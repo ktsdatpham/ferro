@@ -3,7 +3,7 @@
 Điền cột **TaD**: để trống = đồng ý khuyến nghị; ghi chữ cái phương án khác hoặc ghi chú.
 Ưu tiên trả lời các câu 🔴 trước. Bấm vào mã câu hỏi để đọc giải thích đầy đủ.
 
-Đã trả lời: **11** (2026-11-22) · Tổng số câu hỏi: **106** · 🔴 rất khó đổi: **42**
+Đã trả lời: **15** (2026-11-22) · Tổng số câu hỏi: **106** · 🔴 rất khó đổi: **42**
 
 | Mã | Câu hỏi | Độ khó đổi | Khuyến nghị | TaD |
 |---|---|---|---|---|
@@ -44,9 +44,9 @@
 | [Q-E4](05-bim.md) | Phòng và diện tích | 🔴 | C | |
 | [Q-E5](05-bim.md) | Hệ parameter: chi tiết | 🟠 | B | |
 | [Q-E6](05-bim.md) | Hệ family (loadable): định nghĩa bằng gì? | 🔴 | D | |
-| [Q-E7](05-bim.md) | Phương án thiết kế (design option) và giai đoạn (phase) | 🔴 | A | |
+| [Q-E7](05-bim.md) | Phương án thiết kế (design option) và giai đoạn (phase) | 🔴 | A | ✅ Option là lõi |
 | [Q-E8](05-bim.md) | Vật liệu | 🟠 | A | |
-| [Q-E9](05-bim.md) | View là element? | 🔴 | A | |
+| [Q-E9](05-bim.md) | View là element? | 🔴 | A | ✅ View là element |
 | [Q-E10](05-bim.md) | Site, địa hình, bối cảnh | 🟠 | Đồng ý nguyên tắc | |
 | [Q-E11](05-bim.md) | Kiểm tra quy chuẩn (rule checking) | 🟠 | A + AI đọc văn bản quy chuẩn để soạn quy tắc | |
 | [Q-F1](06-tuong-tac-nen-tang.md) | Bộ công cụ giao diện (UI toolkit) | 🔴 | A cho milestone 1–2 | ✅ egui trước, chốt sau M2 |
@@ -58,7 +58,7 @@
 | [Q-F7](06-tuong-tac-nen-tang.md) | Phím tắt và chuyển đổi từ app khác | 🟢 | Đồng ý nguyên tắc | |
 | [Q-F8](06-tuong-tac-nen-tang.md) | Hiển thị lịch sử và hoàn tác | 🟢 | Đồng ý nguyên tắc | |
 | [Q-L1](06-tuong-tac-nen-tang.md) | Thứ tự nền tảng | 🟠 | Win + Mac trước, web viewer M2–3, iPad M5 | |
-| [Q-L2](06-tuong-tac-nen-tang.md) | Chiến lược web | 🔴 | A | |
+| [Q-L2](06-tuong-tac-nen-tang.md) | Chiến lược web | 🔴 | A | ✅ WASM bắt buộc |
 | [Q-L3](06-tuong-tac-nen-tang.md) | Phần cứng tối thiểu | 🟠 | Đồng ý nguyên tắc | |
 | [Q-G1](07-render-trinh-bay.md) | Engine render: tự viết hay dùng engine có sẵn? | 🔴 | A | |
 | [Q-G2](07-render-trinh-bay.md) | Chất lượng viewport real-time | 🟠 | Đồng ý nguyên tắc | |
@@ -85,7 +85,7 @@
 | [Q-H10](08-ai.md) | Agent chạy nền và nhiều agent | 🟢 | Đồng ý nguyên tắc | |
 | [Q-H11](08-ai.md) | Giao diện với AI | 🟠 | Đồng ý nguyên tắc | |
 | [Q-H12](08-ai.md) | Đo chất lượng AI | 🟠 | Đồng ý nguyên tắc | |
-| [Q-I1](09-cong-tac-interop-plugin.md) | Mô hình cộng tác | 🔴 | Thiết kế lõi cho C | |
+| [Q-I1](09-cong-tac-interop-plugin.md) | Mô hình cộng tác | 🔴 | Thiết kế lõi cho C | ✅ Real-time kiểu Figma |
 | [Q-I2](09-cong-tac-interop-plugin.md) | Server cộng tác | 🟠 | A | |
 | [Q-I3](09-cong-tac-interop-plugin.md) | Phiên bản và nhánh (git cho công trình) | 🔴 | Đồng ý nguyên tắc | |
 | [Q-I4](09-cong-tac-interop-plugin.md) | Phân quyền | 🟠 | Đồng ý nguyên tắc | |

@@ -73,11 +73,15 @@ decision requires a new ADR in [`../decisions/`](../decisions/).
 | D-24 | **The document is an immutable, structurally shared tree**: every commit produces a new `DocumentVersion`; readers (render, AI, regeneration) work on snapshots without locks; undo returns to a previous version (Q-B1) | **Accepted** |
 | D-25 | **Persistent topology ids + semantic references**: every face / edge / vertex has a persistent id; every topological algorithm returns a lineage map (what came from what); BIM elements are referenced by semantic names (e.g. `WallFace::Exterior`) (Q-C4) | **Accepted** |
 | D-26 | **AI changes are proposals by default**: shown as a reviewable draft (accept / reject / refine) built on an uncommitted `TransactionGroup` / branch; users may raise autonomy per action type; an agent never deletes human-created elements without asking (Q-H5) | **Accepted** |
+| D-27 | **UI: egui for milestones 1–2**, final toolkit chosen at the end of milestone 2; the UI talks to the core only through commands, queries and events (Q-F1) | **Accepted** |
 | D-28 | **Contributions use DCO sign-off**, no CLA; contributors keep copyright and license their work under MPL-2.0 (Q-A4) | **Accepted** |
 | D-29 | **State is the source of truth, with a command journal alongside**: every transaction records actor (user / agent + model), time, originating prompt and invoked skills; periodic snapshots; replay is for audit, not required to rebuild the document (Q-B3) | **Accepted** |
 | D-30 | **Hybrid geometry kernel**: own Rust half-edge kernel for planar B-rep (with holes) and push-pull; proven libraries for robust booleans and 2D polygon ops behind Ferro APIs; NURBS / curved surfaces plug in later behind a `Surface` trait; must build for WASM and iOS (Q-C1) | **Accepted** |
 | D-31 | **The design pipeline is data**: `Brief` and `Program` are core elements; each stage (brief, program, site, massing, layout, facade, images, boards, video, handover) has a status and is checked against earlier stages; stages may be visited in any order (Q-H8) | **Accepted** |
-| D-27 | **UI: egui for milestones 1–2**, final toolkit chosen at the end of milestone 2; the UI talks to the core only through commands, queries and events (Q-F1) | **Accepted** |
+| D-32 | **Design options are core**: every element belongs to the shared model or to one option of an option set; options can be viewed side by side and one is primary; phase fields (existing / demolished / new) are reserved from the start (Q-E7) | **Accepted** |
+| D-33 | **Views are elements**: `View3D`, `PlanView`, `SectionView`, `Elevation`, `Scene`, plus view templates; they carry camera, cut, style, filters and active option (Q-E9) | **Accepted** |
+| D-34 | **Collaboration target is real-time, Figma-style**: local-first, server-ordered changes, conflicts resolved per element property, soft locks while editing geometry; sync transmits results, not command replays; ships after single-user (Q-I1) | **Accepted** |
+| D-35 | **`ferro-core` must build for `wasm32-unknown-unknown`**, enforced in CI; no dependency that prevents it (Q-L2) | **Accepted** |
 
 ## Status of the current code
 
