@@ -63,7 +63,7 @@ sinh ra nó (nếu là AI). Đây là nền cho Q-H7 (truy vết AI) và Q-I1 (c
 
 ---
 
-### Q-B4. Định dạng file `.ferro` 🔴
+### Q-B4. Định dạng file `.fro` 🔴
 
 | Phương án | Được | Mất | Ai dùng |
 |---|---|---|---|

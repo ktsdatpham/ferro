@@ -63,7 +63,7 @@ trong bản dev.
   như cũ").
 - **Model vàng** (golden): bộ file mẫu, kết quả lệnh so với snapshot.
 - **Test hình ảnh** (render so sánh pixel có ngưỡng) cho renderer và style.
-- **Fuzz** mọi bộ đọc file (IFC, DXF, SKP, `.ferro`) — file người dùng là đầu vào
+- **Fuzz** mọi bộ đọc file (IFC, DXF, SKP, `.fro`) — file người dùng là đầu vào
   không tin cậy.
 - `Solid::validate()` sau mọi thao tác trong test.
 - Ferro-Bench cho AI (Q-H12).

@@ -3,7 +3,7 @@
 Điền cột **TaD**: để trống = đồng ý khuyến nghị; ghi chữ cái phương án khác hoặc ghi chú.
 Ưu tiên trả lời các câu 🔴 trước. Bấm vào mã câu hỏi để đọc giải thích đầy đủ.
 
-Đã trả lời: **19** (2026-11-22) · Tổng số câu hỏi: **106** · 🔴 rất khó đổi: **42**
+Đã trả lời: **23** (2026-11-22) · Tổng số câu hỏi: **106** · 🔴 rất khó đổi: **42**
 
 | Mã | Câu hỏi | Độ khó đổi | Khuyến nghị | TaD |
 |---|---|---|---|---|
@@ -18,7 +18,7 @@
 | [Q-B1](03-loi-du-lieu.md) | Document được lưu trong bộ nhớ theo cấu trúc nào? | 🔴 | C làm nền + index phụ kiểu A | ✅ Bất biến chia sẻ |
 | [Q-B2](03-loi-du-lieu.md) | Schema element: cứng trong code hay động? | 🔴 | C | ✅ Lai |
 | [Q-B3](03-loi-du-lieu.md) | Nguồn sự thật: trạng thái hay nhật ký lệnh? | 🔴 | C | ✅ Trạng thái + nhật ký |
-| [Q-B4](03-loi-du-lieu.md) | Định dạng file `.ferro` | 🔴 | C làm định dạng chính | ✅ SQLite + xuất JSON |
+| [Q-B4](03-loi-du-lieu.md) | Định dạng file `.fro` | 🔴 | C làm định dạng chính | ✅ SQLite + xuất JSON |
 | [Q-B5](03-loi-du-lieu.md) | Dự án lớn: một file hay nhiều file liên kết? | 🔴 | Thiết kế cho B ngay từ đầu | ✅ Federation, streaming sau |
 | [Q-B6](03-loi-du-lieu.md) | Mô hình đa luồng | 🟠 | B | |
 | [Q-B7](03-loi-du-lieu.md) | Định danh: dạng `Uid` | 🟠 | A | |
@@ -38,12 +38,12 @@
 | [Q-D2](04-hinh-hoc-parametric.md) | Node graph kiểu Grasshopper/Dynamo | 🟠 | A, nhưng muộn (milestone 4+) | |
 | [Q-D3](04-hinh-hoc-parametric.md) | Biểu thức tham số (formula) | 🟠 | A | |
 | [Q-D4](04-hinh-hoc-parametric.md) | Ngôn ngữ script cho người dùng/plugin | 🟠 | D | |
-| [Q-E1](05-bim.md) | Hệ phân loại gốc: kiểu Revit, IFC gốc, hay tự định nghĩa? | 🔴 | A | |
+| [Q-E1](05-bim.md) | Hệ phân loại gốc: kiểu Revit, IFC gốc, hay tự định nghĩa? | 🔴 | A | ✅ Kiểu Revit + IFC |
 | [Q-E2](05-bim.md) | Level (Revit) hay Story (ArchiCAD)? | 🟠 | C | |
-| [Q-E3](05-bim.md) | Mô hình tường, sàn, mái | 🔴 | Đồng ý nguyên tắc | |
-| [Q-E4](05-bim.md) | Phòng và diện tích | 🔴 | C | |
+| [Q-E3](05-bim.md) | Mô hình tường, sàn, mái | 🔴 | Đồng ý nguyên tắc | ✅ Schema đủ lớp, UI dần |
+| [Q-E4](05-bim.md) | Phòng và diện tích | 🔴 | C | ✅ Room tự dò + area scheme |
 | [Q-E5](05-bim.md) | Hệ parameter: chi tiết | 🟠 | B | |
-| [Q-E6](05-bim.md) | Hệ family (loadable): định nghĩa bằng gì? | 🔴 | D | |
+| [Q-E6](05-bim.md) | Hệ family (loadable): định nghĩa bằng gì? | 🔴 | D | ✅ Khai báo + Form + AI; .fro/.ffa/.fte |
 | [Q-E7](05-bim.md) | Phương án thiết kế (design option) và giai đoạn (phase) | 🔴 | A | ✅ Option là lõi |
 | [Q-E8](05-bim.md) | Vật liệu | 🟠 | A | |
 | [Q-E9](05-bim.md) | View là element? | 🔴 | A | ✅ View là element |

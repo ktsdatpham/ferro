@@ -17,7 +17,7 @@ Each milestone should ship something a designer can actually try.
 - [ ] Type exact values while drawing (VCB, e.g. `4000,3000` or `3m`)
 - [ ] Inference snapping: endpoints, midpoints, on-axis, parallel
 - [ ] Undo / redo (command pattern in `ferro-core`)
-- [ ] Save / open `.ferro` files
+- [ ] Save / open `.fro` files
 - [ ] **Kernel upgrade:** replace the face list with a half-edge mesh so push-pull works on faces of existing solids
 
 ## Milestone 2: AI inside the app
@@ -39,7 +39,7 @@ Each milestone should ship something a designer can actually try.
 
 - [ ] Command line with autocomplete (every tool is also a command, and an MCP tool)
 - [ ] IFC4 export (`IfcWall`, `IfcSlab`, `IfcSpace` from tags)
-- [ ] Live link: Revit watches the `.ferro` file and updates in place
+- [ ] Live link: Revit watches the `.fro` file and updates in place
 - [ ] Plugin API (WASM) so the community can ship add-ins safely
 - [ ] Parametric node editor (Grasshopper-style), later
 

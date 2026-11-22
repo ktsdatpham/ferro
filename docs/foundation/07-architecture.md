@@ -49,4 +49,4 @@ template there. An ADR is required to:
 - change an Accepted `D-xx` decision
 - add a category, a standard verb, or a glossary term
 - add a dependency to `ferro-core`
-- change the `.ferro` format version
+- change the `.fro` format version

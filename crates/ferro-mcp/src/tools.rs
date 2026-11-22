@@ -72,7 +72,7 @@ pub fn list() -> Value {
         },
         {
             "name": "export_json",
-            "description": "Return the full model as JSON (the native .ferro format).",
+            "description": "Return the full model as JSON (the native .fro format).",
             "inputSchema": {"type": "object", "properties": {}}
         }
     ])

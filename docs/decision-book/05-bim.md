@@ -109,7 +109,7 @@ Revit family editor là nỗi ám ảnh; ArchiCAD GDL là script.
 | **C. Family = node graph (Q-D2) + Form có tham số** | Trực quan + tham số | Phụ thuộc node graph | Grasshopper-style |
 | **D. Khai báo (dữ liệu) + hình học từ Form + ràng buộc đơn giản**, có thể sinh bởi AI từ ảnh/mô tả; script cho trường hợp nâng cao | AI tạo family từ một tấm ảnh catalog; dễ chỉnh | Nhiều đường cùng lúc |
 
-**Khuyến nghị:** **D**, định dạng family là một `.ferro` nhỏ có `FamilyDefinition`.
+**Khuyến nghị:** **D**, định dạng family là một `.fro` nhỏ có `FamilyDefinition`.
 Nhập family Revit (`.rfa`) chỉ được qua Revit add-in (định dạng đóng).
 **Độ khó đổi:** 🔴
 **TaD trả lời:** ☐ A ☐ B ☐ C ☐ D · ghi chú:

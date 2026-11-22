@@ -41,7 +41,7 @@ namespace Ferro.Revit
     {
         public Result Execute(ExternalCommandData data, ref string message, ElementSet elements)
         {
-            var dialog = new Microsoft.Win32.OpenFileDialog { Filter = "Ferro model (*.ferro;*.json)|*.ferro;*.json" };
+            var dialog = new Microsoft.Win32.OpenFileDialog { Filter = "Ferro model (*.fro;*.json)|*.fro;*.json" };
             if (dialog.ShowDialog() != true) return Result.Cancelled;
 
             IntPtr model = Native.ferro_model_from_json(Native.Utf8(File.ReadAllText(dialog.FileName)));

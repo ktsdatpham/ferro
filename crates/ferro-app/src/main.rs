@@ -18,5 +18,5 @@ fn main() {
             println!("entity {} is a solid with {} faces", e.id, s.faces.len());
         }
     }
-    println!("\nNative .ferro JSON:\n{}", model.to_json());
+    println!("\nNative .fro JSON:\n{}", model.to_json());
 }
