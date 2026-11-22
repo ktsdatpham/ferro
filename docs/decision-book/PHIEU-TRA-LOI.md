@@ -3,7 +3,7 @@
 Điền cột **TaD**: để trống = đồng ý khuyến nghị; ghi chữ cái phương án khác hoặc ghi chú.
 Ưu tiên trả lời các câu 🔴 trước. Bấm vào mã câu hỏi để đọc giải thích đầy đủ.
 
-Đã trả lời: **106** (2026-11-22) · Tổng số câu hỏi: **106** · 🔴 rất khó đổi: **42**
+Đã trả lời: **125** / **125** · 🔴 rất khó đổi: **50** (cập nhật 2026-11-22)
 
 | Mã | Câu hỏi | Độ khó đổi | Khuyến nghị | TaD |
 |---|---|---|---|---|
@@ -113,3 +113,22 @@
 | [Q-P1](10-van-hanh.md) | Đa ngôn ngữ | 🟠 | Đồng ý nguyên tắc | ✅ theo khuyến nghị |
 | [Q-P2](10-van-hanh.md) | Gói khu vực (region pack) | 🟠 | Đồng ý nguyên tắc | ✅ theo khuyến nghị |
 | [Q-P3](10-van-hanh.md) | Trợ năng và giao diện | 🟢 | Đồng ý nguyên tắc | ✅ theo khuyến nghị |
+| [Q-R1](11-van-hanh-thuc-te.md) | Ma trận import / export và thứ tự làm | 🟠 | Theo bảng, SKP sớm (M2) | ✅ Đồng ý thứ tự |
+| [Q-R2](11-van-hanh-thuc-te.md) | Plugin SketchUp chạy được trong Ferro không? | 🔴 | B + C + D, không làm A | ✅ Làm sẵn + cầu nối + chuyển đổi |
+| [Q-R3](11-van-hanh-thuc-te.md) | Phần mềm khác link vào Ferro thế nào? | 🔴 | A | ✅ Ferro Link |
+| [Q-R4](11-van-hanh-thuc-te.md) | Tái sử dụng thư viện family Revit (.rfa) | 🔴 | A + B | ✅ Chuyển hàng loạt + AI tham số lại |
+| [Q-R5](11-van-hanh-thuc-te.md) | Nhận vật liệu Revit | 🟠 | Đồng ý nguyên tắc | ✅ theo khuyến nghị |
+| [Q-R6](11-van-hanh-thuc-te.md) | Thư viện "mớm sẵn" khi cài Ferro | 🟠 | Đồng ý nguyên tắc | ✅ + gói theo hệ kết cấu (kiên cố, tiền chế thép, kiểu Âu) |
+| [Q-R7](11-van-hanh-thuc-te.md) | Chế độ làm việc (workspace) | 🔴 | A | ✅ Workspace |
+| [Q-R8](11-van-hanh-thuc-te.md) | Mức chi tiết (LOD): ai quy định? | 🔴 | C | ✅ Mặc định + user ghi đè |
+| [Q-R9](11-van-hanh-thuc-te.md) | System family và loadable family? | 🔴 | Đúng ba loại như trên | ✅ Đúng 3 loại |
+| [Q-R10](11-van-hanh-thuc-te.md) | Component kiểu SketchUp (sửa một, tất cả cập nhật) | 🟠 | Đồng ý nguyên tắc | ✅ Đồng ý |
+| [Q-R11](11-van-hanh-thuc-te.md) | Kiến trúc chung của một công cụ (tool) | 🔴 | Đồng ý nguyên tắc | ✅ Đồng ý |
+| [Q-R12](11-van-hanh-thuc-te.md) | Push-pull trên element BIM | 🔴 | A | ✅ Hiểu ngữ nghĩa |
+| [Q-R13](11-van-hanh-thuc-te.md) | Bộ công cụ milestone 1–2 | 🟠 | Đồng ý nguyên tắc | ✅ theo khuyến nghị |
+| [Q-R14](11-van-hanh-thuc-te.md) | Layer / tag / ẩn hiện | 🟠 | A | ✅ Không layer |
+| [Q-R15](11-van-hanh-thuc-te.md) | Texture trên Form | 🟢 | Đồng ý nguyên tắc | ✅ theo khuyến nghị |
+| [Q-R16](11-van-hanh-thuc-te.md) | Lưu tự động và khôi phục | 🟢 | Đồng ý nguyên tắc | ✅ theo khuyến nghị |
+| [Q-R17](11-van-hanh-thuc-te.md) | Nền CAD và file nhập | 🟢 | Đồng ý nguyên tắc | ✅ theo khuyến nghị |
+| [Q-R18](11-van-hanh-thuc-te.md) | Copy/paste giữa dự án và giữa app | 🟢 | Đồng ý nguyên tắc | ✅ theo khuyến nghị |
+| [Q-R19](11-van-hanh-thuc-te.md) | Template dự án và lần mở đầu tiên | 🟢 | Đồng ý nguyên tắc | ✅ theo khuyến nghị |

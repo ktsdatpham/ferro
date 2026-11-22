@@ -77,6 +77,7 @@ thứ ba, mạng, bảo mật. Bản đồ dưới đây là **toàn bộ nhữn
 | H | [AI làm trung tâm](08-ai.md) | Q-H1 … Q-H12 |
 | I+J+K | [Cộng tác, interop, plugin](09-cong-tac-interop-plugin.md) | Q-I1 … Q-I5, Q-J1 … Q-J7, Q-K1 … Q-K4 |
 | M+O+P | [Hiệu năng, chất lượng, bản địa hóa](10-van-hanh.md) | Q-M1 … Q-M4, Q-O1 … Q-O5, Q-P1 … Q-P3 |
+| R | [Vận hành thực tế](11-van-hanh-thuc-te.md) | Q-R1 … Q-R19 |
 | ✍️ | [Phiếu trả lời](PHIEU-TRA-LOI.md) | Bảng tổng hợp để điền |
 
 ## Ba nguyên tắc tao dùng để khuyến nghị
