@@ -11,3 +11,7 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 ferro-core = { path = "../ferro-core" }
+ferro-io = { path = "../ferro-io" }
+
+[dev-dependencies]
+serde_json.workspace = true

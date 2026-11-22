@@ -1,11 +1,12 @@
 [package]
 name = "ferro-mcp"
-description = "MCP server exposing the Ferro model to AI agents (stdio, JSON-RPC 2.0)."
+description = "MCP server exposing Ferro commands to AI agents (stdio, JSON-RPC 2.0)."
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 
 [dependencies]
 ferro-core = { path = "../ferro-core" }
+ferro-io = { path = "../ferro-io" }
 serde.workspace = true
 serde_json.workspace = true

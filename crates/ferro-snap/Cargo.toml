@@ -1,0 +1,12 @@
+[package]
+name = "ferro-snap"
+description = "Inference engine (D-60): SketchUp-style snapping to points, edges, faces, axes and datums."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+ferro-core = { path = "../ferro-core" }
+
+[dev-dependencies]
+serde_json.workspace = true

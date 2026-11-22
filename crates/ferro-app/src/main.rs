@@ -1,22 +1,29 @@
-//! Placeholder for the Ferro app.
+//! Ferro desktop app (Windows, macOS, Linux).
 //!
-//! Milestone 1 replaces this with a window (winit) and a wgpu viewport:
-//! orbit / pan / zoom, rectangle tool, push-pull tool, inference snapping.
-//! See docs/ROADMAP.md. Until then this runs a tiny headless demo.
+//!   cargo run -p ferro-app --release [-- path/to/project.fro]
 
-use ferro_core::{EntityKind, Model, Point3};
+#![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
 
-fn main() {
-    let mut model = Model::new();
-    let room = model
-        .add_rectangle(Point3::ORIGIN, 4000.0, 3000.0)
-        .expect("valid rectangle");
-    model.push_pull(room, 2800.0).expect("valid push-pull");
+mod app;
+mod camera;
+mod render;
+mod scene;
+mod tools;
 
-    for e in model.entities() {
-        if let EntityKind::Solid(s) = &e.kind {
-            println!("entity {} is a solid with {} faces", e.id, s.faces.len());
-        }
-    }
-    println!("\nNative .fro JSON:\n{}", model.to_json());
+use eframe::egui;
+
+fn main() -> eframe::Result {
+    let open = std::env::args().nth(1).map(std::path::PathBuf::from);
+    let options = eframe::NativeOptions {
+        viewport: egui::ViewportBuilder::default()
+            .with_title("Ferro")
+            .with_inner_size([1440.0, 900.0])
+            .with_min_inner_size([960.0, 600.0]),
+        ..Default::default()
+    };
+    eframe::run_native(
+        "Ferro",
+        options,
+        Box::new(move |cc| Ok(Box::new(app::FerroApp::new(cc, open)))),
+    )
 }

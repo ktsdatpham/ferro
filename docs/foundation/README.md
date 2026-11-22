@@ -125,11 +125,10 @@ decision requires a new ADR in [`../decisions/`](../decisions/).
 
 ## Status of the current code
 
-The v0.1 prototype predates this spec. Known gaps, to be closed in milestone 1:
-
-- ~~`Vec3` is used for points → split into `Point3` / `Vec3` (D-07).~~ Done in M1-1.
-- `Model` / `Entity` / `EntityKind` → `Document` / `Element` / categories (D-13, D-14, D-20).
-- Free-form `tags` → typed parameters (D-15).
-- `Face` / `Solid` as vertex lists → half-edge topology (D-11).
-- Mutations are direct method calls → commands + transactions (D-17).
-- No `Uid`, no levels, no origins (D-04, D-13, D-16).
+Milestone 1 rebuilt the prototype on this spec (`docs/milestones/M1.md`):
+`Point3` / `Vec3`, `Document` / `Element`, typed parameters, half-edge topology
+with persistent ids and lineage, commands + transactions, `Uid`, levels and
+origins are all in place. Remaining gaps are tracked as milestone 2 items:
+design options and views as elements (D-32, D-33), AI proposal mode (D-26),
+exact single curved faces (D-39), layer / glossary lints and CI performance
+budgets (D-19, D-20, D-62).
