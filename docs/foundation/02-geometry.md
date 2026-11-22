@@ -126,7 +126,9 @@ Rules:
    one body, **not** `ElementId`s.
 2. A `Solid` is **closed, manifold, and outward-facing** (face normals point out).
    `Solid::validate()` checks this and is run in debug builds after every
-   operation.
+   operation. A `Form` may also hold open shells (sheet bodies, SketchUp-style
+   loose faces); they are valid Form geometry but are never called a `Solid`
+   and are excluded from volume and boolean operations until closed.
 3. Faces may have holes (SketchUp behaviour). Each face carries a `Surface`;
    v1 supports **`Plane` and `Cylinder`** (curved walls, round columns, barrel
    vaults, from extruded arcs) exactly. NURBS and SubD surfaces plug in later

@@ -47,26 +47,26 @@ decision requires a new ADR in [`../decisions/`](../decisions/).
 
 | Id | Decision | Status |
 |---|---|---|
-| D-01 | Internal length unit is the **millimetre**, stored as `f64` | Proposed |
-| D-02 | Internal angle unit is the **radian**; degrees only at UI / MCP edges | Proposed |
-| D-03 | Right-handed coordinates, **Z up**, X = project east, Y = project north, counter-clockwise positive | Proposed |
-| D-04 | Three origins as in Revit: **Internal Origin** (fixed), **Project Base Point**, **Survey Point**, plus true-north angle | Proposed |
-| D-05 | Model geometry must stay within **10 km** of the Internal Origin; rendering is camera-relative | Proposed |
-| D-06 | Fixed global tolerances (`VERTEX_TOL` = 0.01 mm, `SHORT_CURVE_TOL` = 0.5 mm, `ANGLE_TOL` = 1e-6 rad); never compare `f64` with `==` | Proposed |
-| D-07 | **`Point3` and `Vec3` are distinct types** (Revit's `XYZ` conflates them) | Proposed |
-| D-08 | A `Plane` is a full frame: origin + X axis + Y axis (normal derived) | Proposed |
-| D-09 | Curves are bounded and parameterised on **[0, 1]** in the public API | Proposed |
-| D-10 | Profiles: outer `CurveLoop` counter-clockwise about the plane normal, holes clockwise | Proposed |
-| D-11 | Solid topology is a **half-edge B-rep**; faces may have holes; solids are closed, manifold, outward-facing | Proposed |
-| D-12 | **All geometry belongs to an element.** Free SketchUp-style editing happens inside a `Form` element; geometry never sticks across elements | Proposed |
-| D-13 | Identity: `ElementId` (u64, document-local, never reused) **and** `Uid` (UUID v7, stable across save / export / Revit round-trip) | Proposed |
-| D-14 | Classification: **Category → Family → Type → Instance**, as in Revit | Proposed |
-| D-15 | Data lives in **typed parameters** (instance or type), not free-form string tags | Proposed |
-| D-16 | **Levels** are elements; vertical position is expressed as level + offset | Proposed |
-| D-17 | Every mutation is a **Command** executed inside a **Transaction**; MCP tools are commands 1:1 | Proposed |
-| D-18 | After commit, a **dependency graph** regenerates dependents; failures are Warning (commit allowed) or Error (rollback) | Proposed |
-| D-19 | `ferro-core` is pure: no IO, no UI, no global mutable state, deterministic | Proposed |
-| D-20 | Use Revit's term whenever the concept matches; never invent synonyms (see glossary) | Proposed |
+| D-01 | Internal length unit is the **millimetre**, stored as `f64` | **Accepted** |
+| D-02 | Internal angle unit is the **radian**; degrees only at UI / MCP edges | **Accepted** |
+| D-03 | Right-handed coordinates, **Z up**, X = project east, Y = project north, counter-clockwise positive | **Accepted** |
+| D-04 | Three origins as in Revit: **Internal Origin** (fixed), **Project Base Point**, **Survey Point**, plus true-north angle | **Accepted** |
+| D-05 | Model geometry must stay within **10 km** of the Internal Origin; rendering is camera-relative | **Accepted** |
+| D-06 | Fixed global tolerances (`VERTEX_TOL` = 0.01 mm, `SHORT_CURVE_TOL` = 0.5 mm, `ANGLE_TOL` = 1e-6 rad); never compare `f64` with `==` | **Accepted** |
+| D-07 | **`Point3` and `Vec3` are distinct types** (Revit's `XYZ` conflates them) | **Accepted** |
+| D-08 | A `Plane` is a full frame: origin + X axis + Y axis (normal derived) | **Accepted** |
+| D-09 | Curves are bounded and parameterised on **[0, 1]** in the public API | **Accepted** |
+| D-10 | Profiles: outer `CurveLoop` counter-clockwise about the plane normal, holes clockwise | **Accepted** |
+| D-11 | Solid topology is a **half-edge B-rep**; faces may have holes; solids are closed, manifold, outward-facing | **Accepted** |
+| D-12 | **All geometry belongs to an element.** Free SketchUp-style editing happens inside a `Form` element; geometry never sticks across elements | **Accepted** |
+| D-13 | Identity: `ElementId` (u64, document-local, never reused) **and** `Uid` (UUID v7, stable across save / export / Revit round-trip) | **Accepted** (Q-B7) |
+| D-14 | Classification: **Category → Family → Type → Instance**, as in Revit | **Accepted** (with D-40) |
+| D-15 | Data lives in **typed parameters** (instance or type), not free-form string tags | **Accepted** |
+| D-16 | **Levels** are elements; vertical position is expressed as level + offset | **Accepted** |
+| D-17 | Every mutation is a **Command** executed inside a **Transaction**; MCP tools are commands 1:1 | **Accepted** |
+| D-18 | After commit, a **dependency graph** regenerates dependents; failures are Warning (commit allowed) or Error (rollback) | **Accepted** |
+| D-19 | `ferro-core` is pure: no IO, no UI, no global mutable state, deterministic | **Accepted** |
+| D-20 | Use Revit's term whenever the concept matches; never invent synonyms (see glossary) | **Accepted** |
 | D-21 | `.fro` files are versioned (`format_version`) with stable keys; **container is SQLite** (incremental save, crash-safe, holds history and assets) with **JSON as the interchange format** for AI, git and tools (Q-B4) | **Accepted** |
 | D-22 | **Licence: MPL-2.0, open core.** App, kernel, BIM, MCP, plugin SDK are open; Ferro Cloud (hosted AI, sync, cloud render, premium assets, DWG, enterprise) is the business (Decision Book Q-A3) | **Accepted** |
 | D-23 | **Scope: design + presentation** (concept → render → boards → video). Construction documentation stays in Revit; the view system is designed so 2D drawings can be added later (Q-A1) | **Accepted** |
@@ -109,6 +109,7 @@ decision requires a new ADR in [`../decisions/`](../decisions/).
 | D-60 | **Inference engine** is its own pure, tested crate (`ferro-snap`) with a specified priority order (points > edges / faces > directions > grid), snaps to BIM datums (levels, grids, reference planes), uses screen-space snap tolerance, accepts typed values at any time (`3m`, `4000,3000`, `*5`), and is usable by AI (Q-F2) | **Accepted** |
 | D-61 | **Plugin permissions are explicit capabilities** (read model, write model, network per domain, files, AI calls), granted by the user at install; official-registry plugins are signed; all plugin edits go through commands (history + undo) (Q-K3) | **Accepted** |
 | D-62 | **Performance budgets enforced in CI** (reference: 3-year-old integrated-GPU laptop): house ~2k elements 60 fps / open < 1 s; 20-storey ~100k elements 30 fps (60 fps discrete GPU) / open < 5 s; tool feedback < 16 ms; commit < 10–50 ms; undo < 100 ms; PRs that regress > 10 % are blocked (Q-M1) | **Accepted** |
+| D-63 | **All other Decision Book questions (🟠 / 🟢) adopt the written recommendation** as the default; each becomes binding when its area is implemented and may be revisited by ADR (see `docs/decision-book/PHIEU-TRA-LOI.md`) | **Accepted** |
 
 ## Status of the current code
 
