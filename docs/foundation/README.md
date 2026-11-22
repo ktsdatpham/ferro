@@ -37,6 +37,8 @@ millimetres instead of feet, free-form editing inside `Form` elements).
 | 6 | [Interop](06-interop.md) | `.ferro` file format, MCP, Revit and IFC mapping |
 | 7 | [Architecture and layering](07-architecture.md) | Crates, layers, dependency rules |
 
+Open questions still to be decided by the maintainer are worked through, in Vietnamese, in the [Decision Book](../decision-book/README.md) (106 questions). Accepted answers become `D-xx` entries below.
+
 ## Decision register
 
 Every foundational choice has an id (`D-xx`). Status is one of

@@ -1,0 +1,115 @@
+# Phiếu trả lời
+
+Điền cột **TaD**: để trống = đồng ý khuyến nghị; ghi chữ cái phương án khác hoặc ghi chú.
+Ưu tiên trả lời các câu 🔴 trước. Bấm vào mã câu hỏi để đọc giải thích đầy đủ.
+
+Tổng số câu hỏi: **106** · 🔴 rất khó đổi: **42**
+
+| Mã | Câu hỏi | Độ khó đổi | Khuyến nghị | TaD |
+|---|---|---|---|---|
+| [Q-A1](02-san-pham.md) | Ranh giới sản phẩm: Ferro dừng ở đâu? | 🔴 | A trong 2 năm đầu, thiết kế kiến trúc sẵn cho B | |
+| [Q-A2](02-san-pham.md) | Người dùng chính là ai? | 🔴 | A là chính, C là kênh lan truyền | |
+| [Q-A3](02-san-pham.md) | License mã nguồn | 🔴 | MPL-2.0 cho lõi + Apache-2.0 cho SDK plugin/schema | |
+| [Q-A4](02-san-pham.md) | Bản quyền đóng góp: CLA hay DCO? | 🔴 | B (DCO) | |
+| [Q-A5](02-san-pham.md) | Mô hình kinh doanh |  | A + B + C kết hợp | |
+| [Q-A6](02-san-pham.md) | Quản trị dự án mã nguồn mở |  | A trong giai đoạn 0–2 năm | |
+| [Q-A7](02-san-pham.md) | Chính sách đóng góp bằng AI |  | A | |
+| [Q-A8](02-san-pham.md) | Tên và thương hiệu |  | Đồng ý nguyên tắc | |
+| [Q-B1](03-loi-du-lieu.md) | Document được lưu trong bộ nhớ theo cấu trúc nào? | 🔴 | C làm nền + index phụ kiểu A | |
+| [Q-B2](03-loi-du-lieu.md) | Schema element: cứng trong code hay động? | 🔴 | C | |
+| [Q-B3](03-loi-du-lieu.md) | Nguồn sự thật: trạng thái hay nhật ký lệnh? | 🔴 | C | |
+| [Q-B4](03-loi-du-lieu.md) | Định dạng file `.ferro` | 🔴 | C làm định dạng chính | |
+| [Q-B5](03-loi-du-lieu.md) | Dự án lớn: một file hay nhiều file liên kết? | 🔴 | Thiết kế cho B ngay từ đầu | |
+| [Q-B6](03-loi-du-lieu.md) | Mô hình đa luồng | 🟠 | B | |
+| [Q-B7](03-loi-du-lieu.md) | Định danh: dạng `Uid` | 🟠 | A | |
+| [Q-B8](03-loi-du-lieu.md) | Tính tất định (determinism) | 🟠 | B cho hình học, A cho logic | |
+| [Q-B9](03-loi-du-lieu.md) | Tiến hóa schema và tương thích file | 🟠 | A từ bản 0.1 công khai | |
+| [Q-B10](03-loi-du-lieu.md) | Thư viện dùng chung (asset, family, vật liệu) lưu ở đâu? | 🟠 | C | |
+| [Q-B11](03-loi-du-lieu.md) | Truy vấn model (cho AI, schedule, plugin) | 🟠 | A làm nền + C cho AI và schedule | |
+| [Q-C1](04-hinh-hoc-parametric.md) | Geometry kernel: tự viết hay dùng có sẵn? | 🔴 | D | |
+| [Q-C2](04-hinh-hoc-parametric.md) | Biểu diễn hình học gốc | 🔴 | D | |
+| [Q-C3](04-hinh-hoc-parametric.md) | Độ bền số học (robustness) | 🔴 | B | |
+| [Q-C4](04-hinh-hoc-parametric.md) | Tham chiếu bền khi hình thay đổi (topological naming) | 🔴🔴 | C + D | |
+| [Q-C5](04-hinh-hoc-parametric.md) | Hình học 2D (offset, boolean đa giác, tô hatch) | 🟢 | B | |
+| [Q-C6](04-hinh-hoc-parametric.md) | Modelling trực tiếp hay theo lịch sử? | 🔴 | C | |
+| [Q-C7](04-hinh-hoc-parametric.md) | Hình học hiển thị (tessellation) và LOD | 🟠 | Đồng ý nguyên tắc | |
+| [Q-C8](04-hinh-hoc-parametric.md) | Point cloud và mesh scan | 🟠 | A, ở milestone 3–4 | |
+| [Q-D1](04-hinh-hoc-parametric.md) | Hệ ràng buộc (constraint) | 🔴 | D | |
+| [Q-D2](04-hinh-hoc-parametric.md) | Node graph kiểu Grasshopper/Dynamo | 🟠 | A, nhưng muộn (milestone 4+) | |
+| [Q-D3](04-hinh-hoc-parametric.md) | Biểu thức tham số (formula) | 🟠 | A | |
+| [Q-D4](04-hinh-hoc-parametric.md) | Ngôn ngữ script cho người dùng/plugin | 🟠 | D | |
+| [Q-E1](05-bim.md) | Hệ phân loại gốc: kiểu Revit, IFC gốc, hay tự định nghĩa? | 🔴 | A | |
+| [Q-E2](05-bim.md) | Level (Revit) hay Story (ArchiCAD)? | 🟠 | C | |
+| [Q-E3](05-bim.md) | Mô hình tường, sàn, mái | 🔴 | Đồng ý nguyên tắc | |
+| [Q-E4](05-bim.md) | Phòng và diện tích | 🔴 | C | |
+| [Q-E5](05-bim.md) | Hệ parameter: chi tiết | 🟠 | B | |
+| [Q-E6](05-bim.md) | Hệ family (loadable): định nghĩa bằng gì? | 🔴 | D | |
+| [Q-E7](05-bim.md) | Phương án thiết kế (design option) và giai đoạn (phase) | 🔴 | A | |
+| [Q-E8](05-bim.md) | Vật liệu | 🟠 | A | |
+| [Q-E9](05-bim.md) | View là element? | 🔴 | A | |
+| [Q-E10](05-bim.md) | Site, địa hình, bối cảnh | 🟠 | Đồng ý nguyên tắc | |
+| [Q-E11](05-bim.md) | Kiểm tra quy chuẩn (rule checking) | 🟠 | A + AI đọc văn bản quy chuẩn để soạn quy tắc | |
+| [Q-F1](06-tuong-tac-nen-tang.md) | Bộ công cụ giao diện (UI toolkit) | 🔴 | A cho milestone 1–2 | |
+| [Q-F2](06-tuong-tac-nen-tang.md) | Inference engine (linh hồn của SketchUp) | 🔴 | Đồng ý nguyên tắc | |
+| [Q-F3](06-tuong-tac-nen-tang.md) | Mô hình công cụ: modal, command line, hay cả hai? | 🟠 | C | |
+| [Q-F4](06-tuong-tac-nen-tang.md) | 3D trước hay mặt bằng trước? | 🟠 | C | |
+| [Q-F5](06-tuong-tac-nen-tang.md) | Chọn và sửa đối tượng | 🟢 | Đồng ý nguyên tắc | |
+| [Q-F6](06-tuong-tac-nen-tang.md) | iPad và bút | 🟠 | A | |
+| [Q-F7](06-tuong-tac-nen-tang.md) | Phím tắt và chuyển đổi từ app khác | 🟢 | Đồng ý nguyên tắc | |
+| [Q-F8](06-tuong-tac-nen-tang.md) | Hiển thị lịch sử và hoàn tác | 🟢 | Đồng ý nguyên tắc | |
+| [Q-L1](06-tuong-tac-nen-tang.md) | Thứ tự nền tảng | 🟠 | Win + Mac trước, web viewer M2–3, iPad M5 | |
+| [Q-L2](06-tuong-tac-nen-tang.md) | Chiến lược web | 🔴 | A | |
+| [Q-L3](06-tuong-tac-nen-tang.md) | Phần cứng tối thiểu | 🟠 | Đồng ý nguyên tắc | |
+| [Q-G1](07-render-trinh-bay.md) | Engine render: tự viết hay dùng engine có sẵn? | 🔴 | A | |
+| [Q-G2](07-render-trinh-bay.md) | Chất lượng viewport real-time | 🟠 | Đồng ý nguyên tắc | |
+| [Q-G3](07-render-trinh-bay.md) | Ảnh chất lượng cao: path tracing | 🟠 | A + C | |
+| [Q-G4](07-render-trinh-bay.md) | Style trình bày (NPR) | 🔴 | A | |
+| [Q-G5](07-render-trinh-bay.md) | Chuẩn vật liệu appearance | 🟠 | A làm lõi, ánh xạ sang B khi xuất | |
+| [Q-G6](07-render-trinh-bay.md) | Thư viện asset (cây, người, xe, nội thất, vật liệu) | 🟠 | A + C | |
+| [Q-G7](07-render-trinh-bay.md) | AI render (diffusion) | 🔴 | A | |
+| [Q-G8](07-render-trinh-bay.md) | Video và animation | 🟠 | Đồng ý nguyên tắc | |
+| [Q-G9](07-render-trinh-bay.md) | Render dự án lớn | 🟠 | Đồng ý nguyên tắc | |
+| [Q-N1](07-render-trinh-bay.md) | Bảng trình bày (presentation board) | 🟠 | A | |
+| [Q-N2](07-render-trinh-bay.md) | Diagram sinh từ dữ liệu | 🟢 | Đồng ý nguyên tắc | |
+| [Q-N3](07-render-trinh-bay.md) | Phân tích (nắng, ánh sáng, năng lượng) | 🟠 | Nắng/bóng trong lõi, còn lại plugin | |
+| [Q-N4](07-render-trinh-bay.md) | Xuất bản vẽ 2D | 🟠 | Đồng ý nguyên tắc | |
+| [Q-H1](08-ai.md) | AI sống ở đâu? | 🔴 | C | |
+| [Q-H2](08-ai.md) | Nhà cung cấp mô hình AI | 🟠 | B | |
+| [Q-H3](08-ai.md) | AI "nhìn" model như thế nào? | 🔴 | Đồng ý nguyên tắc | |
+| [Q-H4](08-ai.md) | AI hành động ở mức nào? | 🔴 | D | |
+| [Q-H5](08-ai.md) | Kiểm soát: AI sửa thẳng hay đề xuất? | 🔴 | B làm mặc định, C làm tùy chọn | |
+| [Q-H6](08-ai.md) | Generative design: AI đoán hay thuật toán giải? | 🔴 | D | |
+| [Q-H7](08-ai.md) | Truy vết và giải thích | 🟠 | Đồng ý nguyên tắc | |
+| [Q-H8](08-ai.md) | Quy trình "mớm cho ăn" từ đầu đến cuối | 🔴 | Đồng ý nguyên tắc | |
+| [Q-H9](08-ai.md) | Tri thức: quy chuẩn, tiêu chuẩn văn phòng, phong cách | 🟠 | Đồng ý nguyên tắc | |
+| [Q-H10](08-ai.md) | Agent chạy nền và nhiều agent | 🟢 | Đồng ý nguyên tắc | |
+| [Q-H11](08-ai.md) | Giao diện với AI | 🟠 | Đồng ý nguyên tắc | |
+| [Q-H12](08-ai.md) | Đo chất lượng AI | 🟠 | Đồng ý nguyên tắc | |
+| [Q-I1](09-cong-tac-interop-plugin.md) | Mô hình cộng tác | 🔴 | Thiết kế lõi cho C | |
+| [Q-I2](09-cong-tac-interop-plugin.md) | Server cộng tác | 🟠 | A | |
+| [Q-I3](09-cong-tac-interop-plugin.md) | Phiên bản và nhánh (git cho công trình) | 🔴 | Đồng ý nguyên tắc | |
+| [Q-I4](09-cong-tac-interop-plugin.md) | Phân quyền | 🟠 | Đồng ý nguyên tắc | |
+| [Q-I5](09-cong-tac-interop-plugin.md) | Bình luận và xử lý issue | 🟢 | Đồng ý nguyên tắc | |
+| [Q-J1](09-cong-tac-interop-plugin.md) | IFC | 🔴 | D | |
+| [Q-J2](09-cong-tac-interop-plugin.md) | Revit | 🔴 | Đồng ý nguyên tắc | |
+| [Q-J3](09-cong-tac-interop-plugin.md) | DWG | 🔴 | C | |
+| [Q-J4](09-cong-tac-interop-plugin.md) | SketchUp `.skp` | 🟠 | Đồng ý nguyên tắc | |
+| [Q-J5](09-cong-tac-interop-plugin.md) | Rhino `.3dm` | 🟢 | Đồng ý nguyên tắc | |
+| [Q-J6](09-cong-tac-interop-plugin.md) | glTF và USD | 🟢 | glTF | |
+| [Q-J7](09-cong-tac-interop-plugin.md) | Kết nối hệ sinh thái khác | 🟢 | Đồng ý nguyên tắc | |
+| [Q-K1](09-cong-tac-interop-plugin.md) | Plugin chạy bằng gì? | 🔴 | B làm chuẩn phân phối | |
+| [Q-K2](09-cong-tac-interop-plugin.md) | Plugin được mở rộng những gì? | 🟠 | Đồng ý nguyên tắc | |
+| [Q-K3](09-cong-tac-interop-plugin.md) | Quyền hạn và an ninh plugin | 🔴 | Đồng ý nguyên tắc | |
+| [Q-K4](09-cong-tac-interop-plugin.md) | Phân phối plugin | 🟢 | Đồng ý nguyên tắc | |
+| [Q-M1](10-van-hanh.md) | Ngân sách hiệu năng | 🔴 | Đồng ý nguyên tắc | |
+| [Q-M2](10-van-hanh.md) | Quy mô tối đa thiết kế cho | 🔴 | Kiến trúc cho B, tối ưu trước cho A | |
+| [Q-M3](10-van-hanh.md) | Bộ nhớ | 🟠 | Đồng ý nguyên tắc | |
+| [Q-M4](10-van-hanh.md) | Đo đạc hiệu năng liên tục | 🟢 | Đồng ý nguyên tắc | |
+| [Q-O1](10-van-hanh.md) | Chiến lược kiểm thử | 🟠 | Đồng ý nguyên tắc | |
+| [Q-O2](10-van-hanh.md) | Telemetry và báo lỗi | 🟠 | A | |
+| [Q-O3](10-van-hanh.md) | Phiên bản và nhịp phát hành | 🟢 | Đồng ý nguyên tắc | |
+| [Q-O4](10-van-hanh.md) | An ninh | 🟠 | Đồng ý nguyên tắc | |
+| [Q-O5](10-van-hanh.md) | Tài liệu | 🟢 | Đồng ý nguyên tắc | |
+| [Q-P1](10-van-hanh.md) | Đa ngôn ngữ | 🟠 | Đồng ý nguyên tắc | |
+| [Q-P2](10-van-hanh.md) | Gói khu vực (region pack) | 🟠 | Đồng ý nguyên tắc | |
+| [Q-P3](10-van-hanh.md) | Trợ năng và giao diện | 🟢 | Đồng ý nguyên tắc | |
