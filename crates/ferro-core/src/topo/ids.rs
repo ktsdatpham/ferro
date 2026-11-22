@@ -45,23 +45,23 @@ macro_rules! topo_id {
     };
 }
 
-topo_id!(
+topo_id! {
     /// Persistent vertex id, unique within one body.
     VertexId, "v"
-);
-topo_id!(
+}
+topo_id! {
     /// Persistent edge id (a pair of twin half-edges).
     EdgeId, "e"
-);
-topo_id!(
+}
+topo_id! {
     /// Directed use of an edge by one loop. Internal; may change on rebuild.
     HalfEdgeId, "h"
-);
-topo_id!(
+}
+topo_id! {
     /// A closed cycle of half-edges bounding a face.
     LoopId, "l"
-);
-topo_id!(
+}
+topo_id! {
     /// Persistent face id, unique within one body.
     FaceId, "f"
-);
+}
