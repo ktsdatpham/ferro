@@ -3,7 +3,7 @@
 Điền cột **TaD**: để trống = đồng ý khuyến nghị; ghi chữ cái phương án khác hoặc ghi chú.
 Ưu tiên trả lời các câu 🔴 trước. Bấm vào mã câu hỏi để đọc giải thích đầy đủ.
 
-Đã trả lời: **15** (2026-11-22) · Tổng số câu hỏi: **106** · 🔴 rất khó đổi: **42**
+Đã trả lời: **19** (2026-11-22) · Tổng số câu hỏi: **106** · 🔴 rất khó đổi: **42**
 
 | Mã | Câu hỏi | Độ khó đổi | Khuyến nghị | TaD |
 |---|---|---|---|---|
@@ -16,10 +16,10 @@
 | [Q-A7](02-san-pham.md) | Chính sách đóng góp bằng AI |  | A | |
 | [Q-A8](02-san-pham.md) | Tên và thương hiệu |  | Đồng ý nguyên tắc | |
 | [Q-B1](03-loi-du-lieu.md) | Document được lưu trong bộ nhớ theo cấu trúc nào? | 🔴 | C làm nền + index phụ kiểu A | ✅ Bất biến chia sẻ |
-| [Q-B2](03-loi-du-lieu.md) | Schema element: cứng trong code hay động? | 🔴 | C | |
+| [Q-B2](03-loi-du-lieu.md) | Schema element: cứng trong code hay động? | 🔴 | C | ✅ Lai |
 | [Q-B3](03-loi-du-lieu.md) | Nguồn sự thật: trạng thái hay nhật ký lệnh? | 🔴 | C | ✅ Trạng thái + nhật ký |
 | [Q-B4](03-loi-du-lieu.md) | Định dạng file `.ferro` | 🔴 | C làm định dạng chính | ✅ SQLite + xuất JSON |
-| [Q-B5](03-loi-du-lieu.md) | Dự án lớn: một file hay nhiều file liên kết? | 🔴 | Thiết kế cho B ngay từ đầu | |
+| [Q-B5](03-loi-du-lieu.md) | Dự án lớn: một file hay nhiều file liên kết? | 🔴 | Thiết kế cho B ngay từ đầu | ✅ Federation, streaming sau |
 | [Q-B6](03-loi-du-lieu.md) | Mô hình đa luồng | 🟠 | B | |
 | [Q-B7](03-loi-du-lieu.md) | Định danh: dạng `Uid` | 🟠 | A | |
 | [Q-B8](03-loi-du-lieu.md) | Tính tất định (determinism) | 🟠 | B cho hình học, A cho logic | |
@@ -27,11 +27,11 @@
 | [Q-B10](03-loi-du-lieu.md) | Thư viện dùng chung (asset, family, vật liệu) lưu ở đâu? | 🟠 | C | |
 | [Q-B11](03-loi-du-lieu.md) | Truy vấn model (cho AI, schedule, plugin) | 🟠 | A làm nền + C cho AI và schedule | |
 | [Q-C1](04-hinh-hoc-parametric.md) | Geometry kernel: tự viết hay dùng có sẵn? | 🔴 | D | ✅ Lai |
-| [Q-C2](04-hinh-hoc-parametric.md) | Biểu diễn hình học gốc | 🔴 | D | |
+| [Q-C2](04-hinh-hoc-parametric.md) | Biểu diễn hình học gốc | 🔴 | D | ✅ Phẳng + trụ, NURBS sau |
 | [Q-C3](04-hinh-hoc-parametric.md) | Độ bền số học (robustness) | 🔴 | B | |
 | [Q-C4](04-hinh-hoc-parametric.md) | Tham chiếu bền khi hình thay đổi (topological naming) | 🔴🔴 | C + D | ✅ ID bền + tên ngữ nghĩa |
 | [Q-C5](04-hinh-hoc-parametric.md) | Hình học 2D (offset, boolean đa giác, tô hatch) | 🟢 | B | |
-| [Q-C6](04-hinh-hoc-parametric.md) | Modelling trực tiếp hay theo lịch sử? | 🔴 | C | |
+| [Q-C6](04-hinh-hoc-parametric.md) | Modelling trực tiếp hay theo lịch sử? | 🔴 | C | ✅ Element tham số + Form trực tiếp |
 | [Q-C7](04-hinh-hoc-parametric.md) | Hình học hiển thị (tessellation) và LOD | 🟠 | Đồng ý nguyên tắc | |
 | [Q-C8](04-hinh-hoc-parametric.md) | Point cloud và mesh scan | 🟠 | A, ở milestone 3–4 | |
 | [Q-D1](04-hinh-hoc-parametric.md) | Hệ ràng buộc (constraint) | 🔴 | D | |

@@ -115,7 +115,7 @@ Solids and editable geometry use a **half-edge boundary representation**:
 | `HalfEdge` | A directed use of an edge by one loop; knows `next`, `prev`, `twin`, `origin` vertex, owning `Loop` |
 | `Edge` | A pair of twin half-edges (geometry: `Curve`) |
 | `Loop` | A closed cycle of half-edges bounding a face (outer or hole) |
-| `Face` | One outer loop + hole loops (geometry: surface, `Plane` in v1) |
+| `Face` | One outer loop + hole loops (geometry: `Surface`; `Plane` or `Cylinder` in v1) |
 | `Shell` | A connected set of faces |
 | `Solid` | One or more closed shells |
 
@@ -127,8 +127,10 @@ Rules:
 2. A `Solid` is **closed, manifold, and outward-facing** (face normals point out).
    `Solid::validate()` checks this and is run in debug builds after every
    operation.
-3. Faces may have holes (SketchUp behaviour). v1 surfaces are planar only; curved
-   surfaces arrive with NURBS later.
+3. Faces may have holes (SketchUp behaviour). Each face carries a `Surface`;
+   v1 supports **`Plane` and `Cylinder`** (curved walls, round columns, barrel
+   vaults, from extruded arcs) exactly. NURBS and SubD surfaces plug in later
+   behind the same trait without changing the topology (D-39).
 4. Revit exposes the same structure read-only (`Solid` → `Face` → `EdgeArrayArray`
    → `Edge`), which makes export straightforward.
 

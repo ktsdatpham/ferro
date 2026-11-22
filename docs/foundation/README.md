@@ -82,6 +82,10 @@ decision requires a new ADR in [`../decisions/`](../decisions/).
 | D-33 | **Views are elements**: `View3D`, `PlanView`, `SectionView`, `Elevation`, `Scene`, plus view templates; they carry camera, cut, style, filters and active option (Q-E9) | **Accepted** |
 | D-34 | **Collaboration target is real-time, Figma-style**: local-first, server-ordered changes, conflicts resolved per element property, soft locks while editing geometry; sync transmits results, not command replays; ships after single-user (Q-I1) | **Accepted** |
 | D-35 | **`ferro-core` must build for `wasm32-unknown-unknown`**, enforced in CI; no dependency that prevents it (Q-L2) | **Accepted** |
+| D-36 | **Element schema is hybrid**: core categories are typed Rust structs; users add typed parameters; plugins register versioned schemas before storing data; unknown plugin data is preserved when the plugin is absent (Q-B2) | **Accepted** |
+| D-37 | **Large projects use federation**: a `Project` groups linked `Document`s (discipline, building, site) sharing coordinates and referencing each other by `Uid`; region streaming / partial loading comes later (Q-B5) | **Accepted** |
+| D-38 | **Parametric elements + direct-edit Forms, no global history tree**: BIM elements derive geometry from location + parameters + type; Forms are edited directly; deeper parametrics come from the node graph later (Q-C6) | **Accepted** |
+| D-39 | **Surfaces in v1: `Plane` and `Cylinder`**, exact, inside the half-edge B-rep; meshes are only display caches and imported assets / scans; NURBS and SubD added later behind the `Surface` trait (Q-C2) | **Accepted** |
 
 ## Status of the current code
 
