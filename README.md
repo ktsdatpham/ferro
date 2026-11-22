@@ -1,8 +1,8 @@
-# Phac
+# Ferro
 
 **An open-source, AI-native 3D design tool for architects. Written in Rust.**
 
-*Phác* is Vietnamese for "sketch" (as in *phác thảo*). That's the point: a
+*Ferro* means iron: the metal behind Rust, and behind ferro-cement. A
 tool that lets designers sketch freely and fast, while real BIM data builds up
 underneath, ready to hand to Revit for documentation.
 
@@ -17,7 +17,7 @@ Revit is great at documentation and painful for design. Designers have to pick
 wall types, levels and families before the idea even exists. So they sketch
 in SketchUp or Rhino, and the model gets rebuilt in Revit later.
 
-Phac wants to be the design stage that doesn't throw work away:
+Ferro wants to be the design stage that doesn't throw work away:
 
 | From | We take |
 |---|---|
@@ -29,7 +29,7 @@ Phac wants to be the design stage that doesn't throw work away:
 
 ## Not doing
 
-Keeping the scope tight matters more than piling on features. Phac core is
+Keeping the scope tight matters more than piling on features. Ferro core is
 **not** a documentation or sheet tool, and is **not** a full Revit clone.
 Anything outside the core loop (sketch → AI → BIM data → Revit) should be an
 add-in.
@@ -38,26 +38,26 @@ add-in.
 
 ```
             ┌──────────────┐   ┌──────────────┐   ┌──────────────────┐
-            │  phac-app    │   │  phac-mcp    │   │  Revit add-in    │
+            │  ferro-app    │   │  ferro-mcp    │   │  Revit add-in    │
             │  (UI, wgpu)  │   │  (AI agents) │   │  (C# thin shell) │
             └──────┬───────┘   └──────┬───────┘   └────────┬─────────┘
                    │                  │                    │ P/Invoke
                    │                  │            ┌───────▼────────┐
-                   │                  │            │   phac-ffi     │
+                   │                  │            │   ferro-ffi     │
                    │                  │            │   (C ABI)      │
                    └────────┬─────────┴────────────┴───────┬────────┘
                             ▼                              ▼
                     ┌─────────────────────────────────────────┐
-                    │  phac-core: model, geometry, units      │
+                    │  ferro-core: model, geometry, units      │
                     └─────────────────────────────────────────┘
 ```
 
 | Crate | What it is |
 |---|---|
-| `crates/phac-core` | The model kernel: entities, faces, solids, push-pull, units, JSON format. No UI, no IO. |
-| `crates/phac-mcp` | MCP server over stdio. Exposes tools such as `create_rectangle`, `push_pull`, `set_tags`, `list_entities`. |
-| `crates/phac-ffi` | C ABI for the Revit add-in and native shells (SwiftUI later). |
-| `crates/phac-app` | The app. Placeholder today; winit + wgpu viewport in milestone 1. |
+| `crates/ferro-core` | The model kernel: entities, faces, solids, push-pull, units, JSON format. No UI, no IO. |
+| `crates/ferro-mcp` | MCP server over stdio. Exposes tools such as `create_rectangle`, `push_pull`, `set_tags`, `list_entities`. |
+| `crates/ferro-ffi` | C ABI for the Revit add-in and native shells (SwiftUI later). |
+| `crates/ferro-app` | The app. Placeholder today; winit + wgpu viewport in milestone 1. |
 | `revit-addin/` | C# stub that loads the Rust core inside Revit. |
 
 ## Quick start
@@ -65,16 +65,16 @@ add-in.
 You need [Rust](https://rustup.rs) (stable).
 
 ```bash
-git clone https://github.com/ktsdatpham/phac
-cd phac
+git clone https://github.com/ktsdatpham/ferro
+cd ferro
 cargo test --workspace      # run all tests
-cargo run -p phac-app       # headless demo: draws a room, prints the model
+cargo run -p ferro-app       # headless demo: draws a room, prints the model
 ```
 
-### Let an AI model with Phac
+### Let an AI model with Ferro
 
 ```bash
-cargo build -p phac-mcp --release
+cargo build -p ferro-mcp --release
 ```
 
 Then add it to your MCP client. For example, in Claude Desktop's config:
@@ -82,7 +82,7 @@ Then add it to your MCP client. For example, in Claude Desktop's config:
 ```json
 {
   "mcpServers": {
-    "phac": { "command": "/absolute/path/to/phac/target/release/phac-mcp" }
+    "ferro": { "command": "/absolute/path/to/ferro/target/release/ferro-mcp" }
   }
 }
 ```

@@ -1,17 +1,17 @@
 [workspace]
 resolver = "2"
 members = [
-    "crates/phac-core",
-    "crates/phac-mcp",
-    "crates/phac-ffi",
-    "crates/phac-app",
+    "crates/ferro-core",
+    "crates/ferro-mcp",
+    "crates/ferro-ffi",
+    "crates/ferro-app",
 ]
 
 [workspace.package]
 version = "0.1.0"
 edition = "2021"
 license = "MIT OR Apache-2.0"
-repository = "https://github.com/ktsdatpham/phac"
+repository = "https://github.com/ktsdatpham/ferro"
 
 [workspace.dependencies]
 serde = { version = "1", features = ["derive"] }

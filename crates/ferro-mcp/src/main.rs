@@ -1,13 +1,13 @@
-//! phac-mcp: lets any MCP client (Claude Desktop, Claude Code, Cursor, ...)
-//! model in Phac. Transport: newline-delimited JSON-RPC 2.0 over stdio.
+//! ferro-mcp: lets any MCP client (Claude Desktop, Claude Code, Cursor, ...)
+//! model in Ferro. Transport: newline-delimited JSON-RPC 2.0 over stdio.
 //!
-//!   cargo run -p phac-mcp
+//!   cargo run -p ferro-mcp
 //!
 //! Logs go to stderr; stdout is reserved for protocol messages.
 
 mod tools;
 
-use phac_core::Model;
+use ferro_core::Model;
 use serde_json::{json, Value};
 use std::io::{self, BufRead, Write};
 
@@ -26,8 +26,8 @@ fn handle(model: &mut Model, req: &Value) -> Option<Value> {
             "protocolVersion": params.get("protocolVersion").cloned()
                 .unwrap_or_else(|| json!(PROTOCOL_VERSION)),
             "capabilities": { "tools": { "listChanged": false } },
-            "serverInfo": { "name": "phac", "version": env!("CARGO_PKG_VERSION") },
-            "instructions": "Phac is an open-source, SketchUp-style 3D design tool. \
+            "serverInfo": { "name": "ferro", "version": env!("CARGO_PKG_VERSION") },
+            "instructions": "Ferro is an open-source, SketchUp-style 3D design tool. \
                 Units are millimetres unless a unit is given. Typical flow: \
                 create_rectangle -> push_pull -> set_tags (category, level) -> list_entities."
         })),
@@ -58,7 +58,7 @@ fn main() {
     let mut model = Model::new();
     let stdin = io::stdin();
     let mut out = io::stdout().lock();
-    eprintln!("phac-mcp {} ready on stdio", env!("CARGO_PKG_VERSION"));
+    eprintln!("ferro-mcp {} ready on stdio", env!("CARGO_PKG_VERSION"));
 
     for line in stdin.lock().lines() {
         let Ok(line) = line else { break };

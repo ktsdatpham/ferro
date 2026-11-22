@@ -1,7 +1,7 @@
 //! The tool surface AI agents see. Adding a tool = add it to `list()` and
 //! handle it in `call()`. Keep descriptions clear: agents read them.
 
-use phac_core::{EntityKind, Length, Model, Vec3};
+use ferro_core::{EntityKind, Length, Model, Vec3};
 use serde_json::{json, Value};
 
 pub fn list() -> Value {
@@ -72,7 +72,7 @@ pub fn list() -> Value {
         },
         {
             "name": "export_json",
-            "description": "Return the full model as JSON (the native .phac format).",
+            "description": "Return the full model as JSON (the native .ferro format).",
             "inputSchema": {"type": "object", "properties": {}}
         }
     ])

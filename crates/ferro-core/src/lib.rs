@@ -1,4 +1,4 @@
-//! phac-core: the model kernel.
+//! ferro-core: the model kernel.
 //!
 //! Everything the app, the AI agents (via MCP) and the Revit bridge do goes
 //! through [`Model`]. Keep this crate free of UI and IO so it stays easy to

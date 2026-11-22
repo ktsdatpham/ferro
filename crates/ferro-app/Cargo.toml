@@ -1,0 +1,9 @@
+[package]
+name = "ferro-app"
+description = "The Ferro desktop/iOS app (placeholder: viewport with winit + wgpu comes in milestone 1)."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+ferro-core = { path = "../ferro-core" }

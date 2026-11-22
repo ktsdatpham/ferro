@@ -1,10 +1,10 @@
-//! Placeholder for the Phac app.
+//! Placeholder for the Ferro app.
 //!
 //! Milestone 1 replaces this with a window (winit) and a wgpu viewport:
 //! orbit / pan / zoom, rectangle tool, push-pull tool, inference snapping.
 //! See docs/ROADMAP.md. Until then this runs a tiny headless demo.
 
-use phac_core::{EntityKind, Model, Vec3};
+use ferro_core::{EntityKind, Model, Vec3};
 
 fn main() {
     let mut model = Model::new();
@@ -18,5 +18,5 @@ fn main() {
             println!("entity {} is a solid with {} faces", e.id, s.faces.len());
         }
     }
-    println!("\nNative .phac JSON:\n{}", model.to_json());
+    println!("\nNative .ferro JSON:\n{}", model.to_json());
 }

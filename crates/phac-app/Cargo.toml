@@ -1,9 +1,0 @@
-[package]
-name = "phac-app"
-description = "The Phac desktop/iOS app (placeholder: viewport with winit + wgpu comes in milestone 1)."
-version.workspace = true
-edition.workspace = true
-license.workspace = true
-
-[dependencies]
-phac-core = { path = "../phac-core" }
