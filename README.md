@@ -101,6 +101,10 @@ See [docs/ROADMAP.md](docs/ROADMAP.md). In short:
 
 ## Contributing
 
+Before writing code, read the **[Foundation Spec](docs/foundation/README.md)**:
+the agreed units, coordinates, Revit-style data model, naming rules and
+transaction model that every contribution (human or AI) must follow.
+
 Every kind of help is welcome: Rust, geometry, UI, Revit API, docs,
 translations, or just testing and telling us what hurts. Start with
 [CONTRIBUTING.md](CONTRIBUTING.md).
