@@ -106,6 +106,9 @@ decision requires a new ADR in [`../decisions/`](../decisions/).
 | D-57 | **Revit live link, two-way**: thin C# add-in over `ferro-ffi`, local connection (socket / named pipe), elements matched by `Uid`; import levels, grids, walls, floors, rooms from existing Revit projects; support the three latest Revit versions (Q-J2) | **Accepted** |
 | D-58 | **DXF read / write in the open core; native DWG through the ODA SDK in a Ferro Pro / Cloud plugin**, kept outside the MPL core (Q-J3) | **Accepted** |
 | D-59 | **Scale**: architecture supports up to ~500k elements per document plus federation; optimisation targets houses and mid-size buildings first; urban / infrastructure scale is out of scope (Q-M2) | **Accepted** |
+| D-60 | **Inference engine** is its own pure, tested crate (`ferro-snap`) with a specified priority order (points > edges / faces > directions > grid), snaps to BIM datums (levels, grids, reference planes), uses screen-space snap tolerance, accepts typed values at any time (`3m`, `4000,3000`, `*5`), and is usable by AI (Q-F2) | **Accepted** |
+| D-61 | **Plugin permissions are explicit capabilities** (read model, write model, network per domain, files, AI calls), granted by the user at install; official-registry plugins are signed; all plugin edits go through commands (history + undo) (Q-K3) | **Accepted** |
+| D-62 | **Performance budgets enforced in CI** (reference: 3-year-old integrated-GPU laptop): house ~2k elements 60 fps / open < 1 s; 20-storey ~100k elements 30 fps (60 fps discrete GPU) / open < 5 s; tool feedback < 16 ms; commit < 10–50 ms; undo < 100 ms; PRs that regress > 10 % are blocked (Q-M1) | **Accepted** |
 
 ## Status of the current code
 

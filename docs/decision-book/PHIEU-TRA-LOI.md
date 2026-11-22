@@ -3,7 +3,7 @@
 Điền cột **TaD**: để trống = đồng ý khuyến nghị; ghi chữ cái phương án khác hoặc ghi chú.
 Ưu tiên trả lời các câu 🔴 trước. Bấm vào mã câu hỏi để đọc giải thích đầy đủ.
 
-Đã trả lời: **39** (2026-11-22) · Tổng số câu hỏi: **106** · 🔴 rất khó đổi: **42**
+Đã trả lời: **42** (2026-11-22) · Tổng số câu hỏi: **106** · 🔴 rất khó đổi: **42**
 
 | Mã | Câu hỏi | Độ khó đổi | Khuyến nghị | TaD |
 |---|---|---|---|---|
@@ -50,7 +50,7 @@
 | [Q-E10](05-bim.md) | Site, địa hình, bối cảnh | 🟠 | Đồng ý nguyên tắc | |
 | [Q-E11](05-bim.md) | Kiểm tra quy chuẩn (rule checking) | 🟠 | A + AI đọc văn bản quy chuẩn để soạn quy tắc | |
 | [Q-F1](06-tuong-tac-nen-tang.md) | Bộ công cụ giao diện (UI toolkit) | 🔴 | A cho milestone 1–2 | ✅ egui trước, chốt sau M2 |
-| [Q-F2](06-tuong-tac-nen-tang.md) | Inference engine (linh hồn của SketchUp) | 🔴 | Đồng ý nguyên tắc | |
+| [Q-F2](06-tuong-tac-nen-tang.md) | Inference engine (linh hồn của SketchUp) | 🔴 | Đồng ý nguyên tắc | ✅ Đồng ý |
 | [Q-F3](06-tuong-tac-nen-tang.md) | Mô hình công cụ: modal, command line, hay cả hai? | 🟠 | C | |
 | [Q-F4](06-tuong-tac-nen-tang.md) | 3D trước hay mặt bằng trước? | 🟠 | C | |
 | [Q-F5](06-tuong-tac-nen-tang.md) | Chọn và sửa đối tượng | 🟢 | Đồng ý nguyên tắc | |
@@ -99,9 +99,9 @@
 | [Q-J7](09-cong-tac-interop-plugin.md) | Kết nối hệ sinh thái khác | 🟢 | Đồng ý nguyên tắc | |
 | [Q-K1](09-cong-tac-interop-plugin.md) | Plugin chạy bằng gì? | 🔴 | B làm chuẩn phân phối | ✅ WASM + Python cá nhân |
 | [Q-K2](09-cong-tac-interop-plugin.md) | Plugin được mở rộng những gì? | 🟠 | Đồng ý nguyên tắc | |
-| [Q-K3](09-cong-tac-interop-plugin.md) | Quyền hạn và an ninh plugin | 🔴 | Đồng ý nguyên tắc | |
+| [Q-K3](09-cong-tac-interop-plugin.md) | Quyền hạn và an ninh plugin | 🔴 | Đồng ý nguyên tắc | ✅ Đồng ý |
 | [Q-K4](09-cong-tac-interop-plugin.md) | Phân phối plugin | 🟢 | Đồng ý nguyên tắc | |
-| [Q-M1](10-van-hanh.md) | Ngân sách hiệu năng | 🔴 | Đồng ý nguyên tắc | |
+| [Q-M1](10-van-hanh.md) | Ngân sách hiệu năng | 🔴 | Đồng ý nguyên tắc | ✅ Đồng ý con số |
 | [Q-M2](10-van-hanh.md) | Quy mô tối đa thiết kế cho | 🔴 | Kiến trúc cho B, tối ưu trước cho A | ✅ Kiến trúc cho lớn, tối ưu vừa |
 | [Q-M3](10-van-hanh.md) | Bộ nhớ | 🟠 | Đồng ý nguyên tắc | |
 | [Q-M4](10-van-hanh.md) | Đo đạc hiệu năng liên tục | 🟢 | Đồng ý nguyên tắc | |
