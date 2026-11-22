@@ -2,6 +2,10 @@
 
 Thanks for helping! Architects, developers, and architect-developers are all welcome.
 
+**Read [docs/foundation/](docs/foundation/README.md) first.** It fixes the units,
+coordinate systems, data model, naming and the way the model changes. AI agents:
+see [AGENTS.md](AGENTS.md).
+
 ## Ways to help
 
 - **Designers / architects:** open an issue describing a workflow that hurts in Revit or SketchUp. Real pain points shape the roadmap.
