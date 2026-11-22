@@ -1,11 +1,19 @@
 # 6. Interop: file format, MCP, Revit, IFC
 
-## 6.1 The `.ferro` file (D-21)
+## 6.1 The `.fro` file (D-21, D-43)
 
-- A `.ferro` file is a serialised `Document`.
-- v0: a single JSON object; later a zip container (JSON + binary geometry
-  buffers). The logical schema stays the same.
-- Top-level keys:
+| Extension | Content | Revit analogue |
+|---|---|---|
+| `.fro` | Project document | `.rvt` |
+| `.ffa` | Family definition (parameters + Form geometry + constraints) | `.rfa` |
+| `.fte` | Project template | `.rte` |
+| `.fro.json` / `.ffa.json` | JSON interchange form of the same schema | — |
+
+- A `.fro` file is a **SQLite database** holding one `Document`: element table,
+  geometry blobs, command journal (D-29), snapshots and embedded assets.
+  Saves are incremental and crash-safe.
+- The **JSON interchange form** (`.fro.json`) carries the same logical schema
+  for AI agents, git diffs and external tools. Its top-level keys:
 
 ```json
 {

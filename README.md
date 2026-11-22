@@ -111,4 +111,4 @@ translations, or just testing and telling us what hurts. Start with
 
 ## License
 
-Dual-licensed under [MIT](LICENSE-MIT) or [Apache-2.0](LICENSE-APACHE), at your option.
+Licensed under the [Mozilla Public License 2.0](LICENSE). Ferro is **open core**: the desktop app, kernel, BIM tools, MCP server and plugin SDK are open; hosted services (AI, sync, cloud rendering, premium assets) are offered separately as Ferro Cloud.

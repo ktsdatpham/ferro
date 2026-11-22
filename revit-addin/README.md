@@ -18,7 +18,7 @@ Revit  ──►  FerroRevit.cs (C#, P/Invoke)  ──►  ferro_ffi.dll (Rust) 
 
 ## Status
 
-- [x] Load a `.ferro` model through the Rust core
+- [x] Load a `.fro` model through the Rust core
 - [ ] Solids → `DirectShape` (milestone 3)
 - [ ] Tags → native walls / floors / rooms (milestone 3)
-- [ ] Live link: watch the `.ferro` file and update in place (milestone 4)
+- [ ] Live link: watch the `.fro` file and update in place (milestone 4)
