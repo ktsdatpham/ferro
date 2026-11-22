@@ -3,7 +3,7 @@
 Điền cột **TaD**: để trống = đồng ý khuyến nghị; ghi chữ cái phương án khác hoặc ghi chú.
 Ưu tiên trả lời các câu 🔴 trước. Bấm vào mã câu hỏi để đọc giải thích đầy đủ.
 
-Đã trả lời: **23** (2026-11-22) · Tổng số câu hỏi: **106** · 🔴 rất khó đổi: **42**
+Đã trả lời: **27** (2026-11-22) · Tổng số câu hỏi: **106** · 🔴 rất khó đổi: **42**
 
 | Mã | Câu hỏi | Độ khó đổi | Khuyến nghị | TaD |
 |---|---|---|---|---|
@@ -73,12 +73,12 @@
 | [Q-N2](07-render-trinh-bay.md) | Diagram sinh từ dữ liệu | 🟢 | Đồng ý nguyên tắc | |
 | [Q-N3](07-render-trinh-bay.md) | Phân tích (nắng, ánh sáng, năng lượng) | 🟠 | Nắng/bóng trong lõi, còn lại plugin | |
 | [Q-N4](07-render-trinh-bay.md) | Xuất bản vẽ 2D | 🟠 | Đồng ý nguyên tắc | |
-| [Q-H1](08-ai.md) | AI sống ở đâu? | 🔴 | C | |
+| [Q-H1](08-ai.md) | AI sống ở đâu? | 🔴 | C | ✅ Cả hai, chung tool |
 | [Q-H2](08-ai.md) | Nhà cung cấp mô hình AI | 🟠 | B | |
-| [Q-H3](08-ai.md) | AI "nhìn" model như thế nào? | 🔴 | Đồng ý nguyên tắc | |
-| [Q-H4](08-ai.md) | AI hành động ở mức nào? | 🔴 | D | |
+| [Q-H3](08-ai.md) | AI "nhìn" model như thế nào? | 🔴 | Đồng ý nguyên tắc | ✅ 4 kênh |
+| [Q-H4](08-ai.md) | AI hành động ở mức nào? | 🔴 | D | ✅ Ba tầng |
 | [Q-H5](08-ai.md) | Kiểm soát: AI sửa thẳng hay đề xuất? | 🔴 | B làm mặc định, C làm tùy chọn | ✅ Đề xuất + thanh tự chủ |
-| [Q-H6](08-ai.md) | Generative design: AI đoán hay thuật toán giải? | 🔴 | D | |
+| [Q-H6](08-ai.md) | Generative design: AI đoán hay thuật toán giải? | 🔴 | D | ✅ AI điều phối + solver |
 | [Q-H7](08-ai.md) | Truy vết và giải thích | 🟠 | Đồng ý nguyên tắc | |
 | [Q-H8](08-ai.md) | Quy trình "mớm cho ăn" từ đầu đến cuối | 🔴 | Đồng ý nguyên tắc | ✅ Dữ liệu trong model |
 | [Q-H9](08-ai.md) | Tri thức: quy chuẩn, tiêu chuẩn văn phòng, phong cách | 🟠 | Đồng ý nguyên tắc | |
