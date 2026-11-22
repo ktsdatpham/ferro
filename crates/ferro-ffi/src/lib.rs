@@ -89,7 +89,7 @@ mod tests {
     #[test]
     fn round_trip_through_c_abi() {
         let mut m = Model::new();
-        m.add_rectangle(ferro_core::Vec3::ZERO, 1000.0, 1000.0)
+        m.add_rectangle(ferro_core::Point3::ORIGIN, 1000.0, 1000.0)
             .unwrap();
         let json = CString::new(m.to_json()).unwrap();
         unsafe {

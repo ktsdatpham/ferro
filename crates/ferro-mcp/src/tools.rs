@@ -1,7 +1,7 @@
 //! The tool surface AI agents see. Adding a tool = add it to `list()` and
 //! handle it in `call()`. Keep descriptions clear: agents read them.
 
-use ferro_core::{EntityKind, Length, Model, Vec3};
+use ferro_core::{EntityKind, Length, Model, Point3};
 use serde_json::{json, Value};
 
 pub fn list() -> Value {
@@ -88,13 +88,13 @@ fn arg_len(args: &Value, key: &str) -> Result<f64, String> {
     }
 }
 
-fn arg_point(v: &Value) -> Result<Vec3, String> {
+fn arg_point(v: &Value) -> Result<Point3, String> {
     let a = v
         .as_array()
         .filter(|a| a.len() == 3)
         .ok_or("point must be [x, y, z]")?;
     let f = |i: usize| a[i].as_f64().ok_or("point coordinates must be numbers");
-    Ok(Vec3::new(f(0)?, f(1)?, f(2)?))
+    Ok(Point3::new(f(0)?, f(1)?, f(2)?))
 }
 
 fn arg_id(args: &Value) -> Result<u64, String> {
@@ -115,7 +115,7 @@ pub fn call(model: &mut Model, name: &str, args: &Value) -> Result<String, Strin
         "create_rectangle" => {
             let origin = match args.get("origin") {
                 Some(p) => arg_point(p)?,
-                None => Vec3::ZERO,
+                None => Point3::ORIGIN,
             };
             let id = model
                 .add_rectangle(origin, arg_len(args, "width")?, arg_len(args, "depth")?)
