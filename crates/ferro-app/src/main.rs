@@ -4,12 +4,12 @@
 //! orbit / pan / zoom, rectangle tool, push-pull tool, inference snapping.
 //! See docs/ROADMAP.md. Until then this runs a tiny headless demo.
 
-use ferro_core::{EntityKind, Model, Vec3};
+use ferro_core::{EntityKind, Model, Point3};
 
 fn main() {
     let mut model = Model::new();
     let room = model
-        .add_rectangle(Vec3::ZERO, 4000.0, 3000.0)
+        .add_rectangle(Point3::ORIGIN, 4000.0, 3000.0)
         .expect("valid rectangle");
     model.push_pull(room, 2800.0).expect("valid push-pull");
 

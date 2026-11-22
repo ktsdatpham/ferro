@@ -1,4 +1,5 @@
-use crate::geom::{polygon_area, polygon_normal, Vec3};
+use crate::geom::{polygon_area, polygon_normal};
+use crate::math::{Point3, UnitVec3, Vec3};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
@@ -8,11 +9,11 @@ pub type EntityId = u64;
 /// from the side the normal points to.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Face {
-    pub vertices: Vec<Vec3>,
+    pub vertices: Vec<Point3>,
 }
 
 impl Face {
-    pub fn normal(&self) -> Option<Vec3> {
+    pub fn normal(&self) -> Option<UnitVec3> {
         polygon_normal(&self.vertices)
     }
     pub fn area(&self) -> f64 {
@@ -113,7 +114,7 @@ impl Model {
     }
 
     /// Draw a face from a closed polygon.
-    pub fn add_face(&mut self, vertices: Vec<Vec3>) -> Result<EntityId, ModelError> {
+    pub fn add_face(&mut self, vertices: Vec<Point3>) -> Result<EntityId, ModelError> {
         let face = Face { vertices };
         if face.vertices.len() < 3 || face.area() < 1e-6 {
             return Err(ModelError::DegenerateFace);
@@ -124,7 +125,7 @@ impl Model {
     /// SketchUp's rectangle tool, on the ground plane (z = elevation).
     pub fn add_rectangle(
         &mut self,
-        origin: Vec3,
+        origin: Point3,
         width: f64,
         depth: f64,
     ) -> Result<EntityId, ModelError> {
@@ -150,8 +151,8 @@ impl Model {
         let n = face.normal().ok_or(ModelError::DegenerateFace)?;
         let offset = n * distance;
 
-        let base: Vec<Vec3> = face.vertices.clone();
-        let top: Vec<Vec3> = base.iter().map(|&v| v + offset).collect();
+        let base: Vec<Point3> = face.vertices.clone();
+        let top: Vec<Point3> = base.iter().map(|&v| v + offset).collect();
 
         // Keep every face pointing outward whichever way we pulled.
         let (bottom_loop, top_loop) = if distance > 0.0 {
@@ -198,7 +199,7 @@ mod tests {
     #[test]
     fn rectangle_then_push_pull_makes_a_box() {
         let mut m = Model::new();
-        let id = m.add_rectangle(Vec3::ZERO, 4000.0, 3000.0).unwrap();
+        let id = m.add_rectangle(Point3::ORIGIN, 4000.0, 3000.0).unwrap();
         m.push_pull(id, 2800.0).unwrap();
 
         let EntityKind::Solid(s) = &m.get(id).unwrap().kind else {
@@ -207,31 +208,34 @@ mod tests {
         assert_eq!(s.faces.len(), 6);
 
         // Every face normal must point away from the box centre.
-        let c = Vec3::new(2000.0, 1500.0, 1400.0);
+        let c = Point3::new(2000.0, 1500.0, 1400.0);
         for f in &s.faces {
             let n = f.normal().unwrap();
-            assert!((f.vertices[0] - c).dot(n) > 0.0, "inward face: {f:?}");
+            assert!(
+                (f.vertices[0] - c).dot(n.as_vec()) > 0.0,
+                "inward face: {f:?}"
+            );
         }
     }
 
     #[test]
     fn negative_push_pull_also_points_outward() {
         let mut m = Model::new();
-        let id = m.add_rectangle(Vec3::ZERO, 1000.0, 1000.0).unwrap();
+        let id = m.add_rectangle(Point3::ORIGIN, 1000.0, 1000.0).unwrap();
         m.push_pull(id, -500.0).unwrap();
         let EntityKind::Solid(s) = &m.get(id).unwrap().kind else {
             panic!()
         };
-        let c = Vec3::new(500.0, 500.0, -250.0);
+        let c = Point3::new(500.0, 500.0, -250.0);
         for f in &s.faces {
-            assert!((f.vertices[0] - c).dot(f.normal().unwrap()) > 0.0);
+            assert!((f.vertices[0] - c).dot(f.normal().unwrap().as_vec()) > 0.0);
         }
     }
 
     #[test]
     fn json_round_trip() {
         let mut m = Model::new();
-        m.add_rectangle(Vec3::ZERO, 1.0, 1.0).unwrap();
+        m.add_rectangle(Point3::ORIGIN, 1.0, 1.0).unwrap();
         let back = Model::from_json(&m.to_json()).unwrap();
         assert_eq!(back.entities().count(), 1);
     }

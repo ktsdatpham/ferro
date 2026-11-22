@@ -127,7 +127,7 @@ decision requires a new ADR in [`../decisions/`](../decisions/).
 
 The v0.1 prototype predates this spec. Known gaps, to be closed in milestone 1:
 
-- `Vec3` is used for points → split into `Point3` / `Vec3` (D-07).
+- ~~`Vec3` is used for points → split into `Point3` / `Vec3` (D-07).~~ Done in M1-1.
 - `Model` / `Entity` / `EntityKind` → `Document` / `Element` / categories (D-13, D-14, D-20).
 - Free-form `tags` → typed parameters (D-15).
 - `Face` / `Solid` as vertex lists → half-edge topology (D-11).
