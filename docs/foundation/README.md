@@ -98,6 +98,10 @@ decision requires a new ADR in [`../decisions/`](../decisions/).
 | D-49 | **Presentation styles are data** (`RenderStyle` element) composed of edge, fill, effect and background layers; user-created, shareable, AI-generatable; includes data-driven colouring (by function, area, height, phase, option) (Q-G4) | **Accepted** |
 | D-50 | **AI render is geometry-controlled**: the renderer outputs control buffers (depth, normals, edges, material / category / element masks, lighting) to pluggable diffusion providers (local, Ferro Cloud, third party); every AI image stores view, style, prompt and seed (Q-G7) | **Accepted** |
 | D-51 | **Distributed plugins run in a WASM sandbox** (component model, capability permissions); Python scripting is for personal desktop automation; both change the model only through commands (Q-K1) | **Accepted** |
+| D-52 | **Primary users: architects / designers in the concept stage**; architecture students are the growth channel; a guided homeowner mode may come later on the same core (Q-A2) | **Accepted** |
+| D-53 | **Exact predicates for every topological decision** (orientation, inside / outside, intersection) using Shewchuk-style adaptive arithmetic; coordinates stay `f64`; tolerances are only for vertex merging (Q-C3) | **Accepted** |
+| D-54 | **Constraints**: model-level relations (level, grid, host, alignment, equal spacing) solved in dependency order during regeneration; a full geometric constraint solver only inside sketch profiles and the family editor (Q-D1) | **Accepted** |
+| D-55 | **Branching is core**: branch from any point, element-level diff shown visually, element-level merge with human conflict resolution, change proposals (PR-style) for humans and AI alike (Q-I3) | **Accepted** |
 
 ## Status of the current code
 

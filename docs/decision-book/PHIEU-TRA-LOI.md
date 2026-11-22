@@ -3,12 +3,12 @@
 Điền cột **TaD**: để trống = đồng ý khuyến nghị; ghi chữ cái phương án khác hoặc ghi chú.
 Ưu tiên trả lời các câu 🔴 trước. Bấm vào mã câu hỏi để đọc giải thích đầy đủ.
 
-Đã trả lời: **31** (2026-11-22) · Tổng số câu hỏi: **106** · 🔴 rất khó đổi: **42**
+Đã trả lời: **35** (2026-11-22) · Tổng số câu hỏi: **106** · 🔴 rất khó đổi: **42**
 
 | Mã | Câu hỏi | Độ khó đổi | Khuyến nghị | TaD |
 |---|---|---|---|---|
 | [Q-A1](02-san-pham.md) | Ranh giới sản phẩm: Ferro dừng ở đâu? | 🔴 | A trong 2 năm đầu, thiết kế kiến trúc sẵn cho B | ✅ Thiết kế + trình bày |
-| [Q-A2](02-san-pham.md) | Người dùng chính là ai? | 🔴 | A là chính, C là kênh lan truyền | |
+| [Q-A2](02-san-pham.md) | Người dùng chính là ai? | 🔴 | A là chính, C là kênh lan truyền | ✅ KTS/designer + SV |
 | [Q-A3](02-san-pham.md) | License mã nguồn | 🔴 | MPL-2.0 cho lõi + Apache-2.0 cho SDK plugin/schema | ✅ MPL-2.0, open core |
 | [Q-A4](02-san-pham.md) | Bản quyền đóng góp: CLA hay DCO? | 🔴 | B (DCO) | ✅ DCO |
 | [Q-A5](02-san-pham.md) | Mô hình kinh doanh |  | A + B + C kết hợp | |
@@ -28,13 +28,13 @@
 | [Q-B11](03-loi-du-lieu.md) | Truy vấn model (cho AI, schedule, plugin) | 🟠 | A làm nền + C cho AI và schedule | |
 | [Q-C1](04-hinh-hoc-parametric.md) | Geometry kernel: tự viết hay dùng có sẵn? | 🔴 | D | ✅ Lai |
 | [Q-C2](04-hinh-hoc-parametric.md) | Biểu diễn hình học gốc | 🔴 | D | ✅ Phẳng + trụ, NURBS sau |
-| [Q-C3](04-hinh-hoc-parametric.md) | Độ bền số học (robustness) | 🔴 | B | |
+| [Q-C3](04-hinh-hoc-parametric.md) | Độ bền số học (robustness) | 🔴 | B | ✅ Predicate chính xác |
 | [Q-C4](04-hinh-hoc-parametric.md) | Tham chiếu bền khi hình thay đổi (topological naming) | 🔴🔴 | C + D | ✅ ID bền + tên ngữ nghĩa |
 | [Q-C5](04-hinh-hoc-parametric.md) | Hình học 2D (offset, boolean đa giác, tô hatch) | 🟢 | B | |
 | [Q-C6](04-hinh-hoc-parametric.md) | Modelling trực tiếp hay theo lịch sử? | 🔴 | C | ✅ Element tham số + Form trực tiếp |
 | [Q-C7](04-hinh-hoc-parametric.md) | Hình học hiển thị (tessellation) và LOD | 🟠 | Đồng ý nguyên tắc | |
 | [Q-C8](04-hinh-hoc-parametric.md) | Point cloud và mesh scan | 🟠 | A, ở milestone 3–4 | |
-| [Q-D1](04-hinh-hoc-parametric.md) | Hệ ràng buộc (constraint) | 🔴 | D | |
+| [Q-D1](04-hinh-hoc-parametric.md) | Hệ ràng buộc (constraint) | 🔴 | D | ✅ Quan hệ + solver sketch |
 | [Q-D2](04-hinh-hoc-parametric.md) | Node graph kiểu Grasshopper/Dynamo | 🟠 | A, nhưng muộn (milestone 4+) | |
 | [Q-D3](04-hinh-hoc-parametric.md) | Biểu thức tham số (formula) | 🟠 | A | |
 | [Q-D4](04-hinh-hoc-parametric.md) | Ngôn ngữ script cho người dùng/plugin | 🟠 | D | |
@@ -87,7 +87,7 @@
 | [Q-H12](08-ai.md) | Đo chất lượng AI | 🟠 | Đồng ý nguyên tắc | |
 | [Q-I1](09-cong-tac-interop-plugin.md) | Mô hình cộng tác | 🔴 | Thiết kế lõi cho C | ✅ Real-time kiểu Figma |
 | [Q-I2](09-cong-tac-interop-plugin.md) | Server cộng tác | 🟠 | A | |
-| [Q-I3](09-cong-tac-interop-plugin.md) | Phiên bản và nhánh (git cho công trình) | 🔴 | Đồng ý nguyên tắc | |
+| [Q-I3](09-cong-tac-interop-plugin.md) | Phiên bản và nhánh (git cho công trình) | 🔴 | Đồng ý nguyên tắc | ✅ Nhánh từ lõi |
 | [Q-I4](09-cong-tac-interop-plugin.md) | Phân quyền | 🟠 | Đồng ý nguyên tắc | |
 | [Q-I5](09-cong-tac-interop-plugin.md) | Bình luận và xử lý issue | 🟢 | Đồng ý nguyên tắc | |
 | [Q-J1](09-cong-tac-interop-plugin.md) | IFC | 🔴 | D | |
