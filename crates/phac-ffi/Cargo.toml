@@ -1,0 +1,13 @@
+[package]
+name = "phac-ffi"
+description = "C ABI over phac-core, used by the Revit add-in (C# P/Invoke) and native shells."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+name = "phac_ffi"
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+phac-core = { path = "../phac-core" }

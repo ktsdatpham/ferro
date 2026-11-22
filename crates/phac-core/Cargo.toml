@@ -1,0 +1,10 @@
+[package]
+name = "phac-core"
+description = "Geometry and model kernel for Phac: entities, units, push-pull."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true

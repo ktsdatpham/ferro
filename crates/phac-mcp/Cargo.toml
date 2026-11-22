@@ -1,0 +1,11 @@
+[package]
+name = "phac-mcp"
+description = "MCP server exposing the Phac model to AI agents (stdio, JSON-RPC 2.0)."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+phac-core = { path = "../phac-core" }
+serde.workspace = true
+serde_json.workspace = true

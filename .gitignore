@@ -1,0 +1,9 @@
+/target
+**/*.rs.bk
+.DS_Store
+.vs/
+.idea/
+.vscode/
+revit-addin/bin/
+revit-addin/obj/
+*.user
