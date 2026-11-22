@@ -67,12 +67,16 @@ decision requires a new ADR in [`../decisions/`](../decisions/).
 | D-18 | After commit, a **dependency graph** regenerates dependents; failures are Warning (commit allowed) or Error (rollback) | Proposed |
 | D-19 | `ferro-core` is pure: no IO, no UI, no global mutable state, deterministic | Proposed |
 | D-20 | Use Revit's term whenever the concept matches; never invent synonyms (see glossary) | Proposed |
-| D-21 | `.ferro` files are versioned (`format_version`), JSON in v0, with stable keys | Proposed |
+| D-21 | `.ferro` files are versioned (`format_version`) with stable keys; **container is SQLite** (incremental save, crash-safe, holds history and assets) with **JSON as the interchange format** for AI, git and tools (Q-B4) | **Accepted** |
 | D-22 | **Licence: MPL-2.0, open core.** App, kernel, BIM, MCP, plugin SDK are open; Ferro Cloud (hosted AI, sync, cloud render, premium assets, DWG, enterprise) is the business (Decision Book Q-A3) | **Accepted** |
 | D-23 | **Scope: design + presentation** (concept → render → boards → video). Construction documentation stays in Revit; the view system is designed so 2D drawings can be added later (Q-A1) | **Accepted** |
 | D-24 | **The document is an immutable, structurally shared tree**: every commit produces a new `DocumentVersion`; readers (render, AI, regeneration) work on snapshots without locks; undo returns to a previous version (Q-B1) | **Accepted** |
 | D-25 | **Persistent topology ids + semantic references**: every face / edge / vertex has a persistent id; every topological algorithm returns a lineage map (what came from what); BIM elements are referenced by semantic names (e.g. `WallFace::Exterior`) (Q-C4) | **Accepted** |
 | D-26 | **AI changes are proposals by default**: shown as a reviewable draft (accept / reject / refine) built on an uncommitted `TransactionGroup` / branch; users may raise autonomy per action type; an agent never deletes human-created elements without asking (Q-H5) | **Accepted** |
+| D-28 | **Contributions use DCO sign-off**, no CLA; contributors keep copyright and license their work under MPL-2.0 (Q-A4) | **Accepted** |
+| D-29 | **State is the source of truth, with a command journal alongside**: every transaction records actor (user / agent + model), time, originating prompt and invoked skills; periodic snapshots; replay is for audit, not required to rebuild the document (Q-B3) | **Accepted** |
+| D-30 | **Hybrid geometry kernel**: own Rust half-edge kernel for planar B-rep (with holes) and push-pull; proven libraries for robust booleans and 2D polygon ops behind Ferro APIs; NURBS / curved surfaces plug in later behind a `Surface` trait; must build for WASM and iOS (Q-C1) | **Accepted** |
+| D-31 | **The design pipeline is data**: `Brief` and `Program` are core elements; each stage (brief, program, site, massing, layout, facade, images, boards, video, handover) has a status and is checked against earlier stages; stages may be visited in any order (Q-H8) | **Accepted** |
 | D-27 | **UI: egui for milestones 1–2**, final toolkit chosen at the end of milestone 2; the UI talks to the core only through commands, queries and events (Q-F1) | **Accepted** |
 
 ## Status of the current code
