@@ -3,7 +3,7 @@
 Điền cột **TaD**: để trống = đồng ý khuyến nghị; ghi chữ cái phương án khác hoặc ghi chú.
 Ưu tiên trả lời các câu 🔴 trước. Bấm vào mã câu hỏi để đọc giải thích đầy đủ.
 
-Đã trả lời: **27** (2026-11-22) · Tổng số câu hỏi: **106** · 🔴 rất khó đổi: **42**
+Đã trả lời: **31** (2026-11-22) · Tổng số câu hỏi: **106** · 🔴 rất khó đổi: **42**
 
 | Mã | Câu hỏi | Độ khó đổi | Khuyến nghị | TaD |
 |---|---|---|---|---|
@@ -60,13 +60,13 @@
 | [Q-L1](06-tuong-tac-nen-tang.md) | Thứ tự nền tảng | 🟠 | Win + Mac trước, web viewer M2–3, iPad M5 | |
 | [Q-L2](06-tuong-tac-nen-tang.md) | Chiến lược web | 🔴 | A | ✅ WASM bắt buộc |
 | [Q-L3](06-tuong-tac-nen-tang.md) | Phần cứng tối thiểu | 🟠 | Đồng ý nguyên tắc | |
-| [Q-G1](07-render-trinh-bay.md) | Engine render: tự viết hay dùng engine có sẵn? | 🔴 | A | |
+| [Q-G1](07-render-trinh-bay.md) | Engine render: tự viết hay dùng engine có sẵn? | 🔴 | A | ✅ Tự viết trên wgpu |
 | [Q-G2](07-render-trinh-bay.md) | Chất lượng viewport real-time | 🟠 | Đồng ý nguyên tắc | |
 | [Q-G3](07-render-trinh-bay.md) | Ảnh chất lượng cao: path tracing | 🟠 | A + C | |
-| [Q-G4](07-render-trinh-bay.md) | Style trình bày (NPR) | 🔴 | A | |
+| [Q-G4](07-render-trinh-bay.md) | Style trình bày (NPR) | 🔴 | A | ✅ Style ghép lớp |
 | [Q-G5](07-render-trinh-bay.md) | Chuẩn vật liệu appearance | 🟠 | A làm lõi, ánh xạ sang B khi xuất | |
 | [Q-G6](07-render-trinh-bay.md) | Thư viện asset (cây, người, xe, nội thất, vật liệu) | 🟠 | A + C | |
-| [Q-G7](07-render-trinh-bay.md) | AI render (diffusion) | 🔴 | A | |
+| [Q-G7](07-render-trinh-bay.md) | AI render (diffusion) | 🔴 | A | ✅ Bộ đệm điều khiển |
 | [Q-G8](07-render-trinh-bay.md) | Video và animation | 🟠 | Đồng ý nguyên tắc | |
 | [Q-G9](07-render-trinh-bay.md) | Render dự án lớn | 🟠 | Đồng ý nguyên tắc | |
 | [Q-N1](07-render-trinh-bay.md) | Bảng trình bày (presentation board) | 🟠 | A | |
@@ -97,7 +97,7 @@
 | [Q-J5](09-cong-tac-interop-plugin.md) | Rhino `.3dm` | 🟢 | Đồng ý nguyên tắc | |
 | [Q-J6](09-cong-tac-interop-plugin.md) | glTF và USD | 🟢 | glTF | |
 | [Q-J7](09-cong-tac-interop-plugin.md) | Kết nối hệ sinh thái khác | 🟢 | Đồng ý nguyên tắc | |
-| [Q-K1](09-cong-tac-interop-plugin.md) | Plugin chạy bằng gì? | 🔴 | B làm chuẩn phân phối | |
+| [Q-K1](09-cong-tac-interop-plugin.md) | Plugin chạy bằng gì? | 🔴 | B làm chuẩn phân phối | ✅ WASM + Python cá nhân |
 | [Q-K2](09-cong-tac-interop-plugin.md) | Plugin được mở rộng những gì? | 🟠 | Đồng ý nguyên tắc | |
 | [Q-K3](09-cong-tac-interop-plugin.md) | Quyền hạn và an ninh plugin | 🔴 | Đồng ý nguyên tắc | |
 | [Q-K4](09-cong-tac-interop-plugin.md) | Phân phối plugin | 🟢 | Đồng ý nguyên tắc | |

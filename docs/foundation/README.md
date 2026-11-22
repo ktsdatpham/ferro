@@ -94,6 +94,10 @@ decision requires a new ADR in [`../decisions/`](../decisions/).
 | D-45 | **AI perceives the model through four channels**: an always-present hierarchical model digest, read-only SQL queries, ID-labelled viewport images, and a spatial graph (adjacency, orientation, levels), plus a diff of what the user changed since the last turn (Q-H3) | **Accepted** |
 | D-46 | **AI acts on three tiers**: primitive commands, deterministic design skills (room subdivision, stairs, window placement, roofs; pluggable), and sandboxed scripts for the long tail; all end as commands in a transaction (Q-H4) | **Accepted** |
 | D-47 | **Generative design = LLM orchestrator + solvers + evaluators**: the model sets constraints, calls layout / optimisation solvers, scores results (area, codes, daylight) and iterates; LLMs never place geometry by guessing coordinates where a solver exists (Q-H6) | **Accepted** |
+| D-48 | **Own renderer on wgpu** (`ferro-render`), built as a composable render graph so presentation styles, AI-render buffers and path tracing are configurations of one system; export to external engines via glTF / USD (Q-G1) | **Accepted** |
+| D-49 | **Presentation styles are data** (`RenderStyle` element) composed of edge, fill, effect and background layers; user-created, shareable, AI-generatable; includes data-driven colouring (by function, area, height, phase, option) (Q-G4) | **Accepted** |
+| D-50 | **AI render is geometry-controlled**: the renderer outputs control buffers (depth, normals, edges, material / category / element masks, lighting) to pluggable diffusion providers (local, Ferro Cloud, third party); every AI image stores view, style, prompt and seed (Q-G7) | **Accepted** |
+| D-51 | **Distributed plugins run in a WASM sandbox** (component model, capability permissions); Python scripting is for personal desktop automation; both change the model only through commands (Q-K1) | **Accepted** |
 
 ## Status of the current code
 
