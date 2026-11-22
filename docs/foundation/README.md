@@ -102,6 +102,10 @@ decision requires a new ADR in [`../decisions/`](../decisions/).
 | D-53 | **Exact predicates for every topological decision** (orientation, inside / outside, intersection) using Shewchuk-style adaptive arithmetic; coordinates stay `f64`; tolerances are only for vertex merging (Q-C3) | **Accepted** |
 | D-54 | **Constraints**: model-level relations (level, grid, host, alignment, equal spacing) solved in dependency order during regeneration; a full geometric constraint solver only inside sketch profiles and the family editor (Q-D1) | **Accepted** |
 | D-55 | **Branching is core**: branch from any point, element-level diff shown visually, element-level merge with human conflict resolution, change proposals (PR-style) for humans and AI alike (Q-I3) | **Accepted** |
+| D-56 | **IFC**: own Rust IFC4 writer in the open core (WASM-safe); full IFC import via an existing C++ library inside a plugin; track IFC5 (Q-J1) | **Accepted** |
+| D-57 | **Revit live link, two-way**: thin C# add-in over `ferro-ffi`, local connection (socket / named pipe), elements matched by `Uid`; import levels, grids, walls, floors, rooms from existing Revit projects; support the three latest Revit versions (Q-J2) | **Accepted** |
+| D-58 | **DXF read / write in the open core; native DWG through the ODA SDK in a Ferro Pro / Cloud plugin**, kept outside the MPL core (Q-J3) | **Accepted** |
+| D-59 | **Scale**: architecture supports up to ~500k elements per document plus federation; optimisation targets houses and mid-size buildings first; urban / infrastructure scale is out of scope (Q-M2) | **Accepted** |
 
 ## Status of the current code
 

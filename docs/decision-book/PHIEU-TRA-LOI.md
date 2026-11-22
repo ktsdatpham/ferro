@@ -3,7 +3,7 @@
 Điền cột **TaD**: để trống = đồng ý khuyến nghị; ghi chữ cái phương án khác hoặc ghi chú.
 Ưu tiên trả lời các câu 🔴 trước. Bấm vào mã câu hỏi để đọc giải thích đầy đủ.
 
-Đã trả lời: **35** (2026-11-22) · Tổng số câu hỏi: **106** · 🔴 rất khó đổi: **42**
+Đã trả lời: **39** (2026-11-22) · Tổng số câu hỏi: **106** · 🔴 rất khó đổi: **42**
 
 | Mã | Câu hỏi | Độ khó đổi | Khuyến nghị | TaD |
 |---|---|---|---|---|
@@ -90,9 +90,9 @@
 | [Q-I3](09-cong-tac-interop-plugin.md) | Phiên bản và nhánh (git cho công trình) | 🔴 | Đồng ý nguyên tắc | ✅ Nhánh từ lõi |
 | [Q-I4](09-cong-tac-interop-plugin.md) | Phân quyền | 🟠 | Đồng ý nguyên tắc | |
 | [Q-I5](09-cong-tac-interop-plugin.md) | Bình luận và xử lý issue | 🟢 | Đồng ý nguyên tắc | |
-| [Q-J1](09-cong-tac-interop-plugin.md) | IFC | 🔴 | D | |
-| [Q-J2](09-cong-tac-interop-plugin.md) | Revit | 🔴 | Đồng ý nguyên tắc | |
-| [Q-J3](09-cong-tac-interop-plugin.md) | DWG | 🔴 | C | |
+| [Q-J1](09-cong-tac-interop-plugin.md) | IFC | 🔴 | D | ✅ Tự viết ghi + đọc qua plugin |
+| [Q-J2](09-cong-tac-interop-plugin.md) | Revit | 🔴 | Đồng ý nguyên tắc | ✅ Live link hai chiều |
+| [Q-J3](09-cong-tac-interop-plugin.md) | DWG | 🔴 | C | ✅ DXF lõi + DWG Pro |
 | [Q-J4](09-cong-tac-interop-plugin.md) | SketchUp `.skp` | 🟠 | Đồng ý nguyên tắc | |
 | [Q-J5](09-cong-tac-interop-plugin.md) | Rhino `.3dm` | 🟢 | Đồng ý nguyên tắc | |
 | [Q-J6](09-cong-tac-interop-plugin.md) | glTF và USD | 🟢 | glTF | |
@@ -102,7 +102,7 @@
 | [Q-K3](09-cong-tac-interop-plugin.md) | Quyền hạn và an ninh plugin | 🔴 | Đồng ý nguyên tắc | |
 | [Q-K4](09-cong-tac-interop-plugin.md) | Phân phối plugin | 🟢 | Đồng ý nguyên tắc | |
 | [Q-M1](10-van-hanh.md) | Ngân sách hiệu năng | 🔴 | Đồng ý nguyên tắc | |
-| [Q-M2](10-van-hanh.md) | Quy mô tối đa thiết kế cho | 🔴 | Kiến trúc cho B, tối ưu trước cho A | |
+| [Q-M2](10-van-hanh.md) | Quy mô tối đa thiết kế cho | 🔴 | Kiến trúc cho B, tối ưu trước cho A | ✅ Kiến trúc cho lớn, tối ưu vừa |
 | [Q-M3](10-van-hanh.md) | Bộ nhớ | 🟠 | Đồng ý nguyên tắc | |
 | [Q-M4](10-van-hanh.md) | Đo đạc hiệu năng liên tục | 🟢 | Đồng ý nguyên tắc | |
 | [Q-O1](10-van-hanh.md) | Chiến lược kiểm thử | 🟠 | Đồng ý nguyên tắc | |
