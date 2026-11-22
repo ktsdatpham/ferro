@@ -41,4 +41,5 @@ CI runs those same checks on Windows, macOS and Linux.
 
 ## License
 
-By contributing you agree your work is dual-licensed under MIT or Apache-2.0, like the rest of the project.
+Ferro is licensed under MPL-2.0. By contributing you agree your work is licensed under MPL-2.0 too.
+Sign off every commit (`git commit -s`) to certify the [Developer Certificate of Origin](https://developercertificate.org/).
