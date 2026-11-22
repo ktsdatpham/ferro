@@ -22,9 +22,9 @@ namespace Ferro.Revit
         private const string Lib = "ferro_ffi";
 
         [DllImport(Lib)] public static extern IntPtr ferro_version();
-        [DllImport(Lib)] public static extern IntPtr ferro_model_from_json(byte[] utf8Json);
-        [DllImport(Lib)] public static extern long ferro_model_entity_count(IntPtr model);
-        [DllImport(Lib)] public static extern void ferro_model_free(IntPtr model);
+        [DllImport(Lib)] public static extern IntPtr ferro_document_from_json(byte[] utf8Json);
+        [DllImport(Lib)] public static extern long ferro_document_element_count(IntPtr model);
+        [DllImport(Lib)] public static extern void ferro_document_free(IntPtr model);
         [DllImport(Lib)] public static extern void ferro_string_free(IntPtr s);
 
         public static string TakeString(IntPtr p)
@@ -44,12 +44,12 @@ namespace Ferro.Revit
             var dialog = new Microsoft.Win32.OpenFileDialog { Filter = "Ferro model (*.fro;*.json)|*.fro;*.json" };
             if (dialog.ShowDialog() != true) return Result.Cancelled;
 
-            IntPtr model = Native.ferro_model_from_json(Native.Utf8(File.ReadAllText(dialog.FileName)));
+            IntPtr model = Native.ferro_document_from_json(Native.Utf8(File.ReadAllText(dialog.FileName)));
             if (model == IntPtr.Zero) { message = "Not a valid Ferro model."; return Result.Failed; }
 
             try
             {
-                long count = Native.ferro_model_entity_count(model);
+                long count = Native.ferro_document_element_count(model);
                 string version = Native.TakeString(Native.ferro_version());
                 // TODO (milestone 3): build DirectShape geometry per entity, map tags -> categories.
                 TaskDialog.Show("Ferro", $"Ferro core {version}\nLoaded {count} entities.\nGeometry import coming in milestone 3.");
@@ -57,7 +57,7 @@ namespace Ferro.Revit
             }
             finally
             {
-                Native.ferro_model_free(model);
+                Native.ferro_document_free(model);
             }
         }
     }

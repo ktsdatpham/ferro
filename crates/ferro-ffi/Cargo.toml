@@ -4,6 +4,7 @@ description = "C ABI over ferro-core, used by the Revit add-in (C# P/Invoke) and
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+repository.workspace = true
 
 [lib]
 name = "ferro_ffi"
@@ -11,3 +12,7 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 ferro-core = { path = "../ferro-core" }
+ferro-io = { path = "../ferro-io" }
+
+[dev-dependencies]
+serde_json.workspace = true

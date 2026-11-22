@@ -1,9 +1,21 @@
 [package]
 name = "ferro-app"
-description = "The Ferro desktop/iOS app (placeholder: viewport with winit + wgpu comes in milestone 1)."
+description = "The Ferro desktop app: viewport, tools, panels (egui + wgpu)."
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "ferro"
+path = "src/main.rs"
 
 [dependencies]
 ferro-core = { path = "../ferro-core" }
+ferro-io = { path = "../ferro-io" }
+ferro-snap = { path = "../ferro-snap" }
+eframe = { version = "0.37", default-features = false, features = ["wgpu", "default_fonts", "x11", "wayland"] }
+rfd = "0.18"
+glam = "0.34"
+bytemuck = { version = "1", features = ["derive"] }
+serde_json.workspace = true

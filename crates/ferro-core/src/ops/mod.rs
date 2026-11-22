@@ -1,0 +1,21 @@
+//! Operations layer (Foundation Spec ch. 4): the only way to change a
+//! `Document` (D-17).
+//!
+//! * A [`Command`] is a serialisable intent; its name equals its MCP tool name.
+//! * Commands run inside a [`Transaction`] on a working copy; regeneration then
+//!   updates dependents and computed parameters (D-18).
+//! * Errors roll everything back; warnings are reported and commit.
+//! * A [`Session`] owns the current document, undo / redo, transaction groups
+//!   (one undo step per gesture) and the journal (D-29).
+
+pub mod commands;
+mod events;
+mod failure;
+mod session;
+mod transaction;
+
+pub use commands::{AnyCommand, Command, CommandOutput};
+pub use events::DocumentChanged;
+pub use failure::{CommandError, Failure, Severity};
+pub use session::{Actor, ActorKind, ExecContext, JournalEntry, Outcome, Session};
+pub use transaction::{IdSource, SequentialIds, Transaction};

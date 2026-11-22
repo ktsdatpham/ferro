@@ -1,0 +1,538 @@
+//! Milestone 1 commands. Each command's `NAME` is also its MCP tool name
+//! (D-17, `verb_noun`). Arguments use kernel units: lengths in mm, angles in
+//! radians; the MCP edge converts user units (`"3m"`, degrees).
+
+use super::{CommandError, Transaction};
+use crate::algo::{push_pull_face, PushPullMode};
+use crate::geom::{polygon, Plane};
+use crate::math::{tol, Angle, Length, Point3, Transform, UnitVec3, Vec3};
+use crate::model::{keys, Category, ElementBody, ElementId, Form, Level, ParamValue};
+use crate::topo::{Body, FaceId};
+use serde::de::DeserializeOwned;
+use serde::{Deserialize, Serialize};
+use serde_json::{json, Value};
+
+/// JSON result of a command (ids created, lineage, ...).
+pub type CommandOutput = Value;
+
+/// A serialisable intent (§4.2). Deterministic: same document + same command
+/// (+ same id source) = same result.
+pub trait Command: Serialize + DeserializeOwned {
+    const NAME: &'static str;
+    fn execute(&self, tx: &mut Transaction) -> Result<CommandOutput, CommandError>;
+}
+
+fn level_z(tx: &Transaction, level: Option<ElementId>) -> Result<f64, CommandError> {
+    match level {
+        None => Ok(0.0),
+        Some(l) => tx
+            .element(l)?
+            .as_level()
+            .map(|lv| lv.elevation.mm())
+            .ok_or_else(|| {
+                CommandError::new("ferro.model.not_a_level", format!("{l} is not a level")).on(l)
+            }),
+    }
+}
+
+fn form_body(tx: &Transaction, id: ElementId) -> Result<Body, CommandError> {
+    tx.element(id)?
+        .as_form()
+        .map(|f| f.body.clone())
+        .ok_or_else(|| {
+            CommandError::new("ferro.model.not_a_form", format!("{id} is not a Form")).on(id)
+        })
+}
+
+// ------------------------------------------------------------------ levels
+
+/// Create a level at an elevation.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct CreateLevel {
+    pub name: String,
+    pub elevation: Length,
+    #[serde(default = "yes")]
+    pub is_building_storey: bool,
+}
+fn yes() -> bool {
+    true
+}
+
+impl Command for CreateLevel {
+    const NAME: &'static str = "create_level";
+    fn execute(&self, tx: &mut Transaction) -> Result<CommandOutput, CommandError> {
+        if tx
+            .doc()
+            .by_category(Category::Levels)
+            .any(|l| l.name.as_deref() == Some(self.name.as_str()))
+        {
+            return Err(CommandError::new(
+                "ferro.model.duplicate_name",
+                format!("a level named {:?} already exists", self.name),
+            ));
+        }
+        let id = tx.create(
+            Category::Levels,
+            Some(self.name.clone()),
+            None,
+            ElementBody::Level(Level {
+                elevation: self.elevation,
+                is_building_storey: self.is_building_storey,
+            }),
+        )?;
+        Ok(json!({ "element": id }))
+    }
+}
+
+/// Change a level's elevation; Forms on that level move with it.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SetLevelElevation {
+    pub level: ElementId,
+    pub elevation: Length,
+}
+
+impl Command for SetLevelElevation {
+    const NAME: &'static str = "set_level_elevation";
+    fn execute(&self, tx: &mut Transaction) -> Result<CommandOutput, CommandError> {
+        let elev = self.elevation;
+        tx.modify(self.level, |e| match &mut e.body {
+            ElementBody::Level(l) => {
+                l.elevation = elev;
+                Ok(())
+            }
+            _ => {
+                Err(CommandError::new("ferro.model.not_a_level", "element is not a level").on(e.id))
+            }
+        })?;
+        Ok(json!({ "element": self.level }))
+    }
+}
+
+// ------------------------------------------------------------------ forms
+
+/// Draw a horizontal rectangle face (SketchUp Rectangle tool). With a level,
+/// `origin.z` is relative to the level elevation.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct CreateRectangle {
+    pub origin: Point3,
+    pub width: Length,
+    pub depth: Length,
+    #[serde(default)]
+    pub level: Option<ElementId>,
+    #[serde(default)]
+    pub name: Option<String>,
+}
+
+impl Command for CreateRectangle {
+    const NAME: &'static str = "create_rectangle";
+    fn execute(&self, tx: &mut Transaction) -> Result<CommandOutput, CommandError> {
+        let o = self.origin + Vec3::new(0.0, 0.0, level_z(tx, self.level)?);
+        let (w, d) = (self.width.mm(), self.depth.mm());
+        let mut pts = vec![
+            o,
+            o + Vec3::new(w, 0.0, 0.0),
+            o + Vec3::new(w, d, 0.0),
+            o + Vec3::new(0.0, d, 0.0),
+        ];
+        // Negative width/depth flip the winding; keep the face facing up.
+        if w * d < 0.0 {
+            pts.reverse();
+        }
+        CreatePolygon {
+            points: pts,
+            level: self.level,
+            name: self.name.clone(),
+            relative_to_level: false,
+        }
+        .execute(tx)
+    }
+}
+
+/// Draw a planar polygon face from 3+ points (mm).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct CreatePolygon {
+    pub points: Vec<Point3>,
+    #[serde(default)]
+    pub level: Option<ElementId>,
+    #[serde(default)]
+    pub name: Option<String>,
+    /// When true and a level is given, point z values are relative to it.
+    #[serde(default)]
+    pub relative_to_level: bool,
+}
+
+impl Command for CreatePolygon {
+    const NAME: &'static str = "create_polygon";
+    fn execute(&self, tx: &mut Transaction) -> Result<CommandOutput, CommandError> {
+        let dz = if self.relative_to_level {
+            level_z(tx, self.level)?
+        } else {
+            0.0
+        };
+        let pts: Vec<Point3> = self
+            .points
+            .iter()
+            .map(|p| *p + Vec3::new(0.0, 0.0, dz))
+            .collect();
+        if pts.len() < 3 {
+            return Err(CommandError::new(
+                "ferro.geom.degenerate",
+                "a face needs at least 3 points",
+            ));
+        }
+        for i in 0..pts.len() {
+            if pts[i].distance_to(pts[(i + 1) % pts.len()]) < tol::SHORT_CURVE_TOL {
+                return Err(CommandError::new(
+                    "ferro.geom.short_curve",
+                    "edges must be at least 0.5 mm long",
+                ));
+            }
+        }
+        let n = polygon::polygon_normal(&pts)
+            .ok_or_else(|| CommandError::new("ferro.geom.degenerate", "points are collinear"))?;
+        let plane = Plane::from_origin_normal(pts[0], n);
+        if pts.iter().any(|p| !plane.contains(*p)) {
+            return Err(CommandError::new(
+                "ferro.geom.not_planar",
+                "points are not coplanar",
+            ));
+        }
+        let idx: Vec<usize> = (0..pts.len()).collect();
+        let (body, faces) = Body::from_polygons(&pts, &[idx])?;
+        let id = tx.create(
+            Category::Forms,
+            self.name.clone(),
+            self.level,
+            ElementBody::Form(Form { body }),
+        )?;
+        Ok(json!({ "element": id, "face": faces[0] }))
+    }
+}
+
+/// Convenience for agents: rectangle + push/pull in one step.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct CreateBox {
+    pub origin: Point3,
+    pub width: Length,
+    pub depth: Length,
+    pub height: Length,
+    #[serde(default)]
+    pub level: Option<ElementId>,
+    #[serde(default)]
+    pub name: Option<String>,
+}
+
+impl Command for CreateBox {
+    const NAME: &'static str = "create_box";
+    fn execute(&self, tx: &mut Transaction) -> Result<CommandOutput, CommandError> {
+        let r = CreateRectangle {
+            origin: self.origin,
+            width: self.width,
+            depth: self.depth,
+            level: self.level,
+            name: self.name.clone(),
+        }
+        .execute(tx)?;
+        let element: ElementId = serde_json::from_value(r["element"].clone()).expect("own output");
+        let face: FaceId = serde_json::from_value(r["face"].clone()).expect("own output");
+        PushPullFace {
+            element,
+            face,
+            distance: self.height,
+        }
+        .execute(tx)?;
+        Ok(json!({ "element": element }))
+    }
+}
+
+/// Push / pull a face of a Form along its normal (negative = inward).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct PushPullFace {
+    pub element: ElementId,
+    pub face: FaceId,
+    pub distance: Length,
+}
+
+impl Command for PushPullFace {
+    const NAME: &'static str = "push_pull_face";
+    fn execute(&self, tx: &mut Transaction) -> Result<CommandOutput, CommandError> {
+        let mut body = form_body(tx, self.element)?;
+        let (mode, lineage) = push_pull_face(&mut body, self.face, self.distance.mm())
+            .map_err(|e| CommandError::from(e).on(self.element))?;
+        tx.modify(self.element, |e| {
+            e.body = ElementBody::Form(Form { body });
+            Ok(())
+        })?;
+        let mode = match mode {
+            PushPullMode::Extrude => "extrude",
+            PushPullMode::Stretch => "stretch",
+            PushPullMode::Prism => "prism",
+        };
+        Ok(json!({ "element": self.element, "mode": mode, "lineage": lineage }))
+    }
+}
+
+// ------------------------------------------------------------------ edits
+
+fn transform_elements(
+    tx: &mut Transaction,
+    ids: &[ElementId],
+    t: &Transform,
+) -> Result<(), CommandError> {
+    for id in ids {
+        tx.modify(*id, |e| match &mut e.body {
+            ElementBody::Form(f) => {
+                f.body.transform(t);
+                Ok(())
+            }
+            ElementBody::Level(_) => Err(CommandError::new(
+                "ferro.model.not_movable",
+                "levels move with set_level_elevation",
+            )
+            .on(e.id)),
+        })?;
+    }
+    Ok(())
+}
+
+/// Move elements by a vector (mm).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct MoveElements {
+    pub elements: Vec<ElementId>,
+    pub vector: Vec3,
+}
+
+impl Command for MoveElements {
+    const NAME: &'static str = "move_elements";
+    fn execute(&self, tx: &mut Transaction) -> Result<CommandOutput, CommandError> {
+        transform_elements(tx, &self.elements, &Transform::translation(self.vector))?;
+        Ok(json!({ "elements": self.elements }))
+    }
+}
+
+/// Rotate elements about a vertical axis through `center`
+/// (counter-clockwise positive).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct RotateElements {
+    pub elements: Vec<ElementId>,
+    pub center: Point3,
+    pub angle: Angle,
+}
+
+impl Command for RotateElements {
+    const NAME: &'static str = "rotate_elements";
+    fn execute(&self, tx: &mut Transaction) -> Result<CommandOutput, CommandError> {
+        let t = Transform::rotation(self.center, UnitVec3::Z, self.angle);
+        transform_elements(tx, &self.elements, &t)?;
+        Ok(json!({ "elements": self.elements }))
+    }
+}
+
+/// Copy elements, offset by a vector (mm). `count` > 1 makes a linear array.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct CopyElements {
+    pub elements: Vec<ElementId>,
+    pub vector: Vec3,
+    #[serde(default = "one")]
+    pub count: u32,
+}
+fn one() -> u32 {
+    1
+}
+
+impl Command for CopyElements {
+    const NAME: &'static str = "copy_elements";
+    fn execute(&self, tx: &mut Transaction) -> Result<CommandOutput, CommandError> {
+        if self.count == 0 || self.count > 1000 {
+            return Err(CommandError::new(
+                "ferro.ops.invalid_count",
+                "count must be 1..=1000",
+            ));
+        }
+        let mut created = Vec::new();
+        for i in 1..=self.count {
+            for id in &self.elements {
+                let new = tx.duplicate(*id)?;
+                transform_elements(tx, &[new], &Transform::translation(self.vector * i as f64))?;
+                created.push(new);
+            }
+        }
+        Ok(json!({ "elements": created }))
+    }
+}
+
+/// Delete elements.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct DeleteElements {
+    pub elements: Vec<ElementId>,
+}
+
+impl Command for DeleteElements {
+    const NAME: &'static str = "delete_elements";
+    fn execute(&self, tx: &mut Transaction) -> Result<CommandOutput, CommandError> {
+        for id in &self.elements {
+            tx.delete(*id)?;
+        }
+        Ok(json!({ "deleted": self.elements }))
+    }
+}
+
+// ------------------------------------------------------------------ data
+
+/// Rename an element (`null` clears the name).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SetName {
+    pub element: ElementId,
+    pub name: Option<String>,
+}
+
+impl Command for SetName {
+    const NAME: &'static str = "set_name";
+    fn execute(&self, tx: &mut Transaction) -> Result<CommandOutput, CommandError> {
+        let name = self.name.clone();
+        tx.modify(self.element, |e| {
+            e.name = name;
+            Ok(())
+        })?;
+        Ok(json!({ "element": self.element }))
+    }
+}
+
+/// Set a typed parameter (D-15). Computed keys are read-only.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SetParameter {
+    pub element: ElementId,
+    pub key: String,
+    pub value: ParamValue,
+}
+
+impl Command for SetParameter {
+    const NAME: &'static str = "set_parameter";
+    fn execute(&self, tx: &mut Transaction) -> Result<CommandOutput, CommandError> {
+        if !keys::is_valid(&self.key) {
+            return Err(CommandError::new(
+                "ferro.model.invalid_parameter_key",
+                format!("{:?} is not a valid key (namespace.group.name)", self.key),
+            ));
+        }
+        if keys::is_read_only(&self.key) {
+            return Err(CommandError::new(
+                "ferro.model.read_only_parameter",
+                format!("{} is computed and read-only", self.key),
+            ));
+        }
+        if let ParamValue::ElementRef(r) = &self.value {
+            tx.element(*r)?;
+        }
+        let (k, v) = (self.key.clone(), self.value.clone());
+        tx.modify(self.element, |e| {
+            e.params.insert(k, v);
+            Ok(())
+        })?;
+        Ok(json!({ "element": self.element }))
+    }
+}
+
+/// Classify a Form as a BIM category (D-12), e.g. `walls`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SetCategory {
+    pub element: ElementId,
+    pub category: Category,
+}
+
+impl Command for SetCategory {
+    const NAME: &'static str = "set_category";
+    fn execute(&self, tx: &mut Transaction) -> Result<CommandOutput, CommandError> {
+        if !self.category.classifiable_form() {
+            return Err(CommandError::new(
+                "ferro.model.invalid_category",
+                format!("a Form cannot be classified as {}", self.category),
+            ));
+        }
+        let c = self.category;
+        tx.modify(self.element, |e| {
+            if e.as_form().is_none() {
+                return Err(CommandError::new(
+                    "ferro.model.not_a_form",
+                    "only Forms can be classified",
+                )
+                .on(e.id));
+            }
+            e.category = c;
+            Ok(())
+        })?;
+        Ok(json!({ "element": self.element }))
+    }
+}
+
+/// Rename the project.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SetProjectName {
+    pub name: String,
+}
+
+impl Command for SetProjectName {
+    const NAME: &'static str = "set_project_name";
+    fn execute(&self, tx: &mut Transaction) -> Result<CommandOutput, CommandError> {
+        tx.project_name(self.name.clone());
+        Ok(json!({}))
+    }
+}
+
+// ------------------------------------------------------------------ dispatch
+
+macro_rules! any_command {
+    ($($variant:ident),* $(,)?) => {
+        /// Any command, serialised as `{"command": "<name>", ...args}`.
+        #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+        #[serde(tag = "command", rename_all = "snake_case")]
+        pub enum AnyCommand {
+            $($variant($variant),)*
+        }
+
+        impl AnyCommand {
+            pub fn name(&self) -> &'static str {
+                match self { $(AnyCommand::$variant(_) => $variant::NAME,)* }
+            }
+            pub fn execute(&self, tx: &mut Transaction) -> Result<CommandOutput, CommandError> {
+                match self { $(AnyCommand::$variant(c) => c.execute(tx),)* }
+            }
+            /// All command names (= MCP tool names).
+            pub const NAMES: &'static [&'static str] = &[$($variant::NAME,)*];
+        }
+
+        $(impl From<$variant> for AnyCommand {
+            fn from(c: $variant) -> Self { AnyCommand::$variant(c) }
+        })*
+    };
+}
+
+any_command!(
+    CreateLevel,
+    SetLevelElevation,
+    CreateRectangle,
+    CreatePolygon,
+    CreateBox,
+    PushPullFace,
+    MoveElements,
+    RotateElements,
+    CopyElements,
+    DeleteElements,
+    SetName,
+    SetParameter,
+    SetCategory,
+    SetProjectName,
+);
+
+impl AnyCommand {
+    /// Build from a tool name and JSON arguments (MCP).
+    pub fn from_tool(name: &str, args: &Value) -> Result<AnyCommand, String> {
+        if !Self::NAMES.contains(&name) {
+            return Err(format!("unknown command: {name}"));
+        }
+        let mut obj = args.as_object().cloned().unwrap_or_default();
+        obj.insert("command".into(), Value::String(name.into()));
+        serde_json::from_value(Value::Object(obj))
+            .map_err(|e| format!("invalid arguments for {name}: {e}"))
+    }
+}

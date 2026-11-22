@@ -1,0 +1,18 @@
+//! Model layer (Foundation Spec ch. 3): the `Document` and its `Element`s.
+//!
+//! The document is an immutable, structurally shared tree (D-24): cloning is
+//! O(1) and every committed transaction produces a new version. Mutation is
+//! only possible through `ops::Transaction` (D-17); the mutating methods here
+//! are crate-private.
+
+mod category;
+mod document;
+mod element;
+mod ids;
+mod parameter;
+
+pub use category::Category;
+pub use document::{Document, ProjectInfo, ProjectOrigins, EXTENT_LIMIT_MM};
+pub use element::{Element, ElementBody, Form, Level};
+pub use ids::{ElementId, Uid};
+pub use parameter::{keys, ParamValue};

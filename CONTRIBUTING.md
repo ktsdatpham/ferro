@@ -32,12 +32,14 @@ CI runs those same checks on Windows, macOS and Linux.
 4. **Tests for kernel changes.** Geometry bugs are subtle, so add a test that would have caught yours.
 5. Small PRs beat big PRs. Open an issue first for anything large.
 
-## Adding an MCP tool
+## Adding a command (and its MCP tool)
 
-1. Implement the operation on `Model` in `crates/ferro-core/src/model.rs`, with a test.
-2. Describe it in `tools::list()` in `crates/ferro-mcp/src/tools.rs`. Write the description for an AI reader: say what it does and give units.
-3. Handle it in `tools::call()`.
-4. Add a test in `crates/ferro-mcp/src/main.rs`.
+1. Add a struct implementing `Command` in `crates/ferro-core/src/ops/commands.rs`
+   (`NAME` = `verb_noun`), register it in `any_command!`, and test it.
+2. Describe it for AI readers in `tools::list()` in `crates/ferro-mcp/src/tools.rs`
+   (the test `every_command_has_a_tool_with_the_same_name` enforces this).
+3. If the app needs a tool for it, add a state in `crates/ferro-app/src/tools.rs`
+   that previews and commits that command.
 
 ## License
 

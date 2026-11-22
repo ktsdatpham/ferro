@@ -1,0 +1,73 @@
+name: Release builds
+
+# Every push to main produces downloadable builds (Actions → this workflow →
+# Artifacts). Pushing a tag like v0.2.0 also publishes a GitHub Release.
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: rustup show active-toolchain || rustup toolchain install
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo build --release -p ferro-app -p ferro-mcp
+      - name: Package
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force dist/Ferro | Out-Null
+          Copy-Item target/release/ferro.exe dist/Ferro/
+          Copy-Item target/release/ferro-mcp.exe dist/Ferro/
+          Copy-Item packaging/README-install.txt dist/Ferro/README.txt
+          Copy-Item LICENSE dist/Ferro/
+          Compress-Archive -Path dist/Ferro -DestinationPath Ferro-windows-x64.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Ferro-windows-x64
+          path: Ferro-windows-x64.zip
+      - if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: Ferro-windows-x64.zip
+
+  macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: rustup target add aarch64-apple-darwin x86_64-apple-darwin
+      - uses: Swatinem/rust-cache@v2
+      - name: Build universal binaries (Apple Silicon + Intel)
+        run: |
+          for t in aarch64-apple-darwin x86_64-apple-darwin; do
+            cargo build --release --target $t -p ferro-app -p ferro-mcp
+          done
+      - name: Bundle Ferro.app
+        run: |
+          APP=dist/Ferro.app/Contents
+          mkdir -p $APP/MacOS $APP/Resources
+          for b in ferro ferro-mcp; do
+            lipo -create -output $APP/MacOS/$b \
+              target/aarch64-apple-darwin/release/$b target/x86_64-apple-darwin/release/$b
+          done
+          VERSION=$(grep -m1 '^version' Cargo.toml | sed 's/.*"\(.*\)"/\1/')
+          sed "s/__VERSION__/$VERSION/" packaging/Info.plist > $APP/Info.plist
+          cp packaging/README-install.txt dist/README.txt
+          # Ad-hoc signature (required to run on Apple Silicon). Not notarised.
+          codesign --force --deep --sign - dist/Ferro.app
+          cd dist && ditto -c -k --keepParent Ferro.app ../Ferro-macos-universal.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Ferro-macos-universal
+          path: Ferro-macos-universal.zip
+      - if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: Ferro-macos-universal.zip
