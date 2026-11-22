@@ -36,7 +36,7 @@ pub fn triangulate_face(body: &Body, face: FaceId) -> Result<Vec<[Point3; 3]>, A
         .collect();
     let idx = earcutr::earcut(&flat, &holes, 2).map_err(|_| AlgoError::Triangulation)?;
     let mut tris = Vec::with_capacity(idx.len() / 3);
-    for t in idx.chunks_exact(3) {
+    for t in idx.as_chunks::<3>().0 {
         let (a, b, c) = (pts[t[0]], pts[t[1]], pts[t[2]]);
         // earcut output winding is not guaranteed; orient to the face normal.
         if (b - a).cross(c - a).dot(n.as_vec()) >= 0.0 {

@@ -4,6 +4,7 @@ description = "Inference engine (D-60): SketchUp-style snapping to points, edges
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+repository.workspace = true
 
 [dependencies]
 ferro-core = { path = "../ferro-core" }

@@ -4,6 +4,7 @@ description = "The Ferro desktop app: viewport, tools, panels (egui + wgpu)."
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+repository.workspace = true
 
 [[bin]]
 name = "ferro"
