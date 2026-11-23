@@ -2625,7 +2625,7 @@ impl FerroApp {
             let tool = p.req.tool.clone();
             let resp = self.agent_call(p.req);
             // Tool name and outcome code only (no arguments: model data).
-            let code = resp.body.get("code").and_then(|c| c.as_str()).unwrap_or("");
+            let code = resp.body["failures"][0]["code"].as_str().unwrap_or("");
             crate::report::record(if resp.ok {
                 format!("agent {tool} ok")
             } else {
