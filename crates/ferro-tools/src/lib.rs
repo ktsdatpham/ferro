@@ -246,6 +246,8 @@ pub fn list() -> Vec<Value> {
             json!({"element": id("Form id"), "edges": ids("Edge ids")}), &["element", "edges"]),
         tool("erase_faces", "Erase faces of a Form (it becomes open); erasing all faces deletes it.",
             json!({"element": id("Form id"), "faces": ids("Face ids")}), &["element", "faces"]),
+        tool("subtract_forms", "Cut one Form out of another (solid boolean difference): the target becomes target minus cutter, e.g. a box pushed into a wall makes a niche or an opening. Both must be closed solids with flat faces. The cutter is deleted unless keep_cutter is true. Faces of the target that survive keep their ids; returns lineage (kept / created / deleted faces) and faces (each result face with the input faces it came from: from_a = target, from_b = cutter). Fails with ferro.kernel.empty_result when nothing is left, ferro.kernel.unavailable when no geometry kernel is attached.",
+            json!({"target": id("Form to cut"), "cutter": id("Form to cut away"), "keep_cutter": {"type":"boolean","description":"Keep the cutter Form (default false: it is deleted)"}}), &["target", "cutter"]),
         // Phases (ADR 0006).
         tool("create_phase", "Create a construction phase (Revit Phase), appended at the end or inserted before `before`. Phases are ordered; elements are created / demolished in phases. Dates are YYYY-MM-DD. Returns {element, phases}.",
             json!({"name": {"type":"string"}, "before": id("Optional phase to insert before"), "start_date": {"type":"string","description":"YYYY-MM-DD"}, "end_date": {"type":"string","description":"YYYY-MM-DD"}}), &["name"]),

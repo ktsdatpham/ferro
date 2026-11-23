@@ -2465,6 +2465,31 @@
       "name": "erase_faces"
     },
     {
+      "description": "Cut one Form out of another (solid boolean difference): the target becomes target minus cutter, e.g. a box pushed into a wall makes a niche or an opening. Both must be closed solids with flat faces. The cutter is deleted unless keep_cutter is true. Faces of the target that survive keep their ids; returns lineage (kept / created / deleted faces) and faces (each result face with the input faces it came from: from_a = target, from_b = cutter). Fails with ferro.kernel.empty_result when nothing is left, ferro.kernel.unavailable when no geometry kernel is attached.",
+      "inputSchema": {
+        "properties": {
+          "cutter": {
+            "description": "Form to cut away",
+            "type": "integer"
+          },
+          "keep_cutter": {
+            "description": "Keep the cutter Form (default false: it is deleted)",
+            "type": "boolean"
+          },
+          "target": {
+            "description": "Form to cut",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "target",
+          "cutter"
+        ],
+        "type": "object"
+      },
+      "name": "subtract_forms"
+    },
+    {
       "description": "Create a construction phase (Revit Phase), appended at the end or inserted before `before`. Phases are ordered; elements are created / demolished in phases. Dates are YYYY-MM-DD. Returns {element, phases}.",
       "inputSchema": {
         "properties": {

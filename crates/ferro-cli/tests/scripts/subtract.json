@@ -1,0 +1,8 @@
+[
+  {"id": "wall", "tool": "create_box", "args": {
+    "origin": [0, 0, 0], "width": "2m", "depth": 200, "height": "1m", "name": "Wall"}},
+  {"id": "hole", "tool": "create_box", "args": {
+    "origin": [500, -100, 200], "width": 500, "depth": 400, "height": 500, "name": "Cutter"}},
+  {"id": "cut", "tool": "subtract_forms", "args": {
+    "target": {"$ref": "wall.result.element"}, "cutter": {"$ref": "hole.result.element"}}}
+]

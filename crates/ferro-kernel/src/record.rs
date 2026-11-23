@@ -27,11 +27,15 @@ fn pt(a: [f64; 3]) -> Point3 {
 }
 
 fn index(i: usize) -> Result<u32, KernelError> {
-    u32::try_from(i).map_err(|_| KernelError::new(KernelError::UNSUPPORTED, "the body is too large"))
+    u32::try_from(i)
+        .map_err(|_| KernelError::new(KernelError::UNSUPPORTED, "the body is too large"))
 }
 
 fn not_solid(e: impl std::fmt::Display) -> KernelError {
-    KernelError::new(KernelError::NOT_SOLID, format!("the operand is not a valid solid: {e}"))
+    KernelError::new(
+        KernelError::NOT_SOLID,
+        format!("the operand is not a valid solid: {e}"),
+    )
 }
 
 /// A record of `body` and, for each record face, the Ferro face it is.
@@ -99,14 +103,18 @@ pub(crate) fn body_to_record(body: &Body) -> Result<Record, KernelError> {
             .collect();
         loops.insert(f, ls);
     }
-    let point = |v: VertexId| body.point(v).ok_or_else(|| not_solid(format!("vertex {v} missing")));
+    let point = |v: VertexId| {
+        body.point(v)
+            .ok_or_else(|| not_solid(format!("vertex {v} missing")))
+    };
 
     // Each face's plane: through the outer loop's centroid, Newell normal.
     let mut planes: BTreeMap<FaceId, Plane> = BTreeMap::new();
     let mut slack: BTreeMap<VertexId, f64> = BTreeMap::new();
     for (f, ls) in &loops {
         let outer: Vec<Point3> = ls[0].iter().map(|v| point(*v)).collect::<Result<_, _>>()?;
-        let n = polygon::polygon_normal(&outer).ok_or_else(|| not_solid(format!("face {f} is degenerate")))?;
+        let n = polygon::polygon_normal(&outer)
+            .ok_or_else(|| not_solid(format!("face {f} is degenerate")))?;
         let c = Point3::centroid(&outer).ok_or_else(|| not_solid(format!("face {f} is empty")))?;
         let pl = Plane::from_origin_normal(c, n);
         for v in ls.iter().flatten() {
@@ -293,7 +301,9 @@ pub(crate) fn record_faces(rec: &Brep) -> Result<Vec<Vec<Vec<Point3>>>, KernelEr
     for s in &rec.shells {
         if let Shell::Faces { faces, .. } = s {
             for of in faces {
-                let slot = side.get_mut(of.face as usize).ok_or_else(|| bad("shell face"))?;
+                let slot = side
+                    .get_mut(of.face as usize)
+                    .ok_or_else(|| bad("shell face"))?;
                 if slot.is_some() {
                     return Err(KernelError::new(
                         KernelError::UNSUPPORTED,
@@ -307,7 +317,9 @@ pub(crate) fn record_faces(rec: &Brep) -> Result<Vec<Vec<Vec<Point3>>>, KernelEr
     let mut out = Vec::with_capacity(rec.faces.len());
     for (fi, face) in rec.faces.iter().enumerate() {
         let natural = match &face.surface {
-            Surface::Plane { u_axis, v_axis, .. } => pt(*u_axis).to_vec().cross(pt(*v_axis).to_vec()),
+            Surface::Plane { u_axis, v_axis, .. } => {
+                pt(*u_axis).to_vec().cross(pt(*v_axis).to_vec())
+            }
             Surface::PlaneThrough {
                 origin,
                 u_point,
@@ -338,7 +350,11 @@ pub(crate) fn record_faces(rec: &Brep) -> Result<Vec<Vec<Vec<Point3>>>, KernelEr
                         "the result has a curved edge; the kernel seam carries straight edges only",
                     ));
                 }
-                let v = if u.forward { e.vertices[0] } else { e.vertices[1] };
+                let v = if u.forward {
+                    e.vertices[0]
+                } else {
+                    e.vertices[1]
+                };
                 let p = rec.vertices.get(v as usize).ok_or_else(|| bad("vertex"))?;
                 pts.push(pt(p.point));
             }

@@ -85,7 +85,10 @@ fn from_topo(e: TopoError) -> KernelError {
             KernelError::NON_MANIFOLD_RESULT,
             "the result is not manifold: solids touch only along an edge or at a vertex",
         ),
-        e => invalid(format!("the result is not a valid solid: {e} ({})", e.code())),
+        e => invalid(format!(
+            "the result is not a valid solid: {e} ({})",
+            e.code()
+        )),
     }
 }
 
@@ -245,7 +248,8 @@ fn merge_group(
         }
         loops.push(lp);
     }
-    let local = |l: &Vec<usize>| -> Vec<Point2> { l.iter().map(|&i| plane.to_local(pts[i])).collect() };
+    let local =
+        |l: &Vec<usize>| -> Vec<Point2> { l.iter().map(|&i| plane.to_local(pts[i])).collect() };
     let mut outers: Vec<Vec<usize>> = Vec::new();
     let mut holes: Vec<Vec<usize>> = Vec::new();
     for l in loops {
@@ -367,7 +371,9 @@ pub fn assemble_kernel_result(a: &Body, faces: &[KernelFace]) -> Result<KernelRe
     for f in faces {
         let mut loops = Vec::new();
         for (k, l) in f.loops.iter().enumerate() {
-            if l.iter().any(|p| !(p.x.is_finite() && p.y.is_finite() && p.z.is_finite())) {
+            if l.iter()
+                .any(|p| !(p.x.is_finite() && p.y.is_finite() && p.z.is_finite()))
+            {
                 return Err(invalid("the kernel returned a non-finite point"));
             }
             let idx = clean_loop(l.iter().map(|p| points.find_or_push(*p)).collect());
@@ -503,7 +509,8 @@ pub fn assemble_kernel_result(a: &Body, faces: &[KernelFace]) -> Result<KernelRe
             }
             ids.push(out);
         }
-        let plane = face_plane(&pts, &w.loops).ok_or_else(|| invalid("a result face is degenerate"))?;
+        let plane =
+            face_plane(&pts, &w.loops).ok_or_else(|| invalid("a result face is degenerate"))?;
         let smooth = {
             let groups: BTreeSet<Option<u32>> = w
                 .sources
@@ -601,7 +608,11 @@ mod tests {
             assert!(r.body.face(*f).is_ok());
         }
         // The merged top carries both tops; B's east face is new.
-        let top = r.body.face_ids().find(|f| r.body.face_normal(*f).unwrap().as_vec().z > 0.9).unwrap();
+        let top = r
+            .body
+            .face_ids()
+            .find(|f| r.body.face_normal(*f).unwrap().as_vec().z > 0.9)
+            .unwrap();
         assert_eq!(top, fa[1]);
         assert_eq!(r.faces[&top].len(), 2);
         assert_eq!(r.lineage.created.len(), 1);

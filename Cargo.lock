@@ -744,6 +744,7 @@ dependencies = [
  "eframe",
  "ferro-core",
  "ferro-io",
+ "ferro-kernel",
  "ferro-scene",
  "ferro-snap",
  "ferro-tools",
@@ -815,6 +816,7 @@ version = "0.2.0"
 dependencies = [
  "ferro-core",
  "ferro-io",
+ "ferro-kernel",
  "ferro-tools",
  "serde",
  "serde_json",

@@ -35,7 +35,10 @@ fn subtract_forms_reaches_the_kernel_and_deletes_the_cutter() {
     assert!(s.doc().get(b).is_none());
     // Every face of the target survives with its id.
     assert_eq!(geometry(&s, a).face_ids().collect::<Vec<_>>(), faces);
-    assert_eq!(o.output["lineage"]["kept"].as_array().map(Vec::len), Some(6));
+    assert_eq!(
+        o.output["lineage"]["kept"].as_array().map(Vec::len),
+        Some(6)
+    );
     s.undo().unwrap();
     assert!(s.doc().get(b).is_some());
 }

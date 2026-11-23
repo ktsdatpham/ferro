@@ -348,3 +348,49 @@ fn script_from_stdin_and_bench() {
     let o = cli(&["bench", s(&script("failing.json")), "--repeat", "2"]);
     assert_eq!(code(&o), 1);
 }
+
+/// `subtract_forms` through the headless CLI (M5-16.4): the kernel is
+/// attached, the wall gets a through opening with an exact volume, its
+/// faces keep their ids, and `check` passes on the saved file.
+#[test]
+fn subtract_script_cuts_an_opening_and_passes_check() {
+    let d = tmp("subtract");
+    let fro = d.join("subtract.fro");
+    let o = cli(&["run", s(&script("subtract.json")), "--out", s(&fro)]);
+    assert_eq!(code(&o), 0, "{}", String::from_utf8_lossy(&o.stdout));
+    let l = lines(&o);
+    let cut = &l[2];
+    assert_eq!(cut["tool"], "subtract_forms");
+    assert_eq!(cut["ok"], true, "{cut}");
+    assert_eq!(cut["result"]["result"]["cutter_deleted"], true);
+    assert_eq!(
+        cut["result"]["result"]["lineage"]["kept"]
+            .as_array()
+            .unwrap()
+            .len(),
+        6
+    );
+    assert_eq!(
+        cut["result"]["result"]["lineage"]["created"]
+            .as_array()
+            .unwrap()
+            .len(),
+        4
+    );
+    assert!(cut["result"]["result"]["lineage"]["deleted"]
+        .as_array()
+        .unwrap()
+        .is_empty());
+
+    let (doc, _) = ferro_io::load_fro(&fro).unwrap();
+    assert_eq!(doc.len(), 1, "the cutter is gone");
+    let wall = doc.elements().next().unwrap();
+    let body = &wall.as_form().unwrap().body;
+    let expected = 2000.0 * 200.0 * 1000.0 - 500.0 * 200.0 * 500.0;
+    assert!((body.volume() - expected).abs() < 1e-3, "{}", body.volume());
+    assert_eq!(body.face_count(), 10);
+
+    let o = cli(&["check", s(&fro)]);
+    assert_eq!(code(&o), 0, "{}", String::from_utf8_lossy(&o.stdout));
+    assert_eq!(json(&o)["ok"], true);
+}

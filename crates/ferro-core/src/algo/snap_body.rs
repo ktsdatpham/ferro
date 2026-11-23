@@ -122,9 +122,9 @@ pub fn snap_body_to_body(b: &Body, a: &Body) -> Result<Body, TopoError> {
             };
             for v in &verts {
                 let list = constraints.entry(*v).or_default();
-                let same = list
-                    .iter()
-                    .any(|o| o.n.cross(c.n).length() < 1e-9 && (o.d - c.d * o.n.dot(c.n)).abs() < 1e-9);
+                let same = list.iter().any(|o| {
+                    o.n.cross(c.n).length() < 1e-9 && (o.d - c.d * o.n.dot(c.n)).abs() < 1e-9
+                });
                 if !same {
                     list.push(c);
                 }
@@ -189,7 +189,10 @@ mod tests {
             assert!((top_z(&s) - 1000.0).abs() < 1e-9, "{deg}: {}", top_z(&s));
             s.validate_solid().unwrap();
             // Ids are kept.
-            assert_eq!(s.face_ids().collect::<Vec<_>>(), b.face_ids().collect::<Vec<_>>());
+            assert_eq!(
+                s.face_ids().collect::<Vec<_>>(),
+                b.face_ids().collect::<Vec<_>>()
+            );
         }
     }
 
@@ -220,10 +223,15 @@ mod tests {
     fn snap_projects_a_corner_onto_three_planes() {
         let (a, _) = box_body(1000.0, 1000.0, 1000.0);
         let (mut b, _) = box_body(500.0, 500.0, 500.0);
-        b.transform(&Transform::translation(Vec3::new(500.006, 500.003, 499.995)));
+        b.transform(&Transform::translation(Vec3::new(
+            500.006, 500.003, 499.995,
+        )));
         let s = snap_body_to_body(&b, &a).unwrap();
         let bb = s.bounding_box().unwrap();
-        assert!((bb.min.x - 500.006).abs() < 1e-9, "inner faces are not on a plane of a");
+        assert!(
+            (bb.min.x - 500.006).abs() < 1e-9,
+            "inner faces are not on a plane of a"
+        );
         assert!((bb.max.x - 1000.0).abs() < 1e-9);
         assert!((bb.max.y - 1000.0).abs() < 1e-9);
         assert!((bb.max.z - 1000.0).abs() < 1e-9);

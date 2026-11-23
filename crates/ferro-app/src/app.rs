@@ -208,7 +208,8 @@ impl FerroApp {
         cc.egui_ctx.set_global_style(style);
         let doc = Document::new("Untitled");
         let mut app = FerroApp {
-            session: Session::new(doc.clone(), Box::new(ferro_io::SystemIds)),
+            session: Session::new(doc.clone(), Box::new(ferro_io::SystemIds))
+                .with_kernel(std::sync::Arc::new(ferro_kernel::SolidcoreKernel::new())),
             path: None,
             store: None,
             saved: doc,

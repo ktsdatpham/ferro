@@ -1490,6 +1490,34 @@ def erase_faces(
     return _call("erase_faces", args)
 
 
+def subtract_forms(
+    *,
+    target: int,
+    cutter: int,
+    keep_cutter: Optional[bool] = None,
+) -> Dict[str, Any]:
+    """Cut one Form out of another (solid boolean difference): the target becomes target
+    minus cutter, e.g. a box pushed into a wall makes a niche or an opening. Both must
+    be closed solids with flat faces. The cutter is deleted unless keep_cutter is true.
+    Faces of the target that survive keep their ids; returns lineage (kept / created /
+    deleted faces) and faces (each result face with the input faces it came from: from_a
+    = target, from_b = cutter). Fails with ferro.kernel.empty_result when nothing is
+    left, ferro.kernel.unavailable when no geometry kernel is attached.
+
+    Args:
+        target: Form to cut.
+        cutter: Form to cut away.
+        keep_cutter: Keep the cutter Form (default false: it is deleted). Optional.
+
+    Returns:
+        The tool's JSON body. Raises FerroError on failure.
+    """
+    args: Dict[str, Any] = {"target": target, "cutter": cutter}
+    if keep_cutter is not None:
+        args["keep_cutter"] = keep_cutter
+    return _call("subtract_forms", args)
+
+
 def create_phase(
     *,
     name: str,
@@ -2368,6 +2396,7 @@ TOOL_NAMES = (
     "scale_elements",
     "erase_edges",
     "erase_faces",
+    "subtract_forms",
     "create_phase",
     "set_phase",
     "delete_phase",

@@ -322,6 +322,25 @@ Imprint: split a planar face by curves drawn on it (SketchUp's "sticky" geometry
 - struct `Imprinted` — Result of [`imprint_face`].
 - fn `imprint_face` — Split face `face` of `body` by the polyline `curve` (closed if `closed`),
 
+### `ferro_core::algo::kernel`
+
+The kernel seam (ADR 0007, D-78): operations Ferro's own planar algorithms do not cover (booleans first; blends, offsets and curved primitives later) go through the [`Kernel`] trait. `ferro-core` only defines the trait and its data; an implementation (the `ferro-kernel` crate, on solidcore) is injected into a `Session` like its `IdSource`. `ferro-core` never depends on a kernel library.
+
+- enum `BooleanOp` — Which boolean a [`Kernel::boolean`] computes: a value passed to the
+- enum `FaceSource` — One input face an output face came from (D-25 lineage across two
+- struct `KernelResult` — The result of a kernel operation on operand `a` (and `b`).
+- struct `KernelError` — A kernel failure with a stable code (`ferro.kernel.*`, §5.6) and a human
+- fn `KernelError::new` — A failure with `code` (one of the constants above) and `message`.
+- fn `KernelError::unavailable` — `ferro.kernel.unavailable`: what a kernel command reports when its
+- trait `Kernel` — A B-rep kernel behind Ferro's seam (ADR 0007). Implementations are pure
+
+### `ferro_core::algo::kernel_result`
+
+A kernel's planar result turned into a Ferro [`Body`] in operand `a`'s id space, merged at Ferro's tolerances (D-06) and with lineage (D-25). Shared by every [`Kernel`](super::Kernel) implementation, so the merge and id rules do not depend on the kernel library.
+
+- struct `KernelFace` — One planar face of a kernel result, before merging.
+- fn `assemble_kernel_result` — Turn a kernel's planar faces into a [`KernelResult`] in `a`'s id space.
+
 ### `ferro_core::algo::mesh`
 
 - struct `Mesh` — Triangle mesh for display and export. Tessellation is a cache, never the
@@ -332,6 +351,12 @@ Imprint: split a planar face by curves drawn on it (SketchUp's "sticky" geometry
 
 - enum `PushPullMode` — How a push / pull was carried out (useful for UI hints and tests).
 - fn `push_pull_face` — Push / pull face `face` of `body` by `distance` mm along its normal
+
+### `ferro_core::algo::snap_body`
+
+Snap one operand to another at Ferro's tolerance before a kernel call (D-06): kernels keep a 0.001 mm gap or skin that Ferro treats as nothing, so a face of the tool within `VERTEX_TOL` of a plane of the target is moved onto that plane first.
+
+- fn `snap_body_to_body` — `b` with its faces that lie within `VERTEX_TOL` (0.01 mm, D-06) of a
 
 ### `ferro_core::geom`
 
@@ -1001,6 +1026,7 @@ SketchUp-style editing of Forms (milestone 4): drawing on faces, circles, offset
 - struct `ScaleElements` — Scale Forms about `center` by `factor` (uniform) or per axis `factors`.
 - struct `EraseEdges` — Erase edges of a Form. An edge between two faces in the same plane merges
 - struct `EraseFaces` — Erase faces of a Form (the Form becomes open, like deleting a face in
+- struct `SubtractForms` — Subtract one Form from another (solid boolean difference through the
 
 ### `ferro_core::ops::geometry_source`
 
@@ -1065,6 +1091,9 @@ Commands on the relationship table (ADR 0004 §5, M5-5.1).
 - struct `Outcome` — Result of a successful command.
 - struct `Session` — Owns the current document, undo / redo, transaction groups and the journal.
 - fn `Session::new`
+- fn `Session::with_kernel` — The same session with a geometry kernel (ADR 0007, D-78), injected
+- fn `Session::set_kernel` — Attach or remove the geometry kernel.
+- fn `Session::kernel` — The attached geometry kernel, if any.
 - fn `Session::doc`
 - fn `Session::journal`
 - fn `Session::can_undo`
@@ -1090,6 +1119,8 @@ Commands on the relationship table (ADR 0004 §5, M5-5.1).
 - fn `SequentialIds::new`
 - struct `Transaction` — An atomic unit of change (§4.3). Commands mutate a working copy; `finish`
 - fn `Transaction::new`
+- fn `Transaction::with_kernel` — The same transaction with a geometry kernel (ADR 0007), injected like
+- fn `Transaction::kernel` — The session's geometry kernel, for commands that need booleans.
 - fn `Transaction::name`
 - fn `Transaction::doc` — The working copy (reads see this transaction's own changes).
 - fn `Transaction::element`
@@ -1236,6 +1267,28 @@ File format versions and migrations (D-21, M5-21).
 
 - const `FORMAT_VERSION` — Current file format version.
 - fn `migrate` — Check a file's version and bring its data up to [`FORMAT_VERSION`].
+
+## `ferro-kernel`
+
+### `ferro_kernel`
+
+Ferro's kernel seam (ADR 0007, D-78): [`SolidcoreKernel`] implements `ferro_core::algo::Kernel` on solidcore. This is the only crate that depends on solidcore; everything above sees only the `Kernel` trait, so the kernel can change here without touching the rest of Ferro.
+
+
+### `ferro_kernel::record`
+
+Ferro `Body` ↔ solidcore B-rep record (schema 4, STEP names) for planar bodies: every face a plane, every edge a straight segment. The record is written in its canonical order (regions → shells → faces → edges → vertices by first appearance), so the kernel takes it as it is.
+
+- struct `Record` — A record of `body` and, for each record face, the Ferro face it is.
+- fn `body_to_record` — `body` as a solidcore record.
+- fn `record_faces` — The loops of every face of a planar result record (outer loop first,
+
+### `ferro_kernel::solidcore_kernel`
+
+[`SolidcoreKernel`]: Ferro's [`Kernel`] on solidcore (ADR 0007).
+
+- struct `SolidcoreKernel` — Ferro's B-rep kernel on solidcore (tangency-labs, safe-Rust SMLib port,
+- fn `SolidcoreKernel::new` — The kernel. Switches on solidcore's upstream fixes for the process
 
 ## `ferro-mcp`
 

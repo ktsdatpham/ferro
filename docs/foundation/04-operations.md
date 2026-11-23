@@ -142,3 +142,51 @@ Nobody polls the document. Revit equivalent: `DocumentChanged` event.
 Selection, camera, active tool and hover state live in the **app**, not in the
 `Document`, and never go through transactions. (Revit: `UIDocument.Selection`
 vs `Document`.)
+
+## 4.9 The geometry kernel (D-78, ADR 0007)
+
+Booleans (and later blends, offsets and curved primitives) go through the
+`Kernel` trait (`ferro_core::algo`). `ferro-core` only defines it; the
+`ferro-kernel` crate implements it on solidcore and is the only crate that
+depends on solidcore.
+
+- **Injection.** A `Session` receives its kernel like its `IdSource`:
+  `Session::new(doc, ids).with_kernel(Arc::new(SolidcoreKernel::new()))`
+  (or `set_kernel`). Each `Transaction` carries the session's kernel, and a
+  command reaches it with `tx.kernel()?`. The app, the MCP server and
+  `ferro-cli` attach `SolidcoreKernel`; core tests and minimal builds have
+  none.
+- **Operations.** `boolean(op, a, b)` with `BooleanOp::{Union, Difference,
+  Intersection}` on closed solids with flat faces (mm). The result
+  (`KernelResult`) is a `Body` in `a`'s id space: a face of `a` that survives
+  keeps its id (the largest piece when it is split), and so do surviving
+  vertices and edges; `faces` maps every result face to its input faces
+  (`FromA` / `FromB`, none for a new face); `lineage` says what happened to
+  `a`'s faces (D-25).
+- **Tolerances (D-06).** Before the call, faces of `b` within `VERTEX_TOL`
+  of a plane of `a` are snapped onto it (a 0.001 mm gap, step or skin is
+  nothing). After it, result points within `VERTEX_TOL` are one vertex
+  (taking `a`'s vertex where there is one), and neighbouring faces in one
+  plane are one face. A union of solids that are apart is one body of
+  several shells.
+- **Determinism.** The same operands give the same result on every call and
+  thread.
+
+Commands using the kernel:
+
+| Command | What |
+|---|---|
+| `subtract_forms {target, cutter, keep_cutter?: false}` | The target Form's body becomes target − cutter in one transaction; the cutter is deleted unless `keep_cutter`. Output: `element`, `cutter_deleted`, `lineage`, `faces` |
+
+Kernel failure codes:
+
+| Code | Meaning |
+|---|---|
+| `ferro.kernel.unavailable` | The session has no kernel |
+| `ferro.kernel.not_solid` | An operand is not a closed, valid solid |
+| `ferro.kernel.unsupported` | Geometry the seam does not carry yet: curved faces, bodies with inner voids as operands |
+| `ferro.kernel.empty_result` | Nothing is left (an intersection of solids that are apart, a difference that removes everything) |
+| `ferro.kernel.non_manifold_result` | The solids touch only along an edge or at a vertex |
+| `ferro.kernel.invalid_result` | The result fails `Body::validate_solid` |
+| `ferro.kernel.failed` | The kernel refused or failed (its message says why) |
+| `ferro.ops.same_element` | `subtract_forms` was given the same Form twice |

@@ -60,7 +60,9 @@ fn cuboid(lo: [f64; 3], hi: [f64; 3], pl: Place) -> (Body, Vec<FaceId>) {
         UnitVec3::Z,
         Angle::from_deg(pl.deg),
     ));
-    b.transform(&Transform::translation(Vec3::new(pl.at[0], pl.at[1], pl.at[2])));
+    b.transform(&Transform::translation(Vec3::new(
+        pl.at[0], pl.at[1], pl.at[2],
+    )));
     (b, ids)
 }
 
@@ -131,7 +133,12 @@ fn pocket_has_a_floor_from_the_cutter() {
         check(&r, 1e9 - 200.0 * 200.0 * 500.0, 11, &what);
         assert_eq!(r.body.face(fa[1]).expect("top kept").holes.len(), 1);
         // The pocket floor lies on the cutter's bottom.
-        assert!(r.faces.values().any(|s| s == &vec![FaceSource::FromB(fb[0])]), "{what}");
+        assert!(
+            r.faces
+                .values()
+                .any(|s| s == &vec![FaceSource::FromB(fb[0])]),
+            "{what}"
+        );
     }
 }
 
@@ -189,7 +196,10 @@ fn disjoint_operands() {
     // A difference keeps the target as it is.
     let r = ok(BooleanOp::Difference, &a, &b, "disjoint difference");
     check(&r, 1e9, 6, "disjoint difference");
-    assert_eq!(r.lineage.kept, fa.iter().copied().collect::<Vec<_>>().tap_sort());
+    assert_eq!(
+        r.lineage.kept,
+        fa.iter().copied().collect::<Vec<_>>().tap_sort()
+    );
     // A union is one body of two shells.
     let r = ok(BooleanOp::Union, &a, &b, "disjoint union");
     check(&r, 2e9, 12, "disjoint union");
@@ -251,11 +261,21 @@ fn opening_flush_with_both_wall_faces() {
         let (wall, _) = cuboid([0.0; 3], [6000.0, 200.0, 3000.0], pl);
         let (cut, _) = cuboid([2000.0, 0.0, 900.0], [3500.0, 200.0, 2100.0], pl);
         let r = ok(BooleanOp::Difference, &wall, &cut, &what);
-        check(&r, 6000.0 * 200.0 * 3000.0 - 1500.0 * 200.0 * 1200.0, 10, &what);
+        check(
+            &r,
+            6000.0 * 200.0 * 3000.0 - 1500.0 * 200.0 * 1200.0,
+            10,
+            &what,
+        );
         let (niche, _) = cuboid([2000.0, 100.0, 900.0], [3500.0, 200.0, 2100.0], pl);
         let what = format!("flush niche {pl:?}");
         let r = ok(BooleanOp::Difference, &wall, &niche, &what);
-        check(&r, 6000.0 * 200.0 * 3000.0 - 1500.0 * 100.0 * 1200.0, 11, &what);
+        check(
+            &r,
+            6000.0 * 200.0 * 3000.0 - 1500.0 * 100.0 * 1200.0,
+            11,
+            &what,
+        );
     }
 }
 

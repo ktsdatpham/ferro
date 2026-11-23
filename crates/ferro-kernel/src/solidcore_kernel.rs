@@ -108,8 +108,10 @@ fn run_boolean(
     ids_b: Vec<FaceId>,
 ) -> Result<Vec<KernelFace>, KernelError> {
     use solidcore_ops::Body as ScBody;
-    let (sa, oa) = ScBody::from_record(&ra, false).map_err(|e| failed(format!("operand a: {e}")))?;
-    let (sb, ob) = ScBody::from_record(&rb, false).map_err(|e| failed(format!("operand b: {e}")))?;
+    let (sa, oa) =
+        ScBody::from_record(&ra, false).map_err(|e| failed(format!("operand a: {e}")))?;
+    let (sb, ob) =
+        ScBody::from_record(&rb, false).map_err(|e| failed(format!("operand b: {e}")))?;
     let op = op_of(op);
     let run = || -> solidcore_ops::Result<ScBody> {
         solidcore_ops::boolean::boolean(sa.copy()?, sb.copy()?, op)?.ok_or(ScError::Empty)
@@ -149,7 +151,8 @@ impl Kernel for SolidcoreKernel {
             .map_err(|e| KernelError::new(KernelError::NOT_SOLID, e.to_string()))?;
         let ra = body_to_record(a)?;
         let rb = body_to_record(&b)?;
-        let faces = on_kernel_thread(move || run_boolean(op, ra.brep, rb.brep, ra.faces, rb.faces))?;
+        let faces =
+            on_kernel_thread(move || run_boolean(op, ra.brep, rb.brep, ra.faces, rb.faces))?;
         assemble_kernel_result(a, &faces)
     }
 }

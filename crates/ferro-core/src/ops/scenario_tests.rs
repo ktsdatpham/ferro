@@ -1547,10 +1547,7 @@ fn valid_calls(f: &Fx) -> Vec<(&'static str, Value)> {
             "erase_faces",
             json!({"element": f.sheet, "faces": [f.sheet_face]}),
         ),
-        (
-            "subtract_forms",
-            json!({"target": f.bx, "cutter": f.cut}),
-        ),
+        ("subtract_forms", json!({"target": f.bx, "cutter": f.cut})),
         (
             "set_geometry_source",
             json!({"element": f.wall, "source": "direct"}),
