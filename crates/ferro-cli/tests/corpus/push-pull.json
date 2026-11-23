@@ -1,0 +1,10 @@
+[
+  {"id": "box", "tool": "create_box", "args": {"origin": [0, 0, 0], "width": "2m", "depth": "2m", "height": "2m"}},
+  {"id": "sq", "tool": "imprint_face", "args": {"element": {"$ref": "box.result.element"}, "face": 5,
+    "points": [[500, 500, 2000], [1500, 500, 2000], [1500, 1500, 2000], [500, 1500, 2000]], "closed": true}},
+  {"id": "pocket", "tool": "push_pull_face", "args": {"element": {"$ref": "box.result.element"}, "face": {"$ref": "sq.result.new_faces.0"}, "distance": -500}},
+  {"id": "box2", "tool": "create_box", "args": {"origin": ["4m", 0, 0], "width": "2m", "depth": "1m", "height": "1m"}},
+  {"id": "boss", "tool": "push_pull_face", "args": {"element": {"$ref": "box2.result.element"}, "face": 5, "distance": "1.5m"}},
+  {"tool": "rotate_elements", "args": {"elements": [{"$ref": "box2.result.element"}], "angle": 30, "center": ["4m", 0, 0]}},
+  {"tool": "copy_elements", "args": {"elements": [{"$ref": "box.result.element"}], "vector": [0, "5m", 0], "count": 2}}
+]

@@ -1,0 +1,8 @@
+[
+  {"tool": "set_project_name", "args": {"name": "Corpus settings"}},
+  {"tool": "set_project_units", "args": {"spec": "length", "unit": "m", "decimals": 2}},
+  {"tool": "set_project_units", "args": {"spec": "area", "unit": "m²", "decimals": 1}},
+  {"tool": "set_site_location", "args": {"latitude": 16.05, "longitude": 108.2, "elevation": "5m", "utc_offset_minutes": 420, "place": "Da Nang"}},
+  {"tool": "set_project_currency", "args": {"currency": "VND"}},
+  {"tool": "create_box", "args": {"origin": [0, 0, 0], "width": "1m", "depth": "1m", "height": "1m"}}
+]

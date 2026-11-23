@@ -11,6 +11,7 @@
 //! ferro-cli tools [--names]
 //! ferro-cli info <model.fro|model.fro.json>
 //! ferro-cli check <model.fro|model.fro.json>
+//! ferro-cli fingerprint <model.fro|model.fro.json> [--expect F]
 //! ferro-cli bench <script.json|-> [--repeat N] [--in F]
 //! ```
 //!
@@ -33,6 +34,7 @@ macro_rules! outln {
 
 mod bench;
 mod check;
+mod fingerprint;
 mod script;
 
 use serde_json::{json, Value};
@@ -126,6 +128,7 @@ struct Opts {
     atomic: bool,
     names: bool,
     repeat: Option<usize>,
+    expect: Option<PathBuf>,
 }
 
 fn parse_opts(args: &[String]) -> Result<Opts, CliError> {
@@ -150,6 +153,7 @@ fn parse_opts(args: &[String]) -> Result<Opts, CliError> {
                 })?;
                 o.repeat = Some(n);
             }
+            "--expect" => o.expect = Some(value(a)?.into()),
             "--keep-going" => o.keep_going = true,
             "--atomic" => o.atomic = true,
             "--names" => o.names = true,
@@ -167,6 +171,7 @@ const USAGE: &str = "usage:
   ferro-cli tools [--names]
   ferro-cli info <model.fro|model.fro.json>
   ferro-cli check <model.fro|model.fro.json>
+  ferro-cli fingerprint <model.fro|model.fro.json> [--expect F]
   ferro-cli bench <script.json|-> [--repeat N] [--in F]";
 
 /// Print `{"ok": false, "error": {code, message}}` and return exit code 2.
@@ -250,6 +255,31 @@ fn run(args: &[String]) -> Result<ExitCode, CliError> {
             let (report, ok) = check::check(&PathBuf::from(&path));
             crate::outln!("{}", pretty(&report));
             Ok(if ok {
+                ExitCode::SUCCESS
+            } else {
+                ExitCode::from(1)
+            })
+        }
+        "fingerprint" => {
+            only_io_in(&o)?;
+            let path = one_positional(&o, "model file")?;
+            let server = script::open(&PathBuf::from(&path))?;
+            let got = fingerprint::fingerprint(server.session.doc());
+            let Some(exp) = &o.expect else {
+                crate::outln!("{}", pretty(&got));
+                return Ok(ExitCode::SUCCESS);
+            };
+            let text = std::fs::read_to_string(exp).map_err(|e| CliError {
+                code: codes::SCRIPT.into(),
+                message: format!("{}: {e}", exp.display()),
+            })?;
+            let want: Value = serde_json::from_str(&text).map_err(|e| CliError {
+                code: codes::SCRIPT.into(),
+                message: format!("{}: {e}", exp.display()),
+            })?;
+            let diff = fingerprint::differences(&want, &got, fingerprint::TOLERANCE);
+            crate::outln!("{}", json!({"ok": diff.is_empty(), "differences": diff}));
+            Ok(if diff.is_empty() {
                 ExitCode::SUCCESS
             } else {
                 ExitCode::from(1)

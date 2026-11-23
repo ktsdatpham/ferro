@@ -81,6 +81,23 @@ Opens the model and runs, in this order:
 
 Prints `{"file", "ok", "elements", "checks": [{"check", "ok", "problems"}]}`.
 
+## `fingerprint` and the model corpus (M5-17)
+
+`ferro-cli fingerprint m.fro` prints a canonical description of the model:
+every element by local id (deterministic for a script) with its category,
+body kind, references, and for geometry each face by persistent id with
+vertex count, area (mm²) and normal, plus counts, volume (mm³), bounding box
+and relationships. `--expect F` compares with a saved fingerprint (numbers
+within 1e-6 relative) and exits 1 listing the differing paths.
+
+`tests/corpus/*.json` are sample models; `cargo test -p ferro-cli --test
+corpus` rebuilds each, runs `check` and compares it with
+`<name>.fingerprint.json`, plus hand-computed oracle quantities. A kernel
+change that renames faces, loses lineage or changes a quantity fails there.
+After an intended change: `FERRO_BLESS=1 cargo test -p ferro-cli --test
+corpus`, then review the fingerprint diff in the PR. Add a script to the
+corpus for every new modelling feature.
+
 ## Exit codes
 
 | Code | Meaning |

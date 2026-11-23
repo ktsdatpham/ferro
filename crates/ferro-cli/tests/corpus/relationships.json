@@ -1,0 +1,9 @@
+[
+  {"id": "a", "tool": "create_box", "args": {"origin": [0, 0, 0], "width": 1000, "depth": 1000, "height": 1000}},
+  {"id": "b", "tool": "create_box", "args": {"origin": [1000, 0, 0], "width": 1000, "depth": 1000, "height": 1000}},
+  {"id": "c", "tool": "create_box", "args": {"origin": [2000, 0, 0], "width": 1000, "depth": 1000, "height": 1000}},
+  {"tool": "create_relationship", "args": {"kind": "join", "elements": [{"$ref": "a.result.element"}, {"$ref": "b.result.element"}]}},
+  {"tool": "create_relationship", "args": {"kind": "aggregate", "elements": [{"$ref": "a.result.element"}, {"$ref": "b.result.element"}, {"$ref": "c.result.element"}]}},
+  {"tool": "create_relationship", "args": {"kind": "connect", "elements": [{"$ref": "b.result.element"}, {"$ref": "c.result.element"}]}},
+  {"tool": "delete_elements", "args": {"elements": [{"$ref": "c.result.element"}]}}
+]

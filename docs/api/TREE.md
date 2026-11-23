@@ -248,6 +248,14 @@ ferro-cli: Ferro without the UI, for agents, CI and benchmarks.
 - fn `info` — `ferro-cli info`: project name, element counts by category (placed
 - fn `check` — `ferro-cli check`: open, regenerate, validate bodies, round trip through
 
+### `ferro_cli::fingerprint`
+
+`ferro-cli fingerprint`: a canonical description of a model for the regression corpus (M5-17, SolidCraft's naming corpus).
+
+- const `TOLERANCE` — Relative tolerance used by `--expect` (numbers are rounded to 0.001 too).
+- fn `fingerprint` — The fingerprint of a document: `{elements: {"<id>": {...}}}` in id
+- fn `differences` — Differences between two fingerprints as `path: expected → actual` lines;
+
 ### `ferro_cli::script`
 
 Scripts: a JSON array of tool calls run in order in a headless session.

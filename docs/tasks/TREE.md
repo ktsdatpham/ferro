@@ -101,7 +101,11 @@ Legend: `[ ]` open · `[~]` in progress · `[x]` done · `✓` verified ·
 - [ ] **M5-13 Code layout by discipline** (after M5-3 / M5-4 land): `model::bim` split into `model::architecture::{wall, floor, opening, …}`, room for `structure`, `mep`, `analysis`, `site`, like Revit's `DB.Architecture` / `DB.Structure`
 
 - [ ] **M5-16 Kernel seam crate `ferro-kernel`** (ADR 0007, D-78, approved 2026-11-24: solidcore): every Form geometry operation goes through one crate so the kernel can change without touching what is above (lesson from SolidCraft, `docs/review/2026-11-solidcraft-solidworks.md`)
-- [ ] **M5-17 Model corpus**: sample models rebuilt in CI, checking topology ids, lineage, volumes and areas after every kernel change (SolidCraft's naming corpus), plus hand-computed oracle cases and a robustness fuzz with boolean identities
+- [~] **M5-17 Model corpus**: sample models rebuilt in CI, checking topology ids, lineage, volumes and areas after every kernel change (SolidCraft's naming corpus), plus hand-computed oracle cases and a robustness fuzz with boolean identities @lead
+  - [x] M5-17.1 `ferro-cli fingerprint [--expect F]` + corpus `crates/ferro-cli/tests/corpus/` (house, multi-level, push-pull, freeze, renovation, relationships, settings) with blessed fingerprints, rebuilt and checked in CI on three OSes; `FERRO_BLESS=1` to re-bless @lead
+    - accept: `cargo test -p ferro-cli --test corpus` (2: every model builds, passes `check`, matches its fingerprint; oracles: pocket 7.5 m³, boss 5 m³, copies keep face ids, top face keeps id 5 through imprint + push, deleting a box drops its rows); a face id changed in a blessed file fails with the exact path
+  - [ ] M5-17.2 Boolean-identity fuzz (A∪B = B∪A, A−B−C = A−(B∪C), vol(A∪B)+vol(A∩B) = vol A + vol B) once the kernel lands (M5-16)
+  - [ ] M5-17.3 Corpus scripts for every new modelling feature (kernel booleans, design options, views) as they merge
 - [ ] **M5-19 Problems panel** ("What's Wrong"): regeneration warnings and broken references listed, click selects, fix hints; references carry `exact` / `unverified`, and a lost reference is reported, never silently re-attached
 - [ ] **M5-20 Model cache in `.fro`**: display meshes (and B-rep) cached so files open without regenerating; linked models load light (mesh + faces needed to snap / host) and resolve on edit
 - [x] **M5-18 `ferro-cli`**: run commands and scripts without the UI (agents, CI, benchmarks) · branch `m5/cli` @agent-cli

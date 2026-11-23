@@ -1,0 +1,14 @@
+[
+  {"id": "l1", "tool": "create_level", "args": {"name": "Ground", "elevation": 0}},
+  {"id": "l2", "tool": "create_level", "args": {"name": "Level 2", "elevation": "3.3m"}},
+  {"id": "w1", "tool": "create_walls", "args": {"points": [[0, 0], [0, "10m"], ["12m", "10m"], ["12m", 0]],
+    "closed": true, "level": {"$ref": "l1.result.element"}, "top_level": {"$ref": "l2.result.element"}}},
+  {"id": "f2", "tool": "create_floor", "args": {"points": [[0, 0], ["12m", 0], ["12m", "10m"], [0, "10m"]],
+    "level": {"$ref": "l2.result.element"}}},
+  {"id": "w2", "tool": "create_walls", "args": {"points": [[0, "5m"], ["12m", "5m"]], "height": "3m",
+    "level": {"$ref": "l2.result.element"}}},
+  {"tool": "create_opening", "args": {"wall": {"$ref": "w1.result.elements.0"}, "kind": "window", "position": "2m"}},
+  {"tool": "create_opening", "args": {"wall": {"$ref": "w1.result.elements.0"}, "kind": "window", "position": "6m"}},
+  {"tool": "create_opening", "args": {"wall": {"$ref": "w2.result.elements.0"}, "kind": "door", "position": "5m"}},
+  {"tool": "set_wall", "args": {"wall": {"$ref": "w2.result.elements.0"}, "height": "2.8m"}}
+]
