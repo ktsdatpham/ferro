@@ -59,6 +59,7 @@ namespace Ferro.Revit
                         case "direct_shape": DirectShape(op); break;
                         case "site_location": SiteLocationOf(op); break;
                         case "phase": PhaseOp(op); break;
+                        case "warning": _report.Problems.Add(Str(op, "message")); break;
                         default: _report.Problems.Add($"unknown operation {kind}"); break;
                     }
                 }
