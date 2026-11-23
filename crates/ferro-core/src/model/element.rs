@@ -37,7 +37,8 @@ pub enum GeometrySource {
 pub enum ElementBody {
     Level(Level),
     Form(Form),
-    Material(Material),
+    /// Boxed: a material with assets is much larger than other bodies.
+    Material(Box<Material>),
     WallType(WallType),
     FloorType(FloorType),
     Wall(Wall),

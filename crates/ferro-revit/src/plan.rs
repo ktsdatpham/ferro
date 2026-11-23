@@ -7,6 +7,7 @@ use ferro_core::model::bim::{
     CompoundStructure, LayerFunction, LocationLine, OpeningKind, WallTop,
 };
 use ferro_core::model::generate;
+use ferro_core::model::material::{PhysicalAsset, ThermalAsset};
 use ferro_core::model::{Document, Element, ElementBody};
 use ferro_core::Point2;
 use serde::{Deserialize, Serialize};
@@ -64,12 +65,21 @@ pub enum RevitOp {
         ferro_uid: String,
         unique_id: String,
     },
+    /// Create / update a material: colour, and when the Ferro material has
+    /// them, a Thermal and a Physical (structural) asset. Asset values are
+    /// SI as in `ferro_core::model::material` (not feet); the add-in converts
+    /// them with `UnitUtils`. Absent assets are omitted from the JSON, so
+    /// materials without assets keep their M3 signature.
     Material {
         uid: String,
         signature: String,
         name: String,
         /// sRGB 0–255.
         color: [u8; 3],
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        thermal: Option<ThermalAsset>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        physical: Option<PhysicalAsset>,
     },
     Level {
         uid: String,
@@ -320,6 +330,8 @@ pub fn plan(doc: &Document, state: &RevitState) -> Vec<RevitOp> {
                     signature: String::new(),
                     name: e.label(),
                     color: m.color.map(|c| (c.clamp(0.0, 1.0) * 255.0).round() as u8),
+                    thermal: m.thermal.clone(),
+                    physical: m.physical.clone(),
                 },
             ),
             ElementBody::Level(l) => (
@@ -762,5 +774,48 @@ mod tests {
             unreachable!()
         };
         assert_eq!(level_uid, DEFAULT_LEVEL_UID);
+    }
+
+    #[test]
+    fn material_op_carries_thermal_and_physical_assets() {
+        let mut s = house();
+        let ops = plan(s.doc(), &RevitState::default());
+        let mat = |ops: &[RevitOp]| {
+            ops.iter()
+                .find(|o| matches!(o, RevitOp::Material { .. }))
+                .cloned()
+                .unwrap()
+        };
+        let before = mat(&ops);
+        // Without assets the JSON is as in M3 (no asset keys).
+        let text = serde_json::to_string(&before).unwrap();
+        assert!(
+            !text.contains("thermal") && !text.contains("physical"),
+            "{text}"
+        );
+
+        s.execute(
+            AnyCommand::from_tool(
+                "set_material",
+                &json!({"material": 3, "thermal": {"conductivity_w_mk": 0.77},
+                    "physical": {"density_kg_m3": 1800}, "cost": {"unit_price": 1, "currency": "VND", "unit": "m3"}}),
+            )
+            .unwrap(),
+            &ExecContext::user(),
+        )
+        .unwrap();
+        let after = mat(&plan(s.doc(), &RevitState::default()));
+        let RevitOp::Material {
+            thermal, physical, ..
+        } = &after
+        else {
+            unreachable!()
+        };
+        assert!((thermal.as_ref().unwrap().conductivity_w_mk.unwrap() - 0.77).abs() < 1e-12);
+        assert!((physical.as_ref().unwrap().density_kg_m3.unwrap() - 1800.0).abs() < 1e-12);
+        // New data changes the signature, so Revit updates the material.
+        assert_ne!(before.signature(), after.signature());
+        let v = serde_json::to_value(&after).unwrap();
+        assert!((v["thermal"]["conductivity_w_mk"].as_f64().unwrap() - 0.77).abs() < 1e-12);
     }
 }

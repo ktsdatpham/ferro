@@ -44,10 +44,15 @@ Legend: `[ ]` open · `[~]` in progress · `[x]` done · `✓` verified ·
   - [ ] M5-3.3 Parameter definitions with `Uid` (key, spec, group, instance / type, Revit / IFC Pset mapping); built-in keys registered
   - [ ] M5-3.4 `set_parameter` takes quantities with units (`"0.8 W/mK"`), UI shows them in display units
 - [ ] **M5-4 Material assets** (ADR 0004 §3)
-  - [ ] M5-4.1 `Material` assets: appearance (OpenPBR subset), physical, thermal, environmental, cost; old files load
-  - [ ] M5-4.2 Type quantities from layers: U-value, mass per m², GWP per m², cost per m²
-  - [ ] M5-4.3 `create_material` / `set_material` tools and a material editor in the app
-  - [ ] M5-4.4 IFC material property sets; Revit material op carries thermal / physical values
+  - [x] M5-4.1 `Material` assets: appearance (OpenPBR subset), physical, thermal, environmental, cost; old files load · branch `m5/materials` @agent-materials
+    - Acceptance: `cargo test -p ferro-core model::material` passes; `old_material_json_loads_and_saves_unchanged` shows `{"color":[..],"roughness":..}` re-serialises byte-identical.
+  - [x] M5-4.2 Type quantities from layers: U-value, mass per m², GWP per m², cost per m² · branch `m5/materials` @agent-materials
+    - Acceptance: `cargo test -p ferro-core structure_quantities` passes; 200 mm brick (λ 0.77) + 100 mm wool (λ 0.035) gives U = 0.30424 W/m²K (Rsi 0.13, Rse 0.04, ISO 6946), and a layer without λ gives `u_value_w_m2k: null` with a `no_conductivity` gap in `get_element` on the type.
+  - [x] M5-4.3 `create_material` / `set_material` tools and a material editor in the app · branch `m5/materials` @agent-materials
+    - Acceptance: `cargo test -p ferro-core material_tests` and `cargo test -p ferro-mcp agent_sets_material_data` pass; in the app, ✎ next to a material opens an editor whose Apply changes the wall type's U-value shown in Properties.
+  - [x] M5-4.4 IFC material property sets; Revit material op carries thermal / physical values · branch `m5/materials` @agent-materials
+    - Acceptance: `cargo test -p ferro-io ifc` and `cargo test -p ferro-revit material_op` pass; IFC of a material with data contains `IFCMATERIALPROPERTIES('Pset_MaterialThermal'`; the C# add-in (`Applier.cs`, thermal / structural assets) builds in CI.
+  - [ ] M5-4.5 Acoustic asset (absorption per octave band) and texture rendering of `ImageMapping`
 - [ ] **M5-5 Relationships** (ADR 0004 §5) @lead
   - [ ] M5-5.1 Relationship table in the document (`Uid`, kind, elements), saved, undoable
   - [ ] M5-5.2 `Join`: inferred L / T joins become explicit; joins survive freezing

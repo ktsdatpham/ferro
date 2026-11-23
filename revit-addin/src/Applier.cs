@@ -126,7 +126,54 @@ namespace Ferro.Revit
             m ??= (Material)_doc.GetElement(Autodesk.Revit.DB.Material.Create(_doc, UniqueName<Material>(name, null)));
             var c = op["color"]!;
             m.Color = new Color((byte)c[0]!.GetValue<int>(), (byte)c[1]!.GetValue<int>(), (byte)c[2]!.GetValue<int>());
+            if (op["thermal"] is JsonObject th) ThermalAssetOf(m, th);
+            if (op["physical"] is JsonObject ph) StructuralAssetOf(m, ph);
             Tag(m, op, created);
+        }
+
+        // Optional SI number from an asset object (null when absent).
+        private static double? Si(JsonObject o, string k) =>
+            o[k] is JsonValue v && v.TryGetValue<double>(out var d) ? d : null;
+
+        private static double ToInternal(double v, ForgeTypeId unit) => UnitUtils.ConvertToInternalUnits(v, unit);
+
+        /// <summary>Thermal asset from Ferro's `thermal` (SI units): reuse the
+        /// material's own property set or create one.</summary>
+        private void ThermalAssetOf(Material m, JsonObject t)
+        {
+            var asset = new ThermalAsset(UniqueName<PropertySetElement>(m.Name + " (Ferro thermal)", null), ThermalMaterialType.Solid);
+            if (Si(t, "conductivity_w_mk") is double k) asset.ThermalConductivity = ToInternal(k, UnitTypeId.WattsPerMeterKelvin);
+            if (Si(t, "specific_heat_j_kgk") is double cp) asset.SpecificHeat = ToInternal(cp, UnitTypeId.JoulesPerKilogramDegreeCelsius);
+            if (Si(t, "density_kg_m3") is double rho) asset.Density = ToInternal(rho, UnitTypeId.KilogramsPerCubicMeter);
+            if (Si(t, "emissivity") is double e) asset.Emissivity = e;
+            if (_doc.GetElement(m.ThermalAssetId) is PropertySetElement pse)
+            {
+                asset.Name = pse.Name;
+                pse.SetThermalAsset(asset);
+            }
+            else
+            {
+                m.SetMaterialAspectByPropertySet(MaterialAspect.Thermal, PropertySetElement.Create(_doc, asset).Id);
+            }
+        }
+
+        /// <summary>Structural (physical) asset from Ferro's `physical` (SI units).</summary>
+        private void StructuralAssetOf(Material m, JsonObject p)
+        {
+            var asset = new StructuralAsset(UniqueName<PropertySetElement>(m.Name + " (Ferro physical)", null), StructuralAssetClass.Generic);
+            if (Si(p, "density_kg_m3") is double rho) asset.Density = ToInternal(rho, UnitTypeId.KilogramsPerCubicMeter);
+            if (Si(p, "youngs_modulus_pa") is double e) asset.SetYoungModulus(ToInternal(e, UnitTypeId.Pascals));
+            if (Si(p, "poisson_ratio") is double nu) asset.SetPoissonRatio(nu);
+            if (Si(p, "thermal_expansion_per_k") is double a) asset.SetThermalExpansionCoefficient(ToInternal(a, UnitTypeId.InverseDegreesCelsius));
+            if (_doc.GetElement(m.StructuralAssetId) is PropertySetElement pse)
+            {
+                asset.Name = pse.Name;
+                pse.SetStructuralAsset(asset);
+            }
+            else
+            {
+                m.SetMaterialAspectByPropertySet(MaterialAspect.Structural, PropertySetElement.Create(_doc, asset).Id);
+            }
         }
 
         private void Level(JsonObject op)
