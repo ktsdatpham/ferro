@@ -20,4 +20,12 @@ step "clippy"
 cargo clippy --workspace --all-targets -- -D warnings
 step "tests"
 cargo test --workspace -q
+step "ferro-cli: build the sample house headless, then self-check it"
+tmp="$(mktemp -d)"
+trap 'rm -rf "$tmp"' EXIT
+cargo run -q -p ferro-cli -- run crates/ferro-cli/tests/scripts/house.json \
+  --out "$tmp/house.fro" --ifc "$tmp/house.ifc" | tail -n 1
+cargo run -q -p ferro-cli -- check "$tmp/house.fro" > "$tmp/check.json" \
+  || { cat "$tmp/check.json"; exit 1; }
+echo "ferro-cli check: ok"
 echo; echo "ferro-check: all checks passed ($(git rev-parse --short HEAD 2>/dev/null || echo no-git))"

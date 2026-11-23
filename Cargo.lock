@@ -755,6 +755,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "ferro-cli"
+version = "0.2.0"
+dependencies = [
+ "ferro-core",
+ "ferro-io",
+ "ferro-mcp",
+ "serde_json",
+]
+
+[[package]]
 name = "ferro-core"
 version = "0.2.0"
 dependencies = [

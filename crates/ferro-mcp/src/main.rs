@@ -6,8 +6,7 @@
 //!
 //! Every kernel command is a tool (D-17). Logs go to stderr.
 
-mod tools;
-
+use ferro_mcp::tools;
 use serde_json::{json, Value};
 use std::io::{self, BufRead, Write};
 use tools::Server;
@@ -71,8 +70,7 @@ fn handle(server: &mut Server, req: &Value) -> Option<Value> {
 /// `tools/list` returns it. Generators (the Python SDK, ADR 0005) read it.
 /// Keys are sorted, so the output is deterministic.
 fn tools_json() -> String {
-    let v = json!({ "tools": tools::list() });
-    serde_json::to_string_pretty(&v).unwrap_or_else(|_| v.to_string())
+    tools::tools_json()
 }
 
 fn main() {

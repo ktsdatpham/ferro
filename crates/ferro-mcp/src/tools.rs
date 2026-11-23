@@ -19,10 +19,20 @@ pub fn list() -> Vec<Value> {
     v
 }
 
+/// The tool list as pretty JSON, `{"tools": [...]}` exactly as MCP
+/// `tools/list` returns it. Keys are sorted, so the output is deterministic.
+pub fn tools_json() -> String {
+    let v = json!({ "tools": list() });
+    serde_json::to_string_pretty(&v).unwrap_or_else(|_| v.to_string())
+}
+
 /// Server state: one session (the open project) plus its file path.
 pub struct Server {
+    /// The open project, its undo history and journal.
     pub session: Session,
+    /// File the project was opened from or last saved to.
     pub path: Option<PathBuf>,
+    /// Actor recorded in the journal for every call.
     pub agent: Actor,
     /// Forward to a running app when one is linked (off in tests or with
     /// `FERRO_LINK=off`).
@@ -30,6 +40,8 @@ pub struct Server {
 }
 
 impl Server {
+    /// A server with an empty "Untitled" project. Forwards to a linked app
+    /// unless `FERRO_LINK=off`.
     pub fn new() -> Server {
         Server {
             session: Session::new(Document::new("Untitled"), Box::new(ferro_io::SystemIds)),
@@ -41,7 +53,17 @@ impl Server {
         }
     }
 
-    fn ctx(&self) -> ExecContext {
+    /// A headless server that never forwards to the app (scripts, CI).
+    pub fn headless(agent: Actor) -> Server {
+        Server {
+            agent,
+            use_link: false,
+            ..Server::new()
+        }
+    }
+
+    /// Execution context for the next call: this server's actor, now.
+    pub fn ctx(&self) -> ExecContext {
         ExecContext {
             actor: self.agent.clone(),
             prompt: None,
@@ -106,6 +128,9 @@ impl Server {
             return r;
         }
         let path_arg = || args.get("path").and_then(Value::as_str).map(PathBuf::from);
+        let io_err = |e: ferro_io::IoError| Err(io_failure(&e));
+        let write =
+            |p: &PathBuf, bytes: &[u8]| std::fs::write(p, bytes).map_err(ferro_io::IoError::from);
         match name {
             "new_document" => {
                 let name = args
@@ -122,12 +147,10 @@ impl Server {
                 };
                 let doc = if p.to_string_lossy().ends_with(".json") {
                     std::fs::read_to_string(&p)
-                        .map_err(|e| e.to_string())
-                        .and_then(|t| ferro_io::document_from_json(&t).map_err(|e| e.to_string()))
+                        .map_err(ferro_io::IoError::from)
+                        .and_then(|t| ferro_io::document_from_json(&t))
                 } else {
-                    ferro_io::load_fro(&p)
-                        .map(|(d, _)| d)
-                        .map_err(|e| e.to_string())
+                    ferro_io::load_fro(&p).map(|(d, _)| d)
                 };
                 match doc {
                     Ok(d) => {
@@ -135,7 +158,7 @@ impl Server {
                         self.path = Some(p);
                         Ok(ferro_tools::summary(self.session.doc(), None))
                     }
-                    Err(m) => err(m),
+                    Err(e) => io_err(e),
                 }
             }
             "save_document" => {
@@ -144,48 +167,44 @@ impl Server {
                 };
                 let r = if p.to_string_lossy().ends_with(".json") {
                     ferro_io::document_to_json(self.session.doc())
-                        .map_err(|e| e.to_string())
-                        .and_then(|t| std::fs::write(&p, t).map_err(|e| e.to_string()))
+                        .and_then(|t| write(&p, t.as_bytes()))
                 } else {
                     ferro_io::save_fro(&p, self.session.doc(), self.session.journal())
-                        .map_err(|e| e.to_string())
                 };
                 match r {
                     Ok(()) => {
                         self.path = Some(p.clone());
                         Ok(json!({"saved": p}))
                     }
-                    Err(m) => err(m),
+                    Err(e) => io_err(e),
                 }
             }
-            "export_ifc" => {
+            "export_ifc" | "export_obj" | "export_glb" => {
                 let Some(p) = path_arg() else {
                     return err("missing path".into());
                 };
-                ferro_io::export_ifc(self.session.doc())
-                    .map_err(|e| e.to_string())
-                    .and_then(|t| std::fs::write(&p, t).map_err(|e| e.to_string()))
-                    .map(|_| json!({"exported": p}))
-                    .or_else(err)
-            }
-            "export_obj" | "export_glb" => {
-                let Some(p) = path_arg() else {
-                    return err("missing path".into());
+                let doc = self.session.doc();
+                let bytes = match name {
+                    "export_ifc" => ferro_io::export_ifc(doc).map(String::into_bytes),
+                    "export_obj" => ferro_io::export_obj(doc).map(String::into_bytes),
+                    _ => ferro_io::export_glb(doc),
                 };
-                let r = if name == "export_obj" {
-                    ferro_io::export_obj(self.session.doc())
-                        .map_err(|e| e.to_string())
-                        .and_then(|s| std::fs::write(&p, s).map_err(|e| e.to_string()))
-                } else {
-                    ferro_io::export_glb(self.session.doc())
-                        .map_err(|e| e.to_string())
-                        .and_then(|b| std::fs::write(&p, b).map_err(|e| e.to_string()))
-                };
-                r.map(|_| json!({"exported": p})).or_else(err)
+                match bytes.and_then(|b| write(&p, &b)) {
+                    Ok(()) => Ok(json!({"exported": p})),
+                    Err(e) => io_err(e),
+                }
             }
             other => err(format!("unknown tool: {other}")),
         }
     }
+}
+
+/// A file error as a tool error: `{"error", "failures": [{code: "ferro.io.*"}]}`.
+pub fn io_failure(e: &ferro_io::IoError) -> Value {
+    json!({
+        "error": e.message,
+        "failures": [{"severity": "error", "code": e.code, "message": e.message, "elements": []}],
+    })
 }
 
 impl Default for Server {

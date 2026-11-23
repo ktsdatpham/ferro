@@ -36,6 +36,9 @@ Read it before writing code. These rules are not optional.
 
 - Run `scripts/ferro-check` (or `--quick` while iterating) and paste its
   result in the PR; fill in `.github/pull_request_template.md`.
+- Agents verify their work with `ferro-cli check` (build a model with
+  `ferro-cli run <script.json> --out m.fro`, then `ferro-cli check m.fro`;
+  see `crates/ferro-cli/README.md`).
 - If you added or changed public items, regenerate the API map:
   `python3 scripts/api_tree.py`.
 

@@ -181,6 +181,55 @@ Drawing tools (D-72): app-side state machines. Each tool previews by evaluating 
 - fn `ToolState::typed` — Enter pressed with typed text (value control box).
 - fn `ToolState::rubber_band` — Lines to draw: the chain being drawn, the rubber band to the cursor,
 
+## `ferro-cli`
+
+### `ferro_cli`
+
+ferro-cli: Ferro without the UI, for agents, CI and benchmarks.
+
+- struct `CliError` — An error that stops the CLI before or outside tool calls (exit code 2).
+- fn `CliError::new` — New error with a code and message.
+- fn `CliError::usage` — Usage error.
+- struct `Io` — Model files written after a successful run (`--out`, `--ifc`, `--obj`,
+- fn `Io::output_calls` — The output tool calls, in a fixed order: save, IFC, OBJ, GLB.
+- fn `pretty` — Pretty JSON (sorted keys, so deterministic).
+
+### `ferro_cli::bench`
+
+`ferro-cli bench`: time each call of a script over N runs, each run in a fresh session (with `--in` reopened), for performance budgets (D-62). Times are wall-clock milliseconds; the opening of `--in` is not timed.
+
+- fn `median` — Median of a non-empty slice (mean of the middle two for even lengths);
+- fn `bench` — Run the script `repeat` times; prints
+
+### `ferro_cli::check`
+
+`info` (model summary) and `check` (self-acceptance: regenerate, validate every body, round trip, deterministic export). Output is deterministic: elements in id order, categories sorted, no uids, lengths in mm rounded to 0.001.
+
+- fn `body_problems` — Validate every element body: `validate_solid` for closed bodies and for
+- fn `regen_problems` — Regeneration errors (their own codes) and elements whose stored geometry
+- fn `bounding_box` — Bounding box of all placed geometry (mm), or `None` for a model without.
+- fn `info` — `ferro-cli info`: project name, element counts by category (placed
+- fn `check` — `ferro-cli check`: open, regenerate, validate bodies, round trip through
+
+### `ferro_cli::script`
+
+Scripts: a JSON array of tool calls run in order in a headless session.
+
+- struct `Step` — One tool call of a script.
+- struct `RunOpts` — How `run` treats failures.
+- fn `actor` — The actor recorded in the journal for CLI calls.
+- fn `read_source` — Read a script from a file, or from stdin when `path` is `-`.
+- fn `parse_args` — Parse tool arguments given on the command line: a JSON object.
+- fn `parse` — Parse a script (JSON array of `{"tool", "args"?, "id"?}`). Unknown keys,
+- struct `Runner` — Runs steps against a server and remembers results for `$ref`.
+- fn `Runner::step` — Run the next step (steps must be given in order). Ok = tool result,
+- fn `failure` — A failure entry in the kernel's JSON shape.
+- fn `line` — One output line for a call: `{tool, ok, result}` or
+- fn `open` — Open a model into a headless server. Fails with the file's `ferro.io.*`
+- fn `session` — A headless server with `--in` opened (if given).
+- fn `run` — `ferro-cli run`: prints one JSON line per call, then
+- fn `call_one` — `ferro-cli call`: one call, one line, then the outputs (when it succeeded).
+
 ## `ferro-core`
 
 ### `ferro_core`
@@ -902,6 +951,11 @@ IFC4 export (D-75, milestone 3): STEP physical file (ISO 10303-21), Reference Vi
 
 ### `ferro_mcp`
 
+ferro-mcp library: the MCP tool host (a headless [`tools::Server`] with file tools, forwarding to the open app over Ferro Link when linked). The `ferro-mcp` binary serves it over stdio; `ferro-cli` reuses it so scripts run exactly the same dispatch as agents (D-44).
+
+
+### `ferro_mcp`
+
 ferro-mcp: lets any MCP client (Claude Desktop, Claude Code, Cursor, ...) model in Ferro. Transport: newline-delimited JSON-RPC 2.0 over stdio.
 
 
@@ -910,9 +964,13 @@ ferro-mcp: lets any MCP client (Claude Desktop, Claude Code, Cursor, ...) model 
 MCP tool host. Tool schemas, unit conversion and command dispatch live in `ferro-tools` (shared with the app's Ferro Link server). When the Ferro app is open, calls are forwarded to it over Ferro Link so the agent edits the model the user is looking at (D-65); otherwise ferro-mcp keeps its own headless session with file tools.
 
 - fn `list` — All tools offered over MCP.
+- fn `tools_json` — The tool list as pretty JSON, `{"tools": [...]}` exactly as MCP
 - struct `Server` — Server state: one session (the open project) plus its file path.
-- fn `Server::new`
+- fn `Server::new` — A server with an empty "Untitled" project. Forwards to a linked app
+- fn `Server::headless` — A headless server that never forwards to the app (scripts, CI).
+- fn `Server::ctx` — Execution context for the next call: this server's actor, now.
 - fn `Server::call` — Run a tool. Ok = JSON result, Err = (message, failures JSON).
+- fn `io_failure` — A file error as a tool error: `{"error", "failures": [{code: "ferro.io.*"}]}`.
 
 ## `ferro-revit`
 

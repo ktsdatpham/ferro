@@ -90,7 +90,17 @@ Legend: `[ ]` open · `[~]` in progress · `[x]` done · `✓` verified ·
 
 - [ ] **M5-16 Kernel seam crate `ferro-kernel`**: every Form geometry operation goes through one crate so the kernel can change without touching what is above (lesson from SolidCraft, `docs/review/2026-11-solidcraft-solidworks.md`)
 - [ ] **M5-17 Model corpus**: sample models rebuilt in CI, checking topology ids, lineage, volumes and areas after every kernel change (SolidCraft's naming corpus)
-- [ ] **M5-18 `ferro-cli`**: run commands and scripts without the UI (agents, CI, benchmarks)
+- [x] **M5-18 `ferro-cli`**: run commands and scripts without the UI (agents, CI, benchmarks) · branch `m5/cli` @agent-cli
+  - [x] M5-18.1 Crate `ferro-cli` reusing the MCP tool host (`ferro-mcp` gains a lib target: `tools::Server::headless`, file errors carry `ferro.io.*` codes); `run` scripts with `$ref`, `--keep-going`, `--atomic`, `--in` / `--out` / `--ifc` / `--obj` / `--glb` @agent-cli
+    - accept: `cargo run -q -p ferro-cli -- run crates/ferro-cli/tests/scripts/house.json --out /tmp/h.fro --ifc /tmp/h.ifc` prints 5 call lines + 2 output lines + `{"summary":{…,"elements":10,"ok":true}}` and exits 0; `cargo test -p ferro-cli` passes (`failing_script_exits_nonzero_with_the_failure_code`, `atomic_leaves_nothing_behind_on_failure`)
+  - [x] M5-18.2 `call`, `tools [--names]`, `info` (counts by category, types, levels, bounding box, problems) @agent-cli
+    - accept: `cargo run -q -p ferro-cli -- info /tmp/h.fro` equals `crates/ferro-cli/tests/scripts/house.info.json` (test `info_output_is_stable`); `tools --names` lists every MCP tool
+  - [x] M5-18.3 `check`: open, regenerate (stale geometry), validate every body, `.fro.json` and in-memory `.fro` round trip, IFC / OBJ / GLB exported twice identical; exit 1 on any problem @agent-cli
+    - accept: `cargo run -q -p ferro-cli -- check /tmp/h.fro` prints `"ok": true` and exits 0; test `check_finds_a_broken_body` (a moved vertex → `ferro.topo.non_planar_face`, exit 1)
+  - [x] M5-18.4 `bench <script> --repeat N`: median / max ms per call (D-62) @agent-cli
+    - accept: `cargo run -q -p ferro-cli -- bench crates/ferro-cli/tests/scripts/house.json --repeat 3` prints 5 calls with `median_ms` / `max_ms`
+  - [x] M5-18.5 Clean errors (exit 2, `ferro.cli.*` / `ferro.io.*` code, never a panic); house + `check` in `scripts/ferro-check` and CI (ubuntu); README, AGENTS.md line, architecture table @agent-cli
+    - accept: test `bad_input_gives_a_clean_error_never_a_panic` passes; `scripts/ferro-check` ends with `ferro-cli check: ok`
 - [ ] **M5-14 Python SDK** (ADR 0005)
   - [x] M5-14.1 `ferro-mcp --tools-json` prints the tool list (schemas) for generators @agent-python
     - accept: `cargo run -q -p ferro-mcp -- --tools-json` prints `{"tools": [...]}` equal to MCP `tools/list`; `cargo test -p ferro-mcp` passes (incl. `tools_json_matches_tools_list`, `python_sdk_snapshot_is_current`) ✓ verified @lead (52 tools, 8 tests)

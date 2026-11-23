@@ -30,7 +30,8 @@ math     Point3, Vec3, UnitVec3, Transform, BoundingBox3, Length, Angle, tol
 | `ferro-io` | `ferro-core`, `rusqlite` | `.fro` / `.fro.json` files, OBJ / glTF export |
 | `ferro-snap` | `ferro-core` | Inference (snapping) |
 | `ferro-tools` | `ferro-core` | Tool schemas, unit normalisation, dispatch, Ferro Link protocol (ADR 0001) |
-| `ferro-mcp` | `ferro-core`, `ferro-io`, `ferro-tools` | MCP server; forwards to the open app over Ferro Link |
+| `ferro-mcp` | `ferro-core`, `ferro-io`, `ferro-tools` | MCP server; forwards to the open app over Ferro Link. Its tool host (`tools::Server`) is also a library |
+| `ferro-cli` | `ferro-core`, `ferro-io`, `ferro-mcp` | Headless command line: run tool scripts, `info`, `check` (self-acceptance), `bench` (D-62) |
 | `ferro-revit` | `ferro-core` | Revit edge: Ferro → Revit operations (feet), Revit → Ferro import (ADR 0002) |
 | `ferro-ffi` | `ferro-core`, `ferro-io`, `ferro-revit` | C ABI for the Revit add-in and native shells |
 | `ferro-render` (M1) | `ferro-core`, `wgpu` | Turns elements into GPU meshes, camera-relative |
