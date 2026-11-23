@@ -15,6 +15,6 @@ mod parameter;
 
 pub use category::Category;
 pub use document::{Document, ProjectInfo, ProjectOrigins, EXTENT_LIMIT_MM};
-pub use element::{Element, ElementBody, Form, Level};
+pub use element::{Element, ElementBody, Form, GeometrySource, Level};
 pub use ids::{ElementId, Uid};
 pub use parameter::{keys, ParamValue};

@@ -1319,6 +1319,38 @@ impl FerroApp {
                 }
                 ui.end_row();
 
+                if let Some(src) = e.geometry_source() {
+                    use ferro_core::model::GeometrySource;
+                    ui.label("Geometry");
+                    ui.horizontal(|ui| {
+                        let (label, other, button, tip) = match src {
+                            GeometrySource::Parametric => (
+                                "Parametric",
+                                GeometrySource::Direct,
+                                "Edit freely",
+                                "Freeze the shape so it can be edited like a SketchUp group; category, type and data stay",
+                            ),
+                            GeometrySource::Direct => (
+                                "Direct",
+                                GeometrySource::Parametric,
+                                "Make parametric",
+                                "Turn a plain wall or slab shape back into a parametric wall / floor",
+                            ),
+                        };
+                        ui.label(label);
+                        if ui.small_button(button).on_hover_text(tip).clicked() {
+                            self.run(
+                                ferro_core::ops::geometry_source::SetGeometrySource {
+                                    element: id,
+                                    source: other,
+                                }
+                                .into(),
+                            );
+                        }
+                    });
+                    ui.end_row();
+                }
+
                 if let Some(l) = e.level_id.and_then(|l| self.session.doc().get(l)) {
                     ui.label("Level");
                     ui.label(l.label());

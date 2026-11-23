@@ -20,6 +20,17 @@ pub struct Form {
     pub body: Body,
 }
 
+/// Where an element's geometry comes from (ADR 0004 §1). The geometric
+/// variants of [`ElementBody`] are the source: `Wall`, `Floor` and `Opening`
+/// carry the parameters their geometry is generated from; `Form` is geometry
+/// edited directly, whatever the element's category.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum GeometrySource {
+    Parametric,
+    Direct,
+}
+
 /// Category-specific data of an element.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
@@ -77,6 +88,17 @@ impl Element {
             ElementBody::Wall(w) => Some(&w.geometry),
             ElementBody::Floor(f) => Some(&f.geometry),
             ElementBody::Opening(o) => Some(&o.geometry),
+            _ => None,
+        }
+    }
+    /// Source of the element's geometry; `None` when it has none (levels,
+    /// types, materials).
+    pub fn geometry_source(&self) -> Option<GeometrySource> {
+        match &self.body {
+            ElementBody::Form(_) => Some(GeometrySource::Direct),
+            ElementBody::Wall(_) | ElementBody::Floor(_) | ElementBody::Opening(_) => {
+                Some(GeometrySource::Parametric)
+            }
             _ => None,
         }
     }

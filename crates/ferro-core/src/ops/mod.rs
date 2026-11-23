@@ -13,6 +13,7 @@ pub mod commands;
 mod events;
 mod failure;
 pub mod form_commands;
+pub mod geometry_source;
 mod session;
 mod transaction;
 
@@ -25,3 +26,5 @@ pub use transaction::{IdSource, SequentialIds, Transaction};
 mod bim_tests;
 #[cfg(test)]
 mod form_tests;
+#[cfg(test)]
+mod geometry_source_tests;

@@ -23,7 +23,8 @@ for the same concept.
 | `ReferenceLine` / `ReferencePoint` | Alignment line / point (SketchUp guides) | Guide, Construction line, Construction point |
 | `Dimension` | Model distance annotation | Measure, Dim (as a type) |
 | `WorkPlane` | Active sketch plane | Sketch plane, Drawing plane |
-| `Form` | Free-form editable element | Mass, Group, Blob, Mesh element |
+| `Form` | Geometry edited directly (geometry source `Direct`); any category, e.g. a free-form wall | Mass, Group, Blob, Mesh element |
+| `GeometrySource` | Where an element's geometry comes from: `Parametric` (generated from parameters) or `Direct` | Mode, Kind, Origin (for this) |
 | `Profile` | Outer loop + holes | Shape, Outline, Polygon (for this) |
 | `CurveLoop` | Closed connected curves | Polyline, Path, Ring |
 | `Point3` / `Vec3` | Location / displacement | XYZ, Pos, V3 |

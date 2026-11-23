@@ -85,8 +85,10 @@ pub fn list() -> Vec<Value> {
             json!({"element": id("Element id"), "name": {"type":["string","null"]}}), &["element", "name"]),
         tool("set_parameter", "Set a typed parameter. Key format namespace.group.name (e.g. ferro.common.comments, acme.fengshui.score). Value: {\"type\": \"length\"|\"angle\"|\"area\"|\"volume\"|\"number\"|\"integer\"|\"bool\"|\"text\"|\"tags\"|\"element_ref\", \"value\": ...}. Lengths in mm, angles in radians here. Computed keys (ferro.form.area, ferro.form.volume) are read-only.",
             json!({"element": id("Element id"), "key": {"type":"string"}, "value": {"type":"object"}}), &["element", "key", "value"]),
-        tool("set_category", "Classify a Form as a BIM category so it exports to Revit / IFC correctly.",
-            json!({"element": id("Form element id"), "category": {"type":"string","enum": Category::ALL.iter().filter(|c| c.classifiable_form()).map(|c| c.to_string()).collect::<Vec<_>>()}}), &["element", "category"]),
+        tool("set_category", "Classify directly edited geometry (a Form, or a frozen wall / floor) as a BIM category: a free-form wall keeps its shape and becomes a Wall with type, materials and parameters, exported to Revit / IFC as a wall. A type that no longer fits is removed.",
+            json!({"element": id("Element with direct geometry"), "category": {"type":"string","enum": Category::ALL.iter().filter(|c| c.classifiable_form()).map(|c| c.to_string()).collect::<Vec<_>>()}}), &["element", "category"]),
+        tool("set_geometry_source", "Switch where an element's geometry comes from. 'direct': freeze a parametric wall / floor so it can be edited freely like a SketchUp group (keeps category, type, parameters; hosted doors / windows freeze with it). 'parametric': turn a directly edited wall (rectangular box) or floor (flat slab with vertical sides) back into a parametric one, using a type of the same thickness; fails with ferro.model.not_recognised or ferro.model.no_matching_type. Returns {element, changed}.",
+            json!({"element": id("Element id"), "source": {"type":"string","enum":["direct","parametric"]}}), &["element", "source"]),
         tool("set_project_name", "Rename the project.", json!({"name":{"type":"string"}}), &["name"]),
         // BIM elements (milestone 2).
         tool("create_material", "Create a material with a base colour. Returns {element}.",

@@ -475,10 +475,23 @@ impl Command for SetElementType {
     const NAME: &'static str = "set_element_type";
     fn execute(&self, tx: &mut Transaction) -> Result<CommandOutput, CommandError> {
         let t = tx.element(self.element_type)?;
+        let e = tx.element(self.element)?;
+        // Parametric walls / floors, or directly edited ones of that category.
         let ok = matches!(
-            (&tx.element(self.element)?.body, &t.body),
+            (&e.body, &t.body),
             (ElementBody::Wall(_), ElementBody::WallType(_))
                 | (ElementBody::Floor(_), ElementBody::FloorType(_))
+        ) || matches!(
+            (&e.body, e.category, &t.body),
+            (
+                ElementBody::Form(_),
+                Category::Walls,
+                ElementBody::WallType(_)
+            ) | (
+                ElementBody::Form(_),
+                Category::Floors,
+                ElementBody::FloorType(_)
+            )
         );
         if !ok {
             return Err(err(

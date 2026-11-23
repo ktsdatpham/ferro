@@ -5,6 +5,7 @@
 
 use super::bim_commands::*;
 use super::form_commands::*;
+use super::geometry_source::*;
 use super::{CommandError, Transaction};
 use crate::algo::{push_pull_face, PushPullMode};
 use crate::geom::{polygon, Plane};
@@ -528,7 +529,9 @@ impl Command for SetParameter {
     }
 }
 
-/// Classify a Form as a BIM category (D-12), e.g. `walls`.
+/// Classify directly edited geometry as a BIM category (D-12, ADR 0004),
+/// e.g. `walls`: a free-form wall keeps its shape and gets the category's
+/// data. A type that does not fit the new category is removed.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SetCategory {
     pub element: ElementId,
@@ -545,6 +548,17 @@ impl Command for SetCategory {
             ));
         }
         let c = self.category;
+        let type_fits = tx
+            .element(self.element)?
+            .type_id
+            .and_then(|t| tx.doc().get(t))
+            .is_some_and(|t| {
+                matches!(
+                    (c, &t.body),
+                    (Category::Walls, crate::model::ElementBody::WallType(_))
+                        | (Category::Floors, crate::model::ElementBody::FloorType(_))
+                )
+            });
         tx.modify(self.element, |e| {
             if e.as_form().is_none() {
                 return Err(CommandError::new(
@@ -554,6 +568,10 @@ impl Command for SetCategory {
                 .on(e.id));
             }
             e.category = c;
+            // Keep the type only if it still fits (wall types for walls...).
+            if !type_fits {
+                e.type_id = None;
+            }
             Ok(())
         })?;
         Ok(json!({ "element": self.element }))
@@ -637,6 +655,7 @@ any_command!(
     ScaleElements,
     EraseEdges,
     EraseFaces,
+    SetGeometrySource,
 );
 
 impl AnyCommand {
