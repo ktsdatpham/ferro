@@ -27,8 +27,14 @@ pub enum PushPullMode {
 ///   faces that lie in the plane of a perpendicular neighbour are merged into
 ///   it, so that neighbour grows or shrinks (SketchUp behaviour).
 ///
-/// The result is validated; collapse or inversion returns `Collapse` and the
-/// body is left unchanged.
+/// * Closed solid, a face with one loop pushed exactly onto an opposite
+///   parallel face (within `VERTEX_TOL`) → a hole through (`Through`).
+///
+/// The result is validated and the body is left unchanged on failure:
+/// collapse or inversion returns `Collapse`; a result whose faces cross,
+/// e.g. a pocket pushed deeper than the solid (past `VERTEX_TOL` beyond the
+/// opposite face), returns `Topo(SelfIntersecting)`
+/// (`ferro.topo.self_intersecting`).
 pub fn push_pull_face(
     body: &mut Body,
     face: FaceId,
@@ -51,7 +57,7 @@ pub fn push_pull_face(
     let mut work = body.clone();
     if distance < 0.0 && work.is_closed() && loops.len() == 1 {
         if let Some(r) = push_through(&mut work, face, &loops[0], n, -distance)? {
-            work.validate_solid().map_err(|_| AlgoError::Collapse)?;
+            check_solid(&work)?;
             *body = work;
             return Ok(r);
         }
@@ -80,6 +86,9 @@ pub fn push_pull_face(
                 .map(|v| (*v, work.point(*v).expect("loop vertex") + offset))
                 .collect();
             work.move_vertices(&moves)?;
+            // A step pulled back below an old corner leaves that corner as
+            // the tip of a spike in its faces: drop it.
+            remove_spikes(&mut work)?;
             // A neighbour may legitimately turn around (a step pulled past its
             // neighbour flips), but it must not vanish or cross itself; the
             // solid check below catches a turned-inside-out body.
@@ -108,9 +117,81 @@ pub fn push_pull_face(
         }
     };
 
-    work.validate_solid().map_err(|_| AlgoError::Collapse)?;
+    check_solid(&work)?;
     *body = work;
     Ok(result)
+}
+
+/// Distance (mm) from `p` to the line through `a` and `b` (to `a` when the
+/// two coincide).
+fn distance_to_line(p: Point3, a: Point3, b: Point3) -> f64 {
+    let d = b - a;
+    let len = d.length();
+    if len <= tol::PARAM_TOL {
+        return p.distance_to(a);
+    }
+    (p - a).cross(d).length() / len
+}
+
+/// Remove vertices left as spike tips by a stretch: a vertex where a loop
+/// runs out and straight back (previous, vertex and next on one line within
+/// `VERTEX_TOL`, direction reversed), provided every loop using it passes
+/// straight through it or doubles back there. Loops left with fewer than
+/// three vertices are a collapse.
+fn remove_spikes(work: &mut Body) -> Result<(), AlgoError> {
+    use std::collections::BTreeSet;
+    // Each pass removes at least one vertex; bounded by the vertex count.
+    for _ in 0..=work.vertex_count() {
+        let specs = work.face_specs();
+        let mut tips = BTreeSet::new();
+        let mut bent = BTreeSet::new();
+        for s in &specs {
+            for lp in std::iter::once(&s.outer).chain(&s.holes) {
+                let k = lp.len();
+                for i in 0..k {
+                    let (a, v, b) = (lp[(i + k - 1) % k], lp[i], lp[(i + 1) % k]);
+                    let (Some(pa), Some(pv), Some(pb)) =
+                        (work.point(a), work.point(v), work.point(b))
+                    else {
+                        return Err(AlgoError::Collapse);
+                    };
+                    if distance_to_line(pv, pa, pb) > tol::VERTEX_TOL {
+                        bent.insert(v);
+                    } else if (pv - pa).dot(pb - pv) < 0.0 {
+                        tips.insert(v);
+                    }
+                }
+            }
+        }
+        let remove: BTreeSet<VertexId> = tips.difference(&bent).copied().collect();
+        if remove.is_empty() {
+            return Ok(());
+        }
+        let mut out = Vec::with_capacity(specs.len());
+        for mut s in specs {
+            s.outer.retain(|v| !remove.contains(v));
+            s.holes
+                .iter_mut()
+                .for_each(|h| h.retain(|v| !remove.contains(v)));
+            if s.outer.len() < 3 || s.holes.iter().any(|h| h.len() < 3) {
+                return Err(AlgoError::Collapse);
+            }
+            out.push(s);
+        }
+        let verts = work.vertex_map();
+        work.rebuild(verts, out)?;
+    }
+    Ok(())
+}
+
+/// Validate the result as a solid: self-intersection keeps its own code,
+/// every other failure is a collapse.
+fn check_solid(work: &Body) -> Result<(), AlgoError> {
+    match work.validate_solid() {
+        Ok(()) => Ok(()),
+        Err(e @ crate::topo::TopoError::SelfIntersecting(_)) => Err(AlgoError::Topo(e)),
+        Err(_) => Err(AlgoError::Collapse),
+    }
 }
 
 /// Push `face` inward by `depth` when that lands exactly on an opposite,
@@ -322,38 +403,20 @@ fn splice(spec: &mut FaceSpec, a: VertexId, b: VertexId, mid: &[VertexId]) -> bo
     false
 }
 
-/// `true` if the closed polygon has no two non-adjacent edges that touch.
+/// `true` if the closed polygon is simple (exact test in its plane, D-53)
+/// and has no two vertices within `VERTEX_TOL`.
 fn is_simple(pts: &[Point3], normal: crate::math::UnitVec3) -> bool {
-    let plane = crate::geom::Plane::from_origin_normal(pts[0], normal);
-    let p: Vec<crate::math::Point2> = pts.iter().map(|q| plane.to_local(*q)).collect();
-    let n = p.len();
-    let cross = |a: crate::math::Point2, b: crate::math::Point2, c: crate::math::Point2| {
-        (b - a).perp_dot(c - a)
+    let Some(&first) = pts.first() else {
+        return false;
     };
-    for i in 0..n {
-        let (a, b) = (p[i], p[(i + 1) % n]);
-        for j in (i + 2)..n {
-            if i == 0 && j == n - 1 {
-                continue;
-            }
-            let (c, d) = (p[j], p[(j + 1) % n]);
-            let d1 = cross(a, b, c);
-            let d2 = cross(a, b, d);
-            let d3 = cross(c, d, a);
-            let d4 = cross(c, d, b);
-            if d1 * d2 < 0.0 && d3 * d4 < 0.0 {
-                return false;
-            }
-        }
-        // Repeated vertices also break simplicity.
-        if p.iter()
+    let plane = crate::geom::Plane::from_origin_normal(first, normal);
+    let p: Vec<crate::math::Point2> = pts.iter().map(|q| plane.to_local(*q)).collect();
+    let repeated = (0..p.len()).any(|i| {
+        p.iter()
             .skip(i + 1)
             .any(|q| q.distance_to(p[i]) <= tol::VERTEX_TOL)
-        {
-            return false;
-        }
-    }
-    true
+    });
+    !repeated && crate::geom::predicates::polygon_is_simple(&p)
 }
 
 fn prism(
@@ -542,6 +605,14 @@ mod tests {
         assert!((b.volume() - (v - 1500.0 * 3000.0 * 300.0)).abs() < 1.0);
         // The side faces were merged, not added: same face count as a step.
         assert_eq!(b.face_count(), 8);
+        // The old top corners are gone (no spike left in the side faces).
+        assert!(b
+            .vertices()
+            .all(|(_, p)| p.x > 1.0 || (p.z - 1000.0).abs() > 1.0));
+        for f in b.face_ids() {
+            let pts = b.face_points(f).unwrap();
+            assert!(is_simple(&pts, b.face_normal(f).unwrap()), "{f}");
+        }
         // Too deep collapses and leaves the body alone.
         let before = b.clone();
         assert!(push_pull_face(&mut b, small, -800.0).is_err());

@@ -901,6 +901,7 @@ Topology layer (Foundation Spec §2.6): half-edge boundary representation.
 - fn `Body::face_area_vector` — Area vector of a face: Σ over loops of ½ Σ pᵢ × pᵢ₊₁ (holes subtract
 - fn `Body::face_normal`
 - fn `Body::face_area`
+- fn `Body::face_triangles` — Triangles covering face `f` (holes supported), as vertex ids,
 - fn `Body::neighbors` — Faces adjacent to `f` across its outer-loop edges, in loop order
 - fn `Body::edges` — All edges as segments, for rendering and snapping.
 - fn `Body::is_closed` — `true` if every edge has two faces.
@@ -908,7 +909,7 @@ Topology layer (Foundation Spec §2.6): half-edge boundary representation.
 - fn `Body::bounding_box`
 - fn `Body::move_vertices` — Move vertices (ids unchanged). Planar face surfaces are refitted.
 - fn `Body::transform` — Apply a transform to all geometry.
-- fn `Body::validate` — Structural validity (links consistent, manifold, planar faces planar).
+- fn `Body::validate` — Validity of the body: links consistent, manifold, planar faces planar,
 - fn `Body::validate_solid` — Validity as a solid: structurally valid, closed and outward-facing (D-11).
 
 ### `ferro_core::topo::error`
