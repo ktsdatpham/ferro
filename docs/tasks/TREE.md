@@ -33,8 +33,9 @@ Legend: `[ ]` open · `[~]` in progress · `[x]` done · `✓` verified ·
     - accept: select a wall, "Edit freely" → Geometry shows Direct, Push/Pull on its faces edits the solid; "Make parametric" on a plain box wall returns it
   - [x] M5-1.5 Type selector and type data shown for direct walls / floors in the properties panel @lead
     - accept: select a frozen wall: the Properties panel shows a Type combo listing wall types; picking one runs `set_element_type`
-- [ ] **M5-2 Representations and quantities** @lead
-  - [ ] M5-2.1 Quantities from the body for every category: volume, surface area, footprint area, height (read-only computed parameters)
+- [~] **M5-2 Representations and quantities** @lead
+  - [x] M5-2.1 Quantities from the body for every category: volume, surface area, footprint area, height (read-only computed parameters) @lead
+    - accept: test `direct_walls_and_floors_report_quantities_from_their_solid`; a frozen wall shows Volume / Height / Thickness and no Length
   - [ ] M5-2.2 Wall faces by side (exterior / interior / top / ends) for direct walls, by comparing with the type's layers when possible
   - [ ] M5-2.3 Derived representations: Axis (walls), Footprint (all), Box; cached, not saved
 - [ ] **M5-3 Quantity-typed parameters** (ADR 0004 §2)

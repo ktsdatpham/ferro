@@ -367,7 +367,8 @@ impl<'a> Transaction<'a> {
         Ok((self.work, changed, self.warnings))
     }
 
-    /// Computed dimensions of walls and floors.
+    /// Computed dimensions of walls and floors, parametric or direct
+    /// (ADR 0004 §1: quantities come from the solid for every category).
     fn bim_params(&self, e: &mut Element) {
         let snapshot = e.clone();
         let mut out: Vec<(&str, ParamValue)> = Vec::new();
@@ -392,7 +393,56 @@ impl<'a> Transaction<'a> {
                     set(keys::AREA, ParamValue::Area(v / t));
                 }
             }
+            ElementBody::Form(f) if snapshot.category != Category::Forms => {
+                // Direct geometry classified as a building element.
+                let b = &f.body;
+                if b.is_closed() {
+                    set(keys::VOLUME, ParamValue::Volume(b.volume()));
+                }
+                if let Some(bb) = b.bounding_box() {
+                    set(keys::HEIGHT, ParamValue::Length(len(bb.max.z - bb.min.z)));
+                }
+                let typed = match snapshot
+                    .type_id
+                    .and_then(|t| self.work.get(t))
+                    .map(|t| &t.body)
+                {
+                    Some(ElementBody::WallType(t)) => Some(t.structure.thickness()),
+                    Some(ElementBody::FloorType(t)) => Some(t.structure.thickness()),
+                    _ => None,
+                };
+                if let Some(t) = typed {
+                    set(keys::THICKNESS, ParamValue::Length(len(t)));
+                }
+                if snapshot.category == Category::Floors {
+                    // Plan area: the faces looking up.
+                    let up: f64 = b
+                        .face_ids()
+                        .filter(|fid| {
+                            b.face_normal(*fid)
+                                .is_ok_and(|n| n.as_vec().z > 1.0 - crate::math::tol::ANGLE_TOL)
+                        })
+                        .filter_map(|fid| b.face_area(fid).ok())
+                        .sum();
+                    set(keys::AREA, ParamValue::Area(up));
+                }
+            }
             _ => {}
+        }
+        // Computed keys this element no longer has (e.g. a frozen wall's
+        // length) are removed so nothing stale is reported.
+        if snapshot.geometry_source() == Some(crate::model::GeometrySource::Direct) {
+            for k in [
+                keys::LENGTH,
+                keys::HEIGHT,
+                keys::THICKNESS,
+                keys::AREA,
+                keys::VOLUME,
+            ] {
+                if !out.iter().any(|(o, _)| *o == k) {
+                    e.params.remove(k);
+                }
+            }
         }
         for (k, v) in out {
             e.params.insert(k.into(), v);

@@ -310,3 +310,46 @@ fn reclassifying_drops_a_type_that_no_longer_fits_and_openings_cannot_freeze_alo
     ));
     assert_eq!(c, "ferro.model.no_geometry");
 }
+
+fn len_param(s: &Session, e: ElementId, key: &str) -> Option<f64> {
+    match s.doc().get(e).unwrap().param(key) {
+        Some(crate::model::ParamValue::Length(l)) => Some(l.mm()),
+        Some(crate::model::ParamValue::Area(a)) | Some(crate::model::ParamValue::Volume(a)) => {
+            Some(*a)
+        }
+        _ => None,
+    }
+}
+
+#[test]
+fn direct_walls_and_floors_report_quantities_from_their_solid() {
+    use crate::model::keys;
+    let mut s = session();
+    let w = wall(&mut s);
+    assert!(len_param(&s, w, keys::LENGTH).is_some());
+    run(
+        &mut s,
+        "set_geometry_source",
+        json!({"element": w, "source": "direct"}),
+    );
+    // Frozen: volume / height / thickness from the solid and type; no stale length.
+    assert!((len_param(&s, w, keys::VOLUME).unwrap() - 6000.0 * 200.0 * 3000.0).abs() < 1.0);
+    assert!((len_param(&s, w, keys::HEIGHT).unwrap() - 3000.0).abs() < 1e-6);
+    assert!((len_param(&s, w, keys::THICKNESS).unwrap() - 200.0).abs() < 1e-6);
+    assert_eq!(len_param(&s, w, keys::LENGTH), None);
+    // A free-form slab classified as floor: plan area from the faces looking up.
+    let b = boxed(&mut s, 4000.0, 3000.0, 150.0);
+    assert_eq!(
+        len_param(&s, b, keys::AREA),
+        None,
+        "plain Forms keep form.* keys only"
+    );
+    run(
+        &mut s,
+        "set_category",
+        json!({"element": b, "category": "floors"}),
+    );
+    assert!((len_param(&s, b, keys::AREA).unwrap() - 12e6).abs() < 1.0);
+    assert!((len_param(&s, b, keys::HEIGHT).unwrap() - 150.0).abs() < 1e-6);
+    assert_eq!(len_param(&s, b, keys::THICKNESS), None, "no type yet");
+}
