@@ -1,0 +1,23 @@
+# solidcore spike. Own workspace: solidcore-ops / -tess / -step are not on crates.io
+# (publish = false), so this depends on a local checkout of tangency-labs/solidcore.
+# Evaluated at solidcore 3d86b621e05fa8e3bc0057730bbd598c4b53de6a (2026-11-23).
+# Replace SC_CHECKOUT below with the path of your checkout.
+# The kernel crate is ~1.1 M lines: rustc peaked at ~5 GB RSS in a dev build (opt-level 0);
+# release builds were killed for memory on the 8 GB spike machine.
+[workspace]
+
+[package]
+name = "sc-eval"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+solidcore = { git = "https://github.com/tangency-labs/solidcore", rev = "3d86b62" }
+solidcore-ops = { git = "https://github.com/tangency-labs/solidcore", rev = "3d86b62" }
+solidcore-record = { git = "https://github.com/tangency-labs/solidcore", rev = "3d86b62" }
+solidcore-tess = { git = "https://github.com/tangency-labs/solidcore", rev = "3d86b62" }
+solidcore-step = { git = "https://github.com/tangency-labs/solidcore", rev = "3d86b62" }
+
+[profile.release]
+debug = false

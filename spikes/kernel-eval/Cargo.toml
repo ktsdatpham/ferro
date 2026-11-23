@@ -1,0 +1,11 @@
+# Kernel spike (M5-9.2). Not part of the Ferro workspace: own [workspace] table.
+# Build: RUSTUP_TOOLCHAIN=stable cargo build --release
+# Run:   ONLY=<substring> MESH_TOL=<mm> target/release/truck-eval <boolean tol mm>
+[workspace]
+resolver = "2"
+members = ["truck-eval", "mt-eval"]
+# sc-eval has its own workspace: it needs a local solidcore checkout (see its Cargo.toml).
+exclude = ["sc-eval"]
+
+[profile.release]
+debug = false
