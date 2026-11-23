@@ -1,0 +1,11 @@
+[package]
+name = "mt-eval"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+monstertruck-modeling = { version = "0.4.3", features = ["fillet"] }
+monstertruck-solid = "0.4.3"
+monstertruck-meshing = "0.4.3"
+monstertruck-io = { version = "0.4.3", features = ["step"] }
