@@ -487,6 +487,13 @@ impl Body {
             v.point = t.apply(v.point);
         }
         for f in self.faces.values_mut() {
+            // Carry the plane frame along so its in-plane axis follows the
+            // rotation (refit below snaps it to the moved points).
+            if let Surface::Plane(pl) = &mut f.surface {
+                if let Ok(moved) = pl.transformed(t) {
+                    *pl = moved;
+                }
+            }
             if let Surface::Cylinder(c) = &mut f.surface {
                 c.axis_origin = t.apply(c.axis_origin);
                 if let Some(a) = t.apply_dir(c.axis) {
@@ -528,15 +535,14 @@ impl Body {
                     Surface::Plane(p) => p,
                     _ => unreachable!(),
                 };
-                // Keep the in-plane X axis when possible so textures don't spin.
-                let pl = Plane::from_frame(
-                    pts[0],
-                    old.x_axis().as_vec(),
-                    n.as_vec().cross(old.x_axis().as_vec()),
-                )
-                .ok()
-                .filter(|p| p.normal().dot(n) > 0.0)
-                .unwrap_or_else(|| Plane::from_origin_normal(pts[0], n));
+                // Keep the in-plane X axis when possible so textures don't
+                // spin: the old axis projected into the new plane.
+                let ox = old.x_axis().as_vec();
+                let x = ox - n.as_vec() * ox.dot(n.as_vec());
+                let pl = Plane::from_frame(pts[0], x, n.as_vec().cross(x))
+                    .ok()
+                    .filter(|p| p.normal().dot(n) > 1.0 - tol::ANGLE_TOL)
+                    .unwrap_or_else(|| Plane::from_origin_normal(pts[0], n));
                 if let Some(face) = self.faces.get_mut(&f) {
                     face.surface = Surface::Plane(pl);
                 }

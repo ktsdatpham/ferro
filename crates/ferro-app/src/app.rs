@@ -153,7 +153,10 @@ pub struct FerroApp {
     /// Axis locked with the arrow keys (→ red X, ← green Y, ↑ blue Z).
     axis_lock: Option<ferro_snap::Axis>,
     /// Axis locked while Shift is held over an axis inference.
-    shift_lock: Option<ferro_snap::Axis>,
+    shift_lock: Option<(SnapKind, ferro_core::Vec3)>,
+    /// Direction of the last edge hovered: reference for parallel /
+    /// perpendicular inference (SketchUp: hover an edge to teach it).
+    ref_dir: Option<ferro_core::UnitVec3>,
     autonomy: Autonomy,
     proposal: Option<Proposal>,
     chat: Chat,
@@ -210,6 +213,7 @@ impl FerroApp {
             sub_sel: Vec::new(),
             axis_lock: None,
             shift_lock: None,
+            ref_dir: None,
             autonomy: Autonomy::Propose,
             proposal: None,
             chat: Chat {
@@ -1608,35 +1612,52 @@ impl FerroApp {
             ray = fc.ray([p.x, p.y]);
             let settings = SnapSettings {
                 ground_z: level.map(|l| l.1).unwrap_or(0.0),
+                reference: self.ref_dir,
                 ..Default::default()
             };
-            let sc = &self.snap_scene.as_ref().expect("built").2;
-            snap_res = snap(sc, &ray, [p.x, p.y], &fc, self.tool.anchor(), &settings);
+            if let Some((_, _, sc)) = &self.snap_scene {
+                snap_res = snap(sc, &ray, [p.x, p.y], &fc, self.tool.anchor(), &settings);
+            }
+            if let Some(d) = snap_res.and_then(|s| s.edge_dir) {
+                self.ref_dir = Some(d);
+            }
             // Inference locking: Shift keeps the axis currently inferred;
             // arrow keys force one.
             if ctx.input(|i| i.modifiers.shift) && self.tool.anchor().is_some() {
                 if self.shift_lock.is_none() {
-                    if let Some(SnapKind::OnAxis(a)) = snap_res.map(|s| s.kind) {
-                        self.shift_lock = Some(a);
+                    if let (Some(s), Some(a)) = (snap_res, self.tool.anchor()) {
+                        let lockable = matches!(
+                            s.kind,
+                            SnapKind::OnAxis(_) | SnapKind::Parallel | SnapKind::Perpendicular
+                        );
+                        if let (true, Some(d)) = (lockable, (s.point - a).normalize()) {
+                            self.shift_lock = Some((s.kind, d.as_vec()));
+                        }
                     }
                 }
             } else {
                 self.shift_lock = None;
             }
-            if let (Some(axis), Some(anchor)) =
-                (self.axis_lock.or(self.shift_lock), self.tool.anchor())
-            {
+            let arrow = self.axis_lock.map(|axis| {
                 let d = match axis {
                     ferro_snap::Axis::X => ferro_core::Vec3::X,
                     ferro_snap::Axis::Y => ferro_core::Vec3::Y,
                     ferro_snap::Axis::Z => ferro_core::Vec3::Z,
                 };
+                (SnapKind::OnAxis(axis), d)
+            });
+            if let (Some((kind, d)), Some(anchor)) = (arrow.or(self.shift_lock), self.tool.anchor())
+            {
                 // Closest point on the locked line to the cursor ray; a
                 // snapped point is projected onto the line instead.
                 let point = match snap_res.filter(|s| {
                     !matches!(
                         s.kind,
-                        SnapKind::Ground | SnapKind::OnFace | SnapKind::OnAxis(_)
+                        SnapKind::Ground
+                            | SnapKind::OnFace
+                            | SnapKind::OnAxis(_)
+                            | SnapKind::Parallel
+                            | SnapKind::Perpendicular
                     )
                 }) {
                     Some(s) => anchor + d * (s.point - anchor).dot(d),
@@ -1655,10 +1676,11 @@ impl FerroApp {
                 };
                 snap_res = Some(SnapResult {
                     point,
-                    kind: SnapKind::OnAxis(axis),
+                    kind,
                     element: None,
                     face: None,
                     normal: None,
+                    edge_dir: None,
                 });
             }
             near_first = self
@@ -2030,6 +2052,9 @@ impl FerroApp {
                     SnapKind::OnAxis(ferro_snap::Axis::X) => (Color32::from_rgb(220, 40, 40), true),
                     SnapKind::OnAxis(ferro_snap::Axis::Y) => (Color32::from_rgb(40, 160, 60), true),
                     SnapKind::OnAxis(ferro_snap::Axis::Z) => (Color32::from_rgb(40, 80, 220), true),
+                    SnapKind::Parallel | SnapKind::Perpendicular => {
+                        (Color32::from_rgb(200, 40, 200), true)
+                    }
                     SnapKind::OnFace => (Color32::from_rgb(40, 60, 200), false),
                     SnapKind::Ground => (Color32::GRAY, false),
                 };

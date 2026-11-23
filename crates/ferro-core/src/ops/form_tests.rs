@@ -250,3 +250,30 @@ fn erase_faces_opens_the_form_then_deletes_it() {
     assert!(s.doc().get(e).is_none());
     assert!(run(&mut s, "erase_faces", json!({"element": e, "faces": [1]})).is_err());
 }
+
+#[test]
+fn rotated_boxes_stay_valid_and_can_be_pushed() {
+    // Regression: refitting planes after a rotation kept the old in-plane
+    // axis, tilting side-face planes off their points (non_planar_face).
+    for angle in [30.0, 45.0, 90.0, 1e-7, -137.5] {
+        let mut s = session();
+        let e = boxed(&mut s);
+        run(
+            &mut s,
+            "rotate_elements",
+            json!({"elements": [e], "center": {"x":0,"y":0,"z":0}, "angle": angle}),
+        )
+        .unwrap_or_else(|f| panic!("{angle}: {f:?}"));
+        let b = body(&s, e);
+        b.validate().unwrap();
+        assert!((b.volume() - 4000.0 * 3000.0 * 1000.0).abs() < 1.0);
+        let side = face_towards(&b, [1.0, 0.0, 0.0]);
+        run(
+            &mut s,
+            "push_pull_face",
+            json!({"element": e, "face": side, "distance": 500}),
+        )
+        .unwrap_or_else(|f| panic!("{angle}: {f:?}"));
+        body(&s, e).validate().unwrap();
+    }
+}

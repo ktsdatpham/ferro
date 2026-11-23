@@ -306,6 +306,8 @@ fn is_point_snap(k: SnapKind) -> bool {
             | SnapKind::Origin
             | SnapKind::OnEdge
             | SnapKind::OnAxis(_)
+            | SnapKind::Parallel
+            | SnapKind::Perpendicular
     )
 }
 
