@@ -107,7 +107,7 @@ Legend: `[ ]` open · `[~]` in progress · `[x]` done · `✓` verified ·
     - accept: `cargo test -p ferro-core kernel_tests` passes (unavailable + rollback, kernel reached, preview uses it)
   - [x] M5-16.3 Crate `ferro-kernel`: `SolidcoreKernel` for planar bodies (Body ↔ solidcore record, per-face history → lineage, D-06 snap / merge, deterministic); the only crate depending on solidcore @agent-kernel
     - accept: `cargo test -p ferro-kernel` passes (box − box hole / pocket / notch, coplanar union, intersection, disjoint, flush, 0.001 / 0.01 / 0.02 mm, 0° / 30° / 45°, 5 km, lineage, validate, determinism)
-  - [x] M5-16.4 Command `subtract_forms {target, cutter, keep_cutter?}` (new verb `subtract`, ADR 0007 note): MCP schema, scenario, Python SDK; kernel wired into `ferro-app`, `ferro-mcp`, `ferro-cli` @agent-kernel
+  - [x] M5-16.4 Command `subtract_forms {target, cutter, keep_cutter?}` (new verb `subtract`, ADR 0007 note): MCP schema, scenario, Python SDK; kernel wired into `ferro-app`, `ferro-mcp`, `ferro-cli`; corpus model `booleans.json` (pocket, through hole, flush cutter kept) @agent-kernel
     - accept: `cargo test -p ferro-cli subtract` runs a script with `subtract_forms` then `ferro-cli check` (ok, exact volume); in the app, two overlapping boxes → `subtract_forms` through Ferro Link / MCP leaves a pocket
   - [x] M5-16.5 Spec: glossary `Kernel`, `BooleanOp`, verb `subtract`; command and `ferro.kernel.*` codes in ch. 4 @agent-kernel
 - [~] **M5-17 Model corpus**: sample models rebuilt in CI, checking topology ids, lineage, volumes and areas after every kernel change (SolidCraft's naming corpus), plus hand-computed oracle cases and a robustness fuzz with boolean identities @lead

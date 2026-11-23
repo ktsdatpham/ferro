@@ -1494,6 +1494,7 @@ def subtract_forms(
     *,
     target: int,
     cutter: int,
+    in_design_option: Optional[int] = None,
     keep_cutter: Optional[bool] = None,
 ) -> Dict[str, Any]:
     """Cut one Form out of another (solid boolean difference): the target becomes target
@@ -1507,12 +1508,16 @@ def subtract_forms(
     Args:
         target: Form to cut.
         cutter: Form to cut away.
+        in_design_option: Optional design option id: make this change inside that option
+            (its layer), not in the shared model. Optional.
         keep_cutter: Keep the cutter Form (default false: it is deleted). Optional.
 
     Returns:
         The tool's JSON body. Raises FerroError on failure.
     """
     args: Dict[str, Any] = {"target": target, "cutter": cutter}
+    if in_design_option is not None:
+        args["in_design_option"] = in_design_option
     if keep_cutter is not None:
         args["keep_cutter"] = keep_cutter
     return _call("subtract_forms", args)

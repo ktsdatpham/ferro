@@ -1070,6 +1070,7 @@ fn every_command_rejects_degenerate_and_wrong_inputs_with_rollback() {
             "apply_changes",
             json!({"changes": [{"op": "remove", "path": "elements"}]}),
             "ferro.change.bad_path",
+        ),
         // booleans (M5-16); the fixture's kernel answers only apart operands
         (
             "subtract_forms",

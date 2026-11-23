@@ -2472,6 +2472,10 @@
             "description": "Form to cut away",
             "type": "integer"
           },
+          "in_design_option": {
+            "description": "Optional design option id: make this change inside that option (its layer), not in the shared model",
+            "type": "integer"
+          },
           "keep_cutter": {
             "description": "Keep the cutter Form (default false: it is deleted)",
             "type": "boolean"

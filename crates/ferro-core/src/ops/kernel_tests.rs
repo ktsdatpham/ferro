@@ -67,6 +67,24 @@ fn a_session_kernel_can_be_removed() {
 }
 
 #[test]
+fn editing_in_a_design_option_uses_the_session_kernel() {
+    let mut s = kernel_session();
+    let (a, b) = two_boxes(&mut s);
+    let o = run(&mut s, "create_option_set", json!({"name": "Cut"}));
+    let option: ElementId = serde_json::from_value(o.output["option"].clone()).unwrap();
+    let cmd = AnyCommand::from_tool("subtract_forms", &json!({"target": a, "cutter": b})).unwrap();
+    s.execute_in_option(
+        option,
+        &crate::model::Combination::primary(),
+        cmd,
+        &ExecContext::user(),
+    )
+    .unwrap();
+    // The shared model keeps the cutter; the option's layer removes it.
+    assert!(s.doc().get(b).is_some());
+}
+
+#[test]
 fn preview_uses_the_session_kernel() {
     let mut s = kernel_session();
     let (a, b) = two_boxes(&mut s);

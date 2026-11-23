@@ -222,7 +222,8 @@ impl Session {
         let base_others = resolve_options(&self.doc, &others)?;
         let base = resolve_options(&self.doc, &chosen)?;
         let name = cmd.name().to_string();
-        let mut tx = Transaction::new(&name, &base, self.ids.as_mut());
+        let mut tx =
+            Transaction::new(&name, &base, self.ids.as_mut()).with_kernel(self.kernel.clone());
         let output = cmd.execute(&mut tx).map_err(|e| vec![e.into_failure()])?;
         let (edited, changed, mut warnings) = tx.finish()?;
         let changes = layer_from_edit(&base_others, &edited).map_err(|e| fail(e.into()))?;
