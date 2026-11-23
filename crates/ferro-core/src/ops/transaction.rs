@@ -284,6 +284,41 @@ impl<'a> Transaction<'a> {
         Ok(())
     }
 
+    /// Make the working copy equal to `doc` (same ids): elements and
+    /// relationship rows missing from `doc` are removed, differing ones
+    /// replaced, the project info copied. Used by commands that apply a change list
+    /// (`accept_design_option`, `apply_changes`); `doc` is authoritative, so
+    /// no reference is cleared and nothing cascades.
+    pub(crate) fn replace_with(&mut self, doc: &Document) {
+        for id in self.work.element_ids() {
+            if !doc.contains(id) {
+                self.work.remove(id);
+            }
+        }
+        for e in doc.elements() {
+            if self.work.get(e.id) != Some(e) {
+                self.work.put(e.clone());
+            }
+        }
+        if self.work.project() != doc.project() {
+            *self.work.project_mut() = doc.project().clone();
+        }
+        let gone: Vec<crate::model::Uid> = self
+            .work
+            .relationships()
+            .filter(|r| doc.relationship(r.uid).is_none())
+            .map(|r| r.uid)
+            .collect();
+        for uid in gone {
+            self.work.remove_relationship(uid);
+        }
+        for r in doc.relationships() {
+            if self.work.relationship(r.uid) != Some(r) {
+                self.work.put_relationship(r.clone());
+            }
+        }
+    }
+
     pub fn warn(&mut self, f: Failure) {
         self.warnings.push(f);
     }
@@ -468,10 +503,62 @@ impl<'a> Transaction<'a> {
             return Err(errors);
         }
         let changed = DocumentChanged::between(&self.name, &self.base, &self.work);
-        if !changed.is_empty() || self.base.project() != self.work.project() {
+        self.warn_stale_layers(&changed);
+        let rows_changed = !self.base.relationships().eq(self.work.relationships());
+        if !changed.is_empty() || rows_changed || self.base.project() != self.work.project() {
             self.work.bump_version();
         }
         Ok((self.work, changed, self.warnings))
+    }
+
+    /// Step 4 of `finish`: design-option layers (ADR 0006) that this
+    /// transaction made inapplicable, e.g. by deleting a shared element an option overrides:
+    /// reported as `ferro.model.option_layer_stale` warnings on the option,
+    /// never dropped silently. Only layers that mention a changed element
+    /// are checked, and only newly broken ones are reported.
+    fn warn_stale_layers(&mut self, changed: &DocumentChanged) {
+        use crate::model::design_option::{check_layer, OptionStatus};
+        if !self.work.has_open_design_options() {
+            return;
+        }
+        let touched: Vec<String> = changed
+            .modified
+            .iter()
+            .filter_map(|id| self.work.get(*id))
+            .chain(changed.deleted.iter().filter_map(|id| self.base.get(*id)))
+            .filter(|e| e.category != Category::DesignOptions)
+            .map(|e| e.uid.to_string())
+            .collect();
+        if touched.is_empty() {
+            return;
+        }
+        let mut found = Vec::new();
+        for e in self.work.by_category(Category::DesignOptions) {
+            let Some(o) = e.as_design_option() else {
+                continue;
+            };
+            if o.status != OptionStatus::Open || o.changes.is_empty() {
+                continue;
+            }
+            let text = serde_json::to_string(&o.changes).unwrap_or_default();
+            if !touched.iter().any(|u| text.contains(u.as_str())) {
+                continue;
+            }
+            if let Err(err) = check_layer(&self.work, &o.changes) {
+                if check_layer(&self.base, &o.changes).is_ok() {
+                    found.push(Failure::warning(
+                        "ferro.model.option_layer_stale",
+                        format!(
+                            "design option {} no longer applies: {}",
+                            e.label(),
+                            err.message
+                        ),
+                        vec![e.id],
+                    ));
+                }
+            }
+        }
+        self.warnings.extend(found);
     }
 
     /// Computed dimensions of walls and floors, parametric or direct

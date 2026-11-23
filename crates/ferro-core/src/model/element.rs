@@ -46,6 +46,11 @@ pub enum ElementBody {
     Opening(Opening),
     /// A construction stage (category `Phases`, ADR 0006).
     Phase(super::phase::Phase),
+    /// An option set (category `DesignOptions`, ADR 0006).
+    OptionSet(super::design_option::OptionSet),
+    /// A design option: a layer of changes over the shared model (category
+    /// `DesignOptions`, hosted by its option set; ADR 0006).
+    DesignOption(super::design_option::DesignOption),
 }
 
 impl ElementBody {
@@ -63,6 +68,8 @@ impl ElementBody {
             ElementBody::Floor(_) => "floor",
             ElementBody::Opening(_) => "opening",
             ElementBody::Phase(_) => "phase",
+            ElementBody::OptionSet(_) => "option_set",
+            ElementBody::DesignOption(_) => "design_option",
         }
     }
 }
@@ -80,7 +87,10 @@ pub struct Element {
     pub level_id: Option<ElementId>,
     /// Hosting element (doors in walls; reserved).
     pub host_id: Option<ElementId>,
-    /// Design option membership (D-32); `None` = shared model.
+    /// Design option membership (D-32, ADR 0006): always `None` in the
+    /// shared model, whose options are layers of changes; in a document
+    /// resolved for a combination, the option whose layer added the element
+    /// (a derived index, `model::design_option::apply_layers`).
     pub design_option: Option<ElementId>,
     /// Phase the element is built in (Revit: *Phase Created*; ADR 0006).
     /// `None` = existing in every phase (`model::phase::phase_status`).

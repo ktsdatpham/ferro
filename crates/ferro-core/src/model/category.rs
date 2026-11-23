@@ -28,10 +28,13 @@ pub enum Category {
     /// Construction stages (ADR 0006). Not IFC products: a phase maps to
     /// `Pset_*Common.Status` on the exported elements.
     Phases,
+    /// Option sets and design options (ADR 0006). Not IFC products: the
+    /// export writes one combination.
+    DesignOptions,
 }
 
 impl Category {
-    pub const ALL: [Category; 18] = [
+    pub const ALL: [Category; 19] = [
         Category::Levels,
         Category::Grids,
         Category::ReferencePlanes,
@@ -50,6 +53,7 @@ impl Category {
         Category::GenericModels,
         Category::Materials,
         Category::Phases,
+        Category::DesignOptions,
     ];
 
     /// Revit `BuiltInCategory` name.
@@ -73,6 +77,7 @@ impl Category {
             Category::GenericModels => "OST_GenericModel",
             Category::Materials => "OST_Materials",
             Category::Phases => "OST_Phases",
+            Category::DesignOptions => "OST_DesignOptions",
         }
     }
 
@@ -99,6 +104,8 @@ impl Category {
             // Not an IFC product: exported as `Pset_*Common.Status` values
             // (ADR 0006); `IfcWorkSchedule` is not used.
             Category::Phases => "IfcPropertySingleValue",
+            // Not exported: IFC gets one combination (ADR 0006).
+            Category::DesignOptions => "IfcGroup",
         }
     }
 
@@ -112,6 +119,7 @@ impl Category {
                 | Category::Rooms
                 | Category::Materials
                 | Category::Phases
+                | Category::DesignOptions
         )
     }
 }

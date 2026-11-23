@@ -10,6 +10,7 @@
 
 pub mod bim_commands;
 pub mod commands;
+pub mod design_option_commands;
 mod events;
 mod failure;
 pub mod form_commands;
@@ -31,6 +32,8 @@ pub use transaction::{IdSource, SequentialIds, Transaction};
 mod bim_tests;
 #[cfg(test)]
 mod change_tests;
+#[cfg(test)]
+mod design_option_tests;
 #[cfg(test)]
 mod form_tests;
 #[cfg(test)]
