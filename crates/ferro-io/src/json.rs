@@ -1,6 +1,6 @@
 use crate::IoError;
-use ferro_core::model::change::visit_element_refs;
-use ferro_core::model::{Document, Element, ElementId, ProjectInfo, Uid};
+use ferro_core::model::change::{relationship_from_value, relationship_value, visit_element_refs};
+use ferro_core::model::{Document, Element, ElementId, ProjectInfo, Relationship, Uid};
 use serde_json::{json, Map, Value};
 use std::collections::HashMap;
 
@@ -40,7 +40,10 @@ pub(crate) fn element_to_value(
 }
 
 /// JSON values (uid references) → elements with fresh local ids in order.
-pub(crate) fn elements_from_values(values: Vec<Value>) -> Result<Vec<Element>, IoError> {
+/// Also returns the uid → local id map, for reading the relationship table.
+pub(crate) fn elements_and_ids(
+    values: Vec<Value>,
+) -> Result<(Vec<Element>, HashMap<String, u64>), IoError> {
     let mut id_of: HashMap<String, u64> = HashMap::new();
     for (i, v) in values.iter().enumerate() {
         let uid = v["uid"]
@@ -73,7 +76,38 @@ pub(crate) fn elements_from_values(values: Vec<Value>) -> Result<Vec<Element>, I
         })?;
         out.push(serde_json::from_value(v)?);
     }
-    Ok(out)
+    Ok((out, id_of))
+}
+
+fn change_error(e: ferro_core::model::change::ChangeError) -> IoError {
+    let code = match e.code {
+        "ferro.change.dangling_reference" => "ferro.io.dangling_reference",
+        _ => "ferro.io.schema",
+    };
+    IoError::new(code, e.message)
+}
+
+/// The relationship table as JSON rows (references as uids), in uid order.
+pub(crate) fn relationships_to_values(
+    doc: &Document,
+    uids: &HashMap<ElementId, Uid>,
+) -> Result<Vec<Value>, IoError> {
+    let uid_of = |id: ElementId| uids.get(&id).copied();
+    doc.relationships()
+        .map(|r| relationship_value(r, &uid_of).map_err(change_error))
+        .collect()
+}
+
+/// Rows written by [`relationships_to_values`] → relationships with local ids.
+pub(crate) fn relationships_from_values(
+    values: &[Value],
+    id_of: &HashMap<String, u64>,
+) -> Result<Vec<Relationship>, IoError> {
+    let lookup = |s: &str| id_of.get(s).map(|i| ElementId(*i));
+    values
+        .iter()
+        .map(|v| relationship_from_value(v, &lookup).map_err(change_error))
+        .collect()
 }
 
 pub(crate) fn uid_map(doc: &Document) -> HashMap<ElementId, Uid> {
@@ -93,6 +127,10 @@ pub fn document_to_json(doc: &Document) -> Result<String, IoError> {
     root.insert("app_version".into(), json!(env!("CARGO_PKG_VERSION")));
     root.insert("project".into(), serde_json::to_value(doc.project())?);
     root.insert("elements".into(), Value::Array(elements));
+    let rows = relationships_to_values(doc, &uids)?;
+    if !rows.is_empty() {
+        root.insert("relationships".into(), Value::Array(rows));
+    }
     Ok(serde_json::to_string_pretty(&Value::Object(root))?)
 }
 
@@ -110,8 +148,17 @@ pub fn document_from_json(text: &str) -> Result<Document, IoError> {
     let mut values = root["elements"].as_array().cloned().unwrap_or_default();
     crate::migrate::migrate(ver, &mut project_v, &mut values)?;
     let project: ProjectInfo = serde_json::from_value(project_v)?;
-    let elements = elements_from_values(values)?;
-    Document::from_parts(project, elements).map_err(|e| IoError::new("ferro.io.schema", e))
+    let (elements, id_of) = elements_and_ids(values)?;
+    let rows = relationships_from_values(
+        root["relationships"]
+            .as_array()
+            .map(Vec::as_slice)
+            .unwrap_or(&[]),
+        &id_of,
+    )?;
+    Document::from_parts(project, elements)
+        .and_then(|d| d.with_relationships(rows))
+        .map_err(|e| IoError::new("ferro.io.schema", e))
 }
 
 #[cfg(test)]

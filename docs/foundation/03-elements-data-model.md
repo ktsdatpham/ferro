@@ -154,10 +154,35 @@ a command. Geometry is derived from location + parameters + type.
 - A **hosted** element (door, window, opening) has `host_id` pointing to its host
   (wall, roof, floor). Deleting the host deletes or orphans hosted elements per
   category rule, reported as a failure (chapter 4).
-- **Joins** (wall-to-wall, floor-to-wall) are explicit relationships stored on
-  the document, not hidden geometry hacks. Until those land, milestone 2 infers
-  L-joins from coincident wall ends (ADR 0001); hosted openings are deleted
-  with their host.
+- **Relationships are data** (ADR 0004 §5, M5-5): the document holds a
+  relationship table next to its elements. A row (`Relationship`) has its own
+  `Uid`, a `RelationshipKind` and the linked element ids, ordered per kind:
+
+  | Kind | Elements | Revit / IFC |
+  |---|---|---|
+  | `join` | `[first, second]`; `first` wins where they overlap | Join Geometry, wall joins / `IfcRelConnectsPathElements` |
+  | `cut` | `[cutter, cut]`; non-destructive void | Cut Geometry / `IfcRelVoidsElement` |
+  | `host` | `[host, hosted]` | `FamilyInstance.Host` / `IfcRelFillsElement` |
+  | `attach` | `[attached, target]` | Attach Top/Base |
+  | `bounds` | `[space, boundary]` | Room Bounding / `IfcRelSpaceBoundary` |
+  | `connect` | `[a, b]`; no geometric effect | `IfcRelConnectsElements` |
+  | `aggregate` | `[whole, part, …]` | `IfcRelAggregates` |
+
+  Rules: only elements with geometry take part; elements are distinct; one
+  row per kind and pair (a reversed `join` is the same pair, a reversed `cut`
+  is not); an optional `phase` says when the row is made (ADR 0006 §5).
+  Deleting an element deletes its rows in the same transaction; a phase used
+  by a row cannot be deleted except by merging. Files store rows with
+  element uids (`relationships` in `.fro.json`, a `relationships` table in
+  `.fro`, format 4); the change format addresses them as
+  `/relationships/<uid>`. Commands: `create_relationship`,
+  `delete_relationship`; query `list_relationships`. Failure codes:
+  `ferro.model.invalid_relationship`, `ferro.model.duplicate_relationship`,
+  `ferro.model.missing_relationship`, `ferro.model.missing_element`,
+  `ferro.model.invalid_uid`.
+- **Joins** (wall-to-wall, floor-to-wall) become `join` rows (M5-5.2). Until
+  then, generation infers L- and T-joins from coincident wall ends (ADR 0001);
+  hosted openings use `host_id` and are deleted with their host.
 - **Groups** (later) are elements referencing members; a group is not a Form.
 
 ## 3.9 Out of scope for v1 (but reserved)

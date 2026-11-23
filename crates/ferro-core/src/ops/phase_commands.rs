@@ -337,6 +337,16 @@ impl Command for DeletePhase {
                 })?;
                 moved.push(u);
             }
+            let rows: Vec<_> = tx
+                .doc()
+                .relationships()
+                .filter(|r| r.phase == Some(gone))
+                .cloned()
+                .collect();
+            for mut r in rows {
+                r.phase = Some(into);
+                tx.put_relationship(r)?;
+            }
         }
         tx.delete(self.phase)?;
         ids.retain(|p| *p != self.phase);

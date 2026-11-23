@@ -18,7 +18,7 @@
 //! Arrays (points of an outline, layers of a type) are replaced whole: a
 //! property is the smallest unit two people can change independently.
 
-use super::{Document, Element, ElementId, ProjectInfo, Uid};
+use super::{Document, Element, ElementId, ProjectInfo, Relationship, Uid};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use std::collections::{BTreeMap, HashMap};
@@ -151,17 +151,100 @@ pub fn element_value(doc: &Document, e: &Element) -> Result<Value, ChangeError> 
     Ok(v)
 }
 
-/// The document as `{project, elements: {uid: element}}`.
+/// A relationship row as JSON with its element and phase references as
+/// uids (`uid_of` maps a local id to its uid). Fails with
+/// `ferro.change.dangling_reference` when a reference has no uid.
+pub fn relationship_value(
+    r: &Relationship,
+    uid_of: &dyn Fn(ElementId) -> Option<Uid>,
+) -> Result<Value, ChangeError> {
+    let to_uid = |id: ElementId| {
+        uid_of(id)
+            .map(|u| Value::String(u.to_string()))
+            .ok_or_else(|| {
+                ChangeError::new(
+                    "ferro.change.dangling_reference",
+                    format!("relationship {} refers to missing #{id}", r.uid),
+                )
+            })
+    };
+    let mut m = Map::new();
+    m.insert("uid".into(), Value::String(r.uid.to_string()));
+    m.insert("kind".into(), Value::String(r.kind.name().to_string()));
+    m.insert(
+        "elements".into(),
+        Value::Array(
+            r.elements
+                .iter()
+                .map(|e| to_uid(*e))
+                .collect::<Result<_, _>>()?,
+        ),
+    );
+    if let Some(p) = r.phase {
+        m.insert("phase".into(), to_uid(p)?);
+    }
+    Ok(Value::Object(m))
+}
+
+/// Read a row written by [`relationship_value`]; `id_of` maps a uid string
+/// to the local id. Fails with `ferro.change.invalid` on bad data and
+/// `ferro.change.dangling_reference` on an unknown uid.
+pub fn relationship_from_value(
+    v: &Value,
+    id_of: &dyn Fn(&str) -> Option<ElementId>,
+) -> Result<Relationship, ChangeError> {
+    let invalid = |m: String| ChangeError::new("ferro.change.invalid", m);
+    let to_id = |x: &Value| -> Result<ElementId, ChangeError> {
+        let s = x
+            .as_str()
+            .ok_or_else(|| invalid(format!("relationship reference {x} is not a uid")))?;
+        id_of(s).ok_or_else(|| {
+            ChangeError::new(
+                "ferro.change.dangling_reference",
+                format!("relationship refers to missing {s}"),
+            )
+        })
+    };
+    let uid: Uid = serde_json::from_value(v["uid"].clone())
+        .map_err(|e| invalid(format!("relationship uid: {e}")))?;
+    let kind = serde_json::from_value(v["kind"].clone())
+        .map_err(|e| invalid(format!("relationship {uid} kind: {e}")))?;
+    let elements = v["elements"]
+        .as_array()
+        .ok_or_else(|| invalid(format!("relationship {uid} has no elements")))?
+        .iter()
+        .map(to_id)
+        .collect::<Result<_, _>>()?;
+    let phase = match v.get("phase") {
+        None | Some(Value::Null) => None,
+        Some(p) => Some(to_id(p)?),
+    };
+    Ok(Relationship {
+        uid,
+        kind,
+        elements,
+        phase,
+    })
+}
+
+/// The document as `{project, elements: {uid: element}, relationships:
+/// {uid: row}}`.
 fn document_value(doc: &Document) -> Result<Value, ChangeError> {
     let mut elements = Map::new();
     for e in doc.elements() {
         elements.insert(e.uid.to_string(), element_value(doc, e)?);
+    }
+    let mut rows = Map::new();
+    let uid_of = |id: ElementId| doc.get(id).map(|e| e.uid);
+    for r in doc.relationships() {
+        rows.insert(r.uid.to_string(), relationship_value(r, &uid_of)?);
     }
     let project = serde_json::to_value(doc.project())
         .map_err(|err| ChangeError::new("ferro.change.encode", err.to_string()))?;
     let mut root = Map::new();
     root.insert("project".into(), project);
     root.insert("elements".into(), Value::Object(elements));
+    root.insert("relationships".into(), Value::Object(rows));
     Ok(Value::Object(root))
 }
 
@@ -331,7 +414,31 @@ pub fn apply(doc: &Document, changes: &[Change]) -> Result<Document, ChangeError
         let _: Uid = e.uid;
         out.push(e);
     }
-    Document::from_parts(project, out).map_err(|m| ChangeError::new("ferro.change.invalid", m))
+    let rows = match root.get("relationships") {
+        Some(Value::Object(m)) => m.clone(),
+        Some(_) => {
+            return Err(ChangeError::new(
+                "ferro.change.invalid",
+                "relationships is not an object",
+            ))
+        }
+        None => Map::new(),
+    };
+    let lookup = |s: &str| id_of.get(s).map(|i| ElementId(*i));
+    let mut table = Vec::with_capacity(rows.len());
+    for (uid, v) in &rows {
+        let r = relationship_from_value(v, &lookup)?;
+        if r.uid.to_string() != *uid {
+            return Err(ChangeError::new(
+                "ferro.change.invalid",
+                format!("relationship at /relationships/{uid} has a different uid"),
+            ));
+        }
+        table.push(r);
+    }
+    Document::from_parts(project, out)
+        .and_then(|d| d.with_relationships(table))
+        .map_err(|m| ChangeError::new("ferro.change.invalid", m))
 }
 
 /// Paths where `ours` and `theirs` disagree: both edit the same path with

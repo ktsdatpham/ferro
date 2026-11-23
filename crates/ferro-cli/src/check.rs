@@ -110,6 +110,7 @@ pub fn info(doc: &Document) -> Value {
     json!({
         "project": doc.project().name,
         "elements": doc.len(),
+        "relationships": doc.relationships().count(),
         "categories": categories,
         "definitions": definitions,
         "levels": levels,

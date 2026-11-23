@@ -54,6 +54,8 @@ for the same concept.
 | `PhaseStatus` | Status of an element in a view's phase: existing, new, demolished, temporary, future, past (derived, never stored) | RenovationState, Lifecycle |
 | `RenovationStatus` | Simple-mode choice existing / demolish / new, mapped to the first and last phase (ArchiCAD renovation status) | Phase type, Status (alone) |
 | `PhaseQuantities` | Volumes and areas per category split by `PhaseStatus` in one phase | Phase schedule, Demolition list |
+| `Relationship` | A row of the document's relationship table: a `Uid`, a `RelationshipKind` and the linked elements in kind order (ADR 0004 §5) | Link, Association, Connection (alone), Constraint |
+| `RelationshipKind` | `join`, `cut`, `host`, `attach`, `bounds`, `connect`, `aggregate` | RelationType, LinkType |
 | `DisplayScene` / `DrawRecord` | Display data derived from a `Document` snapshot (`ferro-scene`, ADR 0004 §6) / what to draw for one element; never saved | Scene (alone, as a type), Render model, Node |
 
 Adding a term requires adding it here first.

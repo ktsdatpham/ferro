@@ -83,8 +83,8 @@ pub(super) fn min_edge(b: &Body) -> f64 {
 
 /// Invariants every committed document keeps: Forms are structurally
 /// valid, closed bodies are outward-facing solids, no edge is shorter than
-/// `SHORT_CURVE_TOL` (D-06 rule 3) and all geometry is inside the 10 km
-/// extent (D-05).
+/// `SHORT_CURVE_TOL` (D-06 rule 3), all geometry is inside the 10 km
+/// extent (D-05) and every relationship row is valid.
 pub(super) fn check_document(doc: &Document) -> Result<(), String> {
     for e in doc.elements() {
         let Some(b) = e.geometry() else { continue };
@@ -116,6 +116,11 @@ pub(super) fn check_document(doc: &Document) -> Result<(), String> {
                 return Err(format!("{}: stale volume parameter", e.label()));
             }
         }
+    }
+    // Every relationship row still links existing elements (ADR 0004 §5).
+    for r in doc.relationships() {
+        r.validate(doc)
+            .map_err(|x| format!("relationship {}: {x}", r.uid))?;
     }
     Ok(())
 }

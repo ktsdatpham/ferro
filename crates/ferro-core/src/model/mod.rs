@@ -18,6 +18,7 @@ mod parameter_definition;
 pub mod phase;
 pub mod phase_quantities;
 pub mod project_settings;
+mod relationship;
 pub mod structure_quantities;
 
 pub use category::Category;
@@ -31,3 +32,4 @@ pub use parameter_definition::{
 };
 pub use phase::{Phase, PhaseStatus};
 pub use phase_quantities::PhaseQuantities;
+pub use relationship::{Relationship, RelationshipError, RelationshipKind};

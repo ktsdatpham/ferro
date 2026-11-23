@@ -9,6 +9,7 @@ use super::geometry_source::*;
 use super::parameter_commands::*;
 use super::phase_commands::*;
 use super::project_commands::*;
+use super::relationship_commands::*;
 use super::{CommandError, Transaction};
 use crate::algo::{push_pull_face, PushPullMode};
 use crate::geom::{polygon, Plane};
@@ -697,6 +698,8 @@ any_command!(
     DeletePhase,
     SetElementPhase,
     SetRenovationStatus,
+    CreateRelationship,
+    DeleteRelationship,
 );
 
 impl AnyCommand {

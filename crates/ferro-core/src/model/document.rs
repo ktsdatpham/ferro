@@ -1,4 +1,6 @@
-use super::{builtin_definition, Category, Element, ElementId, ParameterDefinition, Uid};
+use super::{
+    builtin_definition, Category, Element, ElementId, ParameterDefinition, Relationship, Uid,
+};
 use crate::math::{Angle, Point3};
 use imbl::OrdMap;
 use serde::{Deserialize, Serialize};
@@ -52,6 +54,9 @@ fn is_default_settings(s: &super::project_settings::ProjectSettings) -> bool {
 pub struct Document {
     project: ProjectInfo,
     elements: OrdMap<ElementId, Arc<Element>>,
+    /// The relationship table (ADR 0004 §5), keyed by uid.
+    #[serde(default)]
+    relationships: OrdMap<Uid, Relationship>,
     next_element_id: u64,
     /// Incremented on every commit.
     version: u64,
@@ -65,6 +70,7 @@ impl Default for Document {
                 ..Default::default()
             },
             elements: OrdMap::new(),
+            relationships: OrdMap::new(),
             next_element_id: 1,
             version: 0,
         }
@@ -135,7 +141,37 @@ impl Document {
         Ok(doc)
     }
 
+    /// Add a loaded relationship table to a document assembled with
+    /// [`Document::from_parts`]. Every row is validated
+    /// ([`Relationship::validate`]); uids must be unique and differ from
+    /// element uids.
+    pub fn with_relationships(mut self, rows: Vec<Relationship>) -> Result<Document, String> {
+        for r in rows {
+            if self.relationships.contains_key(&r.uid) || self.find_uid(r.uid).is_some() {
+                return Err(format!("duplicate uid {}", r.uid));
+            }
+            r.validate(&self).map_err(|e| e.to_string())?;
+            self.relationships.insert(r.uid, r);
+        }
+        Ok(self)
+    }
+
     // ---------------------------------------------------------------- reads
+
+    /// The relationship table, in uid order.
+    pub fn relationships(&self) -> impl Iterator<Item = &Relationship> {
+        self.relationships.values()
+    }
+
+    /// The relationship with this uid.
+    pub fn relationship(&self, uid: Uid) -> Option<&Relationship> {
+        self.relationships.get(&uid)
+    }
+
+    /// Relationships that link `id`, in uid order.
+    pub fn relationships_of(&self, id: ElementId) -> impl Iterator<Item = &Relationship> {
+        self.relationships.values().filter(move |r| r.involves(id))
+    }
 
     pub fn project(&self) -> &ProjectInfo {
         &self.project
@@ -207,8 +243,21 @@ impl Document {
         self.next_element_id = self.next_element_id.max(e.id.0 + 1);
         self.elements.insert(e.id, Arc::new(e));
     }
+    /// Remove an element and every relationship that links it (a row
+    /// never points at a missing element).
     pub(crate) fn remove(&mut self, id: ElementId) -> Option<Arc<Element>> {
+        let gone: Vec<Uid> = self.relationships_of(id).map(|r| r.uid).collect();
+        for u in gone {
+            self.relationships.remove(&u);
+        }
         self.elements.remove(&id)
+    }
+    /// Insert or replace a relationship row. The caller validates it.
+    pub(crate) fn put_relationship(&mut self, r: Relationship) {
+        self.relationships.insert(r.uid, r);
+    }
+    pub(crate) fn remove_relationship(&mut self, uid: Uid) -> Option<Relationship> {
+        self.relationships.remove(&uid)
     }
     pub(crate) fn project_mut(&mut self) -> &mut ProjectInfo {
         &mut self.project

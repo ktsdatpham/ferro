@@ -2456,6 +2456,72 @@
       "name": "get_phase_quantities"
     },
     {
+      "description": "Link elements with a relationship row (stored as data, saved, undoable). Order of `elements` by kind: join [first, second] (first wins where they overlap), cut [cutter, cut], host [host, hosted], attach [attached, target], bounds [space, boundary], connect [a, b], aggregate [whole, part, ...]. Only elements with geometry. `phase`: the phase it is made in. Returns {relationship: uid}. Fails with ferro.model.invalid_relationship, missing_element or duplicate_relationship.",
+      "inputSchema": {
+        "properties": {
+          "elements": {
+            "description": "Element ids, ordered as the kind says",
+            "items": {
+              "type": "integer"
+            },
+            "type": "array"
+          },
+          "kind": {
+            "enum": [
+              "join",
+              "cut",
+              "host",
+              "attach",
+              "bounds",
+              "connect",
+              "aggregate"
+            ],
+            "type": "string"
+          },
+          "phase": {
+            "description": "Optional phase id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "kind",
+          "elements"
+        ],
+        "type": "object"
+      },
+      "name": "create_relationship"
+    },
+    {
+      "description": "Remove a relationship row by uid; the elements stay. Deleting an element removes its rows automatically.",
+      "inputSchema": {
+        "properties": {
+          "relationship": {
+            "description": "Relationship uid (from create_relationship or list_relationships)",
+            "type": "string"
+          }
+        },
+        "required": [
+          "relationship"
+        ],
+        "type": "object"
+      },
+      "name": "delete_relationship"
+    },
+    {
+      "description": "Relationship rows, all or those linking `element`: [{relationship, kind, elements, phase}].",
+      "inputSchema": {
+        "properties": {
+          "element": {
+            "description": "Optional element id",
+            "type": "integer"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "name": "list_relationships"
+    },
+    {
       "description": "Elements the user has selected in the Ferro app, with their summaries. Use it for requests like \"make the selected wall taller\".",
       "inputSchema": {
         "properties": {},

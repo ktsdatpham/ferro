@@ -1373,6 +1373,62 @@ def get_phase_quantities(*, phase: Optional[int] = None) -> Dict[str, Any]:
     return _call("get_phase_quantities", args)
 
 
+def create_relationship(
+    *,
+    kind: Literal["join", "cut", "host", "attach", "bounds", "connect", "aggregate"],
+    elements: Sequence[ElementId],
+    phase: Optional[ElementId] = None,
+) -> Dict[str, Any]:
+    """Link elements with a relationship row (stored as data, saved, undoable). Order of
+    `elements` by kind: join [first, second] (first wins where they overlap), cut
+    [cutter, cut], host [host, hosted], attach [attached, target], bounds [space,
+    boundary], connect [a, b], aggregate [whole, part, ...]. Only elements with
+    geometry. `phase`: the phase it is made in. Returns {relationship: uid}. Fails with
+    ferro.model.invalid_relationship, missing_element or duplicate_relationship.
+
+    Args:
+        kind: One of: join, cut, host, attach, bounds, connect, aggregate.
+        elements: Element ids, ordered as the kind says.
+        phase: Optional phase id. Optional.
+
+    Returns:
+        The tool's JSON body. Raises FerroError on failure.
+    """
+    args: Dict[str, Any] = {"kind": kind, "elements": elements}
+    if phase is not None:
+        args["phase"] = phase
+    return _call("create_relationship", args)
+
+
+def delete_relationship(*, relationship: str) -> Dict[str, Any]:
+    """Remove a relationship row by uid; the elements stay. Deleting an element removes
+    its rows automatically.
+
+    Args:
+        relationship: Relationship uid (from create_relationship or list_relationships).
+
+    Returns:
+        The tool's JSON body. Raises FerroError on failure.
+    """
+    return _call("delete_relationship", {"relationship": relationship})
+
+
+def list_relationships(*, element: Optional[ElementId] = None) -> Dict[str, Any]:
+    """Relationship rows, all or those linking `element`: [{relationship, kind,
+    elements, phase}].
+
+    Args:
+        element: Optional element id. Optional.
+
+    Returns:
+        The tool's JSON body. Raises FerroError on failure.
+    """
+    args: Dict[str, Any] = {}
+    if element is not None:
+        args["element"] = element
+    return _call("list_relationships", args)
+
+
 def get_selection() -> Dict[str, Any]:
     """Elements the user has selected in the Ferro app, with their summaries. Use it for
     requests like "make the selected wall taller".
@@ -1635,6 +1691,9 @@ TOOL_NAMES = (
     "set_element_phase",
     "set_renovation_status",
     "get_phase_quantities",
+    "create_relationship",
+    "delete_relationship",
+    "list_relationships",
     "get_selection",
     "select_elements",
     "get_document_version",

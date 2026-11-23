@@ -602,6 +602,8 @@ The change format (M5-26, F10 of the foundation review, D-34, D-55, ADR 0006): e
 - fn `Change::path`
 - fn `visit_element_refs` — Call `f` on every place in an element's JSON that holds an element
 - fn `element_value` — An element as canonical JSON: local `id` dropped, references as uids.
+- fn `relationship_value` — A relationship row as JSON with its element and phase references as
+- fn `relationship_from_value` — Read a row written by [`relationship_value`]; `id_of` maps a uid string
 - fn `escape` — RFC 6901 escaping of one path segment (`~` → `~0`, `/` → `~1`).
 - fn `diff` — The edits that turn `a` into `b`, sorted by path. `diff(a, a)` is empty.
 - fn `apply` — Apply edits to `doc`. Elements keep their `ElementId`; new elements get
@@ -615,6 +617,10 @@ The change format (M5-26, F10 of the foundation review, D-34, D-55, ADR 0006): e
 - struct `Document` — The project container (Revit: `Document`). Cheap to clone: elements live in
 - fn `Document::new`
 - fn `Document::from_parts` — Assemble a document from loaded parts (opening a file, importing).
+- fn `Document::with_relationships` — Add a loaded relationship table to a document assembled with
+- fn `Document::relationships` — The relationship table, in uid order.
+- fn `Document::relationship` — The relationship with this uid.
+- fn `Document::relationships_of` — Relationships that link `id`, in uid order.
 - fn `Document::project`
 - fn `Document::version`
 - fn `Document::parameter_definition` — The definition of a parameter key: the built-in one for `ferro.*`
@@ -767,6 +773,19 @@ Project settings (M5-24): display units, site location and currency — one plac
 - struct `ProjectSettings` — Project settings carried by `ProjectInfo`. All parts are optional in
 - fn `valid_currency` — `true` for a three-letter upper-case code (ISO 4217 shape).
 
+### `ferro_core::model::relationship`
+
+Relationships between elements as data (ADR 0004 §5, F5; M5-5).
+
+- enum `RelationshipKind` — What a relationship means. The order of [`Relationship::elements`] is
+- fn `RelationshipKind::name` — Stable snake_case name, as in files and MCP.
+- fn `RelationshipKind::is_symmetric` — `true` when swapping the two elements gives the same relationship.
+- struct `Relationship` — One row of the relationship table.
+- struct `RelationshipError` — Why a relationship is refused, with its stable failure code.
+- fn `Relationship::involves` — `true` if `id` is one of the linked elements.
+- fn `Relationship::same_link` — `true` if `other` links the same elements with the same kind (in
+- fn `Relationship::validate` — Check the row against `doc`: the number of elements for the kind
+
 ### `ferro_core::model::structure_quantities`
 
 Quantities of a wall / floor type derived from its `CompoundStructure` and the assets of its layer materials (ADR 0004 §3): thermal transmittance (U-value), mass, embodied carbon and cost, all per m² of wall / floor.
@@ -907,6 +926,13 @@ Project settings commands (M5-24): display units, site location, currency. Each 
 - struct `SetSiteLocation` — Set (or with `clear: true` remove) the project's place on Earth. Degrees
 - struct `SetProjectCurrency` — Set the currency used for costs (ISO 4217, e.g. `VND`); `null` clears it.
 
+### `ferro_core::ops::relationship_commands`
+
+Commands on the relationship table (ADR 0004 §5, M5-5.1).
+
+- struct `CreateRelationship` — Add a relationship row linking `elements` (ordered as the kind says:
+- struct `DeleteRelationship` — Remove a relationship row by `uid` (the elements stay). Fails with
+
 ### `ferro_core::ops::session`
 
 - enum `ActorKind` — Who performed a change (D-29). Agents are first-class actors (D-44).
@@ -948,6 +974,9 @@ Project settings commands (M5-24): display units, site location, currency. Each 
 - fn `Transaction::create` — Create an element and return its id.
 - fn `Transaction::duplicate` — Duplicate an element with a new id and uid (Q-B7: copies get both).
 - fn `Transaction::modify` — Modify an element in place.
+- fn `Transaction::add_relationship` — Add a relationship row (ADR 0004 §5) with a new uid; returns it.
+- fn `Transaction::put_relationship` — Insert or replace a relationship row (same uid = replace) after
+- fn `Transaction::remove_relationship` — Remove a relationship row. Fails with `ferro.model.missing_relationship`.
 - fn `Transaction::delete` — Delete an element. Hosted elements (doors, windows) are deleted with
 - fn `Transaction::warn`
 - fn `Transaction::project_name`
@@ -1059,7 +1088,9 @@ IFC4 export (D-75, milestone 3): STEP physical file (ISO 10303-21), Reference Vi
 ### `ferro_io::json`
 
 - fn `element_to_value` — Element → JSON with references rewritten as uids and the local id dropped.
-- fn `elements_from_values` — JSON values (uid references) → elements with fresh local ids in order.
+- fn `elements_and_ids` — JSON values (uid references) → elements with fresh local ids in order.
+- fn `relationships_to_values` — The relationship table as JSON rows (references as uids), in uid order.
+- fn `relationships_from_values` — Rows written by [`relationships_to_values`] → relationships with local ids.
 - fn `uid_map`
 - fn `document_to_json` — Serialise a document to the `.fro.json` interchange format.
 - fn `document_from_json` — Parse `.fro.json`. Unknown top-level keys are ignored (forward compatible).

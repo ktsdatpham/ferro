@@ -18,6 +18,7 @@ pub mod material_commands;
 pub mod parameter_commands;
 pub mod phase_commands;
 pub mod project_commands;
+pub mod relationship_commands;
 mod session;
 mod transaction;
 
@@ -42,6 +43,8 @@ mod material_tests;
 mod phase_tests;
 #[cfg(test)]
 mod project_tests;
+#[cfg(test)]
+mod relationship_tests;
 #[cfg(test)]
 mod scenario_common_tests;
 #[cfg(test)]

@@ -3,7 +3,8 @@ use crate::math::{tol, Vec3};
 use crate::model::bim::WallTop;
 use crate::model::generate;
 use crate::model::{
-    keys, Category, Document, Element, ElementBody, ElementId, ParamValue, Uid, EXTENT_LIMIT_MM,
+    keys, Category, Document, Element, ElementBody, ElementId, ParamValue, Relationship,
+    RelationshipKind, Uid, EXTENT_LIMIT_MM,
 };
 use std::collections::BTreeMap;
 
@@ -130,6 +131,49 @@ impl<'a> Transaction<'a> {
         Ok(r)
     }
 
+    /// Add a relationship row (ADR 0004 §5) with a new uid; returns it.
+    /// Fails with the codes of [`Relationship::validate`].
+    pub fn add_relationship(
+        &mut self,
+        kind: RelationshipKind,
+        elements: Vec<ElementId>,
+        phase: Option<ElementId>,
+    ) -> Result<Uid, CommandError> {
+        let r = Relationship {
+            uid: self.ids.next_uid(),
+            kind,
+            elements,
+            phase,
+        };
+        self.put_relationship(r)
+    }
+
+    /// Insert or replace a relationship row (same uid = replace) after
+    /// validating it against the working document.
+    pub fn put_relationship(&mut self, r: Relationship) -> Result<Uid, CommandError> {
+        if let Err(e) = r.validate(&self.work) {
+            let first = r.elements.first().copied();
+            let mut err = CommandError::new(e.code, e.message);
+            if let Some(id) = first {
+                err = err.on(id);
+            }
+            return Err(err);
+        }
+        let uid = r.uid;
+        self.work.put_relationship(r);
+        Ok(uid)
+    }
+
+    /// Remove a relationship row. Fails with `ferro.model.missing_relationship`.
+    pub fn remove_relationship(&mut self, uid: Uid) -> Result<Relationship, CommandError> {
+        self.work.remove_relationship(uid).ok_or_else(|| {
+            CommandError::new(
+                "ferro.model.missing_relationship",
+                format!("no relationship {uid}"),
+            )
+        })
+    }
+
     /// Delete an element. Hosted elements (doors, windows) are deleted with
     /// their host; other references are cleared and reported as warnings.
     /// Deleting a type that is still used fails with `ferro.model.type_in_use`,
@@ -150,6 +194,18 @@ impl<'a> Transaction<'a> {
             }
         }
         if target.as_phase().is_some() {
+            if let Some(r) = self.work.relationships().find(|r| r.phase == Some(id)) {
+                return Err(CommandError::new(
+                    "ferro.model.phase_in_use",
+                    format!(
+                        "{} is used by the {} relationship {}",
+                        target.label(),
+                        r.kind.name(),
+                        r.uid
+                    ),
+                )
+                .on(id));
+            }
             if let Some(user) = self.work.elements().find(|e| {
                 e.id != id && (e.phase_created == Some(id) || e.phase_demolished == Some(id))
             }) {

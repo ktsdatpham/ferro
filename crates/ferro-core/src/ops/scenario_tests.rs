@@ -33,6 +33,8 @@ struct Fx {
     /// Phases "Existing" and "New Construction" (used by no element).
     ph_old: ElementId,
     ph_new: ElementId,
+    /// A `connect` relationship between `wall` and `bx` (its uid).
+    rel: String,
 }
 
 impl Fx {
@@ -111,6 +113,15 @@ impl Fx {
             "create_phase",
             json!({"name": "New Construction"}),
         ));
+        let rel = run(
+            &mut s,
+            "create_relationship",
+            json!({"kind": "connect", "elements": [wall, bx]}),
+        )
+        .output["relationship"]
+            .as_str()
+            .expect("uid")
+            .to_string();
         check_document(s.doc()).expect("fixture is valid");
         Fx {
             s,
@@ -130,6 +141,7 @@ impl Fx {
             sheet_face,
             ph_old,
             ph_new,
+            rel,
         }
     }
 
@@ -1466,6 +1478,12 @@ fn valid_calls(f: &Fx) -> Vec<(&'static str, Value)> {
             "set_renovation_status",
             json!({"elements": [f.bx, f.door], "status": "demolish"}),
         ),
+        // relationships (M5-5)
+        (
+            "create_relationship",
+            json!({"kind": "join", "elements": [f.wall2, f.bx], "phase": f.ph_new}),
+        ),
+        ("delete_relationship", json!({"relationship": f.rel})),
         // a semantic push / pull on a wall (height)
         (
             "push_pull_face",

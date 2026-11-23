@@ -237,6 +237,13 @@ pub fn list() -> Vec<Value> {
             json!({"elements": ids("Element ids"), "status": {"type":"string","enum":["existing","demolish","new"]}}), &["elements", "status"]),
         tool("get_phase_quantities", "Quantities in the view of a phase, per category split by status (existing / new / demolished / temporary): count, volume (m³) and area (m²; floors plan area, walls gross length × height). The basis for demolition and new-build costs. `phase` defaults to the last phase.",
             json!({"phase": id("Phase id (default: last phase)")}), &[]),
+        // Relationships (ADR 0004 §5).
+        tool("create_relationship", "Link elements with a relationship row (stored as data, saved, undoable). Order of `elements` by kind: join [first, second] (first wins where they overlap), cut [cutter, cut], host [host, hosted], attach [attached, target], bounds [space, boundary], connect [a, b], aggregate [whole, part, ...]. Only elements with geometry. `phase`: the phase it is made in. Returns {relationship: uid}. Fails with ferro.model.invalid_relationship, missing_element or duplicate_relationship.",
+            json!({"kind": {"type":"string","enum":["join","cut","host","attach","bounds","connect","aggregate"]}, "elements": ids("Element ids, ordered as the kind says"), "phase": id("Optional phase id")}), &["kind", "elements"]),
+        tool("delete_relationship", "Remove a relationship row by uid; the elements stay. Deleting an element removes its rows automatically.",
+            json!({"relationship": {"type":"string","description":"Relationship uid (from create_relationship or list_relationships)"}}), &["relationship"]),
+        tool("list_relationships", "Relationship rows, all or those linking `element`: [{relationship, kind, elements, phase}].",
+            json!({"element": id("Optional element id")}), &[]),
         // App-only (needs the Ferro app open, through Ferro Link).
         tool("get_selection", "Elements the user has selected in the Ferro app, with their summaries. Use it for requests like \"make the selected wall taller\".", json!({}), &[]),
         tool("select_elements", "Select elements in the Ferro app so the user sees what you mean.", json!({"elements": ids("Element ids (empty clears)")}), &["elements"]),
@@ -536,6 +543,20 @@ pub fn detail(doc: &Document, id: ElementId) -> Result<Value, String> {
     Ok(v)
 }
 
+/// `list_relationships`: rows (all, or those linking `element`), in uid
+/// order.
+fn relationships(doc: &Document, args: &Value) -> Value {
+    let only = args.get("element").and_then(Value::as_u64).map(ElementId);
+    let rows: Vec<Value> = doc
+        .relationships()
+        .filter(|r| only.is_none_or(|e| r.involves(e)))
+        .map(|r| {
+            json!({"relationship": r.uid.to_string(), "kind": r.kind.name(), "elements": r.elements, "phase": r.phase})
+        })
+        .collect();
+    json!({ "relationships": rows })
+}
+
 /// `get_phase_quantities`: [`PhaseQuantities`] in m³ / m², keyed by category
 /// then status. `phase` defaults to the last phase.
 ///
@@ -630,6 +651,7 @@ pub fn call(
             None => err("missing element".into()),
         },
         "get_phase_quantities" => phase_quantities(session.doc(), args).or_else(err),
+        "list_relationships" => Ok(relationships(session.doc(), args)),
         "undo" => match session.undo() {
             Some(c) => Ok(json!({"changed": c})),
             None => err("nothing to undo".into()),
@@ -729,6 +751,70 @@ mod tests {
         call(s, &ExecContext::user(), name, &args)
             .expect("handled")
             .unwrap_or_else(|e| panic!("{name}: {e}"))
+    }
+
+    #[test]
+    fn relationship_tools_round_trip_through_mcp() {
+        let tools = list();
+        let t = tools
+            .iter()
+            .find(|t| t["name"] == "create_relationship")
+            .expect("schema");
+        assert_eq!(
+            t["inputSchema"]["properties"]["kind"]["enum"],
+            json!([
+                "join",
+                "cut",
+                "host",
+                "attach",
+                "bounds",
+                "connect",
+                "aggregate"
+            ])
+        );
+        let mut s = session();
+        let mut b = || {
+            ok(
+                &mut s,
+                "create_box",
+                json!({"origin": [0, 0, 0], "width": "1m", "depth": "1m", "height": "1m"}),
+            )["result"]["element"]
+                .as_u64()
+                .unwrap()
+        };
+        let (x, y, z) = (b(), b(), b());
+        let u = ok(
+            &mut s,
+            "create_relationship",
+            json!({"kind": "join", "elements": [x, y]}),
+        )["result"]["relationship"]
+            .as_str()
+            .unwrap()
+            .to_string();
+        ok(
+            &mut s,
+            "create_relationship",
+            json!({"kind": "connect", "elements": [y, z]}),
+        );
+        let all = ok(&mut s, "list_relationships", json!({}));
+        assert_eq!(all["relationships"].as_array().unwrap().len(), 2);
+        let of_x = ok(&mut s, "list_relationships", json!({"element": x}));
+        assert_eq!(
+            of_x["relationships"],
+            json!([{"relationship": u, "kind": "join", "elements": [x, y], "phase": null}])
+        );
+        ok(&mut s, "delete_relationship", json!({"relationship": u}));
+        let of_x = ok(&mut s, "list_relationships", json!({"element": x}));
+        assert_eq!(of_x["relationships"], json!([]));
+        // A bad kind is an argument error, not a crash.
+        let r = call(
+            &mut s,
+            &ExecContext::user(),
+            "create_relationship",
+            &json!({"kind": "glue", "elements": [x, y]}),
+        )
+        .expect("handled");
+        assert!(r.is_err());
     }
 
     #[test]

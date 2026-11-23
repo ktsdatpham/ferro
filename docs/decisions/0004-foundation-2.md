@@ -110,6 +110,14 @@ regeneration: `Join`, `Cut` (non-destructive void), `Host`, `Attach`,
 `Bounds` (room bounding), `Connect`, `Aggregate`. Inside a Form editing
 stays direct (D-38); between elements cuts are relationships.
 
+*Implementation note (M5-5.1, 2026-11-24):* the table is a field of
+`Document` keyed by `Uid`, not elements of a category: categories map to a
+Revit category and an IFC product, and relationships are neither. Rows are
+validated on every write and on load, removed with their elements, carried
+by the change format (`/relationships/<uid>`) and stored in files with uid
+references (format 4). `host_id` stays the source of truth for openings
+until M5-5.4 moves it into the table.
+
 ### 6. Scene derived from the document (F6)
 
 New crate `ferro-scene`: an incremental, ECS-style scene derived from the

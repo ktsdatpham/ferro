@@ -21,14 +21,14 @@ use crate::IoError;
 use serde_json::Value;
 
 /// Current file format version.
-pub const FORMAT_VERSION: u32 = 3;
+pub const FORMAT_VERSION: u32 = 4;
 
 /// One migration: from version `n` to `n + 1`, on the raw JSON of the project
 /// and the elements (before they are parsed).
 type Step = fn(&mut Value, &mut [Value]) -> Result<(), IoError>;
 
 /// `STEPS[i]` migrates version `i + 1` to `i + 2`.
-const STEPS: [Step; (FORMAT_VERSION - 1) as usize] = [v1_to_v2, v2_to_v3];
+const STEPS: [Step; (FORMAT_VERSION - 1) as usize] = [v1_to_v2, v2_to_v3, v3_to_v4];
 
 /// 1 → 2: additive (new optional fields and parameter types); nothing to rewrite.
 fn v1_to_v2(_project: &mut Value, _elements: &mut [Value]) -> Result<(), IoError> {
@@ -37,6 +37,12 @@ fn v1_to_v2(_project: &mut Value, _elements: &mut [Value]) -> Result<(), IoError
 
 /// 2 → 3: additive (phases); nothing to rewrite.
 fn v2_to_v3(_project: &mut Value, _elements: &mut [Value]) -> Result<(), IoError> {
+    Ok(())
+}
+
+/// 3 → 4: additive (the relationship table, M5-5); older files have none.
+/// The bump makes older readers refuse files they would lose rows from.
+fn v3_to_v4(_project: &mut Value, _elements: &mut [Value]) -> Result<(), IoError> {
     Ok(())
 }
 

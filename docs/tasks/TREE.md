@@ -57,8 +57,9 @@ Legend: `[ ]` open · `[~]` in progress · `[x]` done · `✓` verified ·
   - [x] M5-4.4 IFC material property sets; Revit material op carries thermal / physical values · branch `m5/materials` @agent-materials
     - Acceptance: `cargo test -p ferro-io ifc` and `cargo test -p ferro-revit material_op` pass; IFC of a material with data contains `IFCMATERIALPROPERTIES('Pset_MaterialThermal'`; the C# add-in (`Applier.cs`, thermal / structural assets) builds in CI. — ✓ tests re-run @lead after merge ; C# ✓ compiled in CI (revit-addin job on 7141d1f)
   - [ ] M5-4.5 Acoustic asset (absorption per octave band) and texture rendering of `ImageMapping`
-- [ ] **M5-5 Relationships** (ADR 0004 §5) @lead
-  - [ ] M5-5.1 Relationship table in the document (`Uid`, kind, elements), saved, undoable
+- [~] **M5-5 Relationships** (ADR 0004 §5) @lead
+  - [x] M5-5.1 Relationship table in the document (`Uid`, kind, elements), saved, undoable @lead
+    - accept: `cargo test -p ferro-core relationship` (9: undo/redo rows, every refusal code with rollback, duplicates per kind, rows removed with their element in one undo step, phase in use / merged, DocumentChanged marks linked elements, change-format round trip and dangling refusal); `cargo test -p ferro-io relationship` + `incremental_sync_keeps_the_relationship_table` + `a_row_pointing_at_a_missing_element_is_refused_on_load`; `cargo test -p ferro-tools relationship_tools_round_trip_through_mcp`; scenario suite covers `create_relationship` / `delete_relationship` and checks every row after every command
   - [ ] M5-5.2 `Join`: inferred L / T joins become explicit; joins survive freezing
   - [ ] M5-5.3 `Cut`: a void element cuts walls / floors, non-destructive
   - [ ] M5-5.4 `Host` moves from `host_id` into the table (kept as a fast index)
