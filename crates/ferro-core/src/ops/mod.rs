@@ -27,7 +27,7 @@ pub mod view_commands;
 pub use commands::{AnyCommand, Command, CommandOutput};
 pub use events::DocumentChanged;
 pub use failure::{CommandError, Failure, Severity};
-pub use session::{Actor, ActorKind, ExecContext, JournalEntry, Outcome, Session};
+pub use session::{Actor, ActorKind, ExecContext, JournalEntry, Outcome, Session, SubTransaction};
 pub use transaction::{IdSource, SequentialIds, Transaction};
 #[cfg(test)]
 mod bim_tests;
