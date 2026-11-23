@@ -11,7 +11,8 @@ use serde_json::{json, Map, Value};
 
 pub mod link;
 
-const LENGTH_FIELDS: [&str; 11] = [
+const LENGTH_FIELDS: [&str; 12] = [
+    "radius",
     "width",
     "depth",
     "height",
@@ -24,7 +25,9 @@ const LENGTH_FIELDS: [&str; 11] = [
     "base_offset",
     "thickness",
 ];
-const POINT_FIELDS: [&str; 6] = ["origin", "center", "vector", "start", "end", "mid"];
+const POINT_FIELDS: [&str; 7] = [
+    "origin", "center", "vector", "start", "end", "mid", "normal",
+];
 
 fn length() -> Value {
     json!({"type": ["number", "string"], "description": "Length: number = millimetres, or a string with units such as \"3m\", \"300cm\", \"10'\"."})
@@ -112,6 +115,19 @@ pub fn list() -> Vec<Value> {
             json!({"wall": id("Wall id"), "start": point("Start"), "end": point("End"), "mid": point("Point on the arc (curved walls)"), "base_offset": length(), "height": length(), "top_level": id("Level the top attaches to"), "top_offset": length(), "location_line": {"type":"string","enum":["wall_centerline","core_centerline","finish_exterior","finish_interior"]}}), &["wall"]),
         tool("set_floor", "Change a floor's outline (points [x, y]), holes or offset. Omitted fields keep their value.",
             json!({"floor": id("Floor id"), "points": {"type":"array","items": point("Vertex"), "minItems": 3}, "holes": {"type":"array","items":{"type":"array","items": point("Vertex")}}, "offset": length()}), &["floor"]),
+        // SketchUp-style Form editing.
+        tool("imprint_face", "Draw on a face of a Form (lines or a closed shape, points on the face plane): the face splits, like drawing on a face in SketchUp. Returns new_faces, ready for push_pull_face (push in to make a pocket, push to the opposite face to cut a hole).",
+            json!({"element": id("Form id"), "face": id("Face id"), "points": {"type":"array","items": point("Point on the face"), "minItems": 2}, "closed": {"type":"boolean"}}), &["element", "face", "points"]),
+        tool("create_circle", "Draw a circle (segments, default 24). With element + face it is drawn on that face; otherwise a new circular face (normal defaults to up). Pulling it gives a smooth cylinder.",
+            json!({"center": point("Centre"), "radius": length(), "normal": point("Normal direction"), "segments": {"type":"integer","minimum":3,"maximum":360}, "element": id("Form id"), "face": id("Face id"), "level": id("Optional level id"), "name": {"type":"string"}}), &["center", "radius"]),
+        tool("offset_face", "Offset a face's outline inwards by a distance (SketchUp Offset); the inner copy splits the face.",
+            json!({"element": id("Form id"), "face": id("Face id"), "distance": length()}), &["element", "face", "distance"]),
+        tool("move_geometry", "Move vertices, edges or faces of a Form (connected faces stretch), e.g. move a top edge sideways to make a sloped roof. Faces must stay flat.",
+            json!({"element": id("Form id"), "vertices": ids("Vertex ids"), "edges": ids("Edge ids"), "faces": ids("Face ids"), "vector": point("Displacement")}), &["element", "vector"]),
+        tool("scale_elements", "Scale Forms about a centre: factor (uniform) or factors [x, y, z].",
+            json!({"elements": ids("Form ids"), "center": point("Centre"), "factor": {"type":"number"}, "factors": {"type":"array","items":{"type":"number"},"minItems":3,"maxItems":3}}), &["elements", "center"]),
+        tool("erase_edges", "Erase edges of a Form: an edge between faces in one plane merges them; other edges remove their faces.",
+            json!({"element": id("Form id"), "edges": ids("Edge ids")}), &["element", "edges"]),
         // App-only (needs the Ferro app open, through Ferro Link).
         tool("get_selection", "Elements the user has selected in the Ferro app, with their summaries. Use it for requests like \"make the selected wall taller\".", json!({}), &[]),
         tool("select_elements", "Select elements in the Ferro app so the user sees what you mean.", json!({"elements": ids("Element ids (empty clears)")}), &["elements"]),

@@ -12,6 +12,7 @@ pub mod bim_commands;
 pub mod commands;
 mod events;
 mod failure;
+pub mod form_commands;
 mod session;
 mod transaction;
 
@@ -22,3 +23,5 @@ pub use session::{Actor, ActorKind, ExecContext, JournalEntry, Outcome, Session}
 pub use transaction::{IdSource, SequentialIds, Transaction};
 #[cfg(test)]
 mod bim_tests;
+#[cfg(test)]
+mod form_tests;
