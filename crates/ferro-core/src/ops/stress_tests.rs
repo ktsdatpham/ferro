@@ -260,29 +260,103 @@ fn pocket_pulled_back_up() {
 }
 
 /// SketchUp: pulling a pocket floor exactly back to flush removes the
-/// pocket; pulling further makes a boss.
+/// pocket; pulling further makes a boss (M5-15.7).
 #[test]
-#[ignore = "bug: pulling a pocket floor back to flush (or past it) fails with ferro.algo.collapse (M5-15.7)"]
 fn pocket_back_to_flush_and_beyond() {
     for fr in frames() {
+        // Flush, exactly and within VERTEX_TOL: one top face again.
+        for d in [800.0, 799.995, 800.005] {
+            let mut s = session();
+            let (e, f) = pocket(&mut s, fr);
+            let o = expect_ok(
+                &mut s,
+                "push_pull_face",
+                json!({"element": e, "face": f, "distance": d}),
+            );
+            assert!((volume(&s, e) - W * D * H).abs() < 10.0, "{fr:?}: flush");
+            let b = geometry(&s, e);
+            assert_eq!(b.face_count(), 6, "{fr:?} {d}: healed");
+            assert!(b.face(f).is_err(), "{fr:?}: pulled face merged");
+            let deleted: Vec<FaceId> =
+                serde_json::from_value(o.output["lineage"]["deleted"].clone()).expect("lineage");
+            assert!(deleted.contains(&f));
+            let top = face(&s, e, fr, 0.0, 0.0, 1.0);
+            assert!(b.face(top).is_ok_and(|t| t.holes.is_empty()));
+            // The merged face is gone for good.
+            expect_code(
+                &mut s,
+                "push_pull_face",
+                json!({"element": e, "face": f, "distance": 100}),
+                "ferro.topo.not_found",
+            );
+        }
+        for (d, boss) in [(1000.0, 200.0), (1200.0, 400.0)] {
+            let mut s = session();
+            let (e, f) = pocket(&mut s, fr);
+            expect_ok(
+                &mut s,
+                "push_pull_face",
+                json!({"element": e, "face": f, "distance": d}),
+            );
+            assert!(
+                (volume(&s, e) - (W * D * H + 1e6 * boss)).abs() < 10.0,
+                "{fr:?}: boss"
+            );
+        }
+        // 0.02 mm short of flush leaves walls below 0.5 mm: refused.
         let mut s = session();
         let (e, f) = pocket(&mut s, fr);
-        expect_ok(
+        expect_code(
             &mut s,
             "push_pull_face",
-            json!({"element": e, "face": f, "distance": 800}),
+            json!({"element": e, "face": f, "distance": 799.98}),
+            "ferro.geom.short_curve",
         );
-        assert!((volume(&s, e) - W * D * H).abs() < 10.0, "{fr:?}: flush");
+    }
+}
+
+/// Half of a split top pushed down (a step), then pulled back flush: the
+/// step wall disappears and the volume is back (M5-15.7).
+#[test]
+fn step_down_and_back_flush() {
+    for fr in frames() {
         let mut s = session();
-        let (e, f) = pocket(&mut s, fr);
+        let e = placed_box(&mut s, fr);
+        let top = face(&s, e, fr, 0.0, 0.0, 1.0);
+        let o = expect_ok(
+            &mut s,
+            "imprint_face",
+            json!({"element": e, "face": top, "closed": false, "points": [
+                fr.pj(1500.0, 0.0, H), fr.pj(1500.0, D, H)]}),
+        );
+        let faces: Vec<FaceId> = serde_json::from_value(o.output["faces"].clone()).expect("faces");
+        let b = geometry(&s, e);
+        // The 1500-wide half.
+        let half = faces
+            .iter()
+            .copied()
+            .find(|f| b.face_area(*f).is_ok_and(|a| (a - 1500.0 * D).abs() < 1.0))
+            .expect("half");
         expect_ok(
             &mut s,
             "push_pull_face",
-            json!({"element": e, "face": f, "distance": 1200}),
+            json!({"element": e, "face": half, "distance": -400}),
         );
         assert!(
-            (volume(&s, e) - (W * D * H + 1e6 * 400.0)).abs() < 10.0,
-            "{fr:?}: boss"
+            (volume(&s, e) - (W * D * H - 1500.0 * D * 400.0)).abs() < 10.0,
+            "{fr:?}"
+        );
+        let n = geometry(&s, e).face_count();
+        expect_ok(
+            &mut s,
+            "push_pull_face",
+            json!({"element": e, "face": half, "distance": 400}),
+        );
+        assert!((volume(&s, e) - W * D * H).abs() < 10.0, "{fr:?}");
+        assert_eq!(
+            geometry(&s, e).face_count(),
+            n - 1,
+            "{fr:?}: step wall gone"
         );
     }
 }

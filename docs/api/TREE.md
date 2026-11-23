@@ -750,7 +750,7 @@ Core commands (milestone 1) and the dispatch enum; BIM commands live in `bim_com
 - struct `RotateElements` — Rotate elements about a vertical axis through `center`
 - struct `CopyElements` — Copy elements, offset by a vector (mm). `count` > 1 makes a linear array.
 - struct `DeleteElements` — Delete elements.
-- struct `SetName` — Rename an element (`null` clears the name).
+- struct `SetName` — Rename an element (`null` clears the name). `name` is required: a
 - struct `SetParameter` — Set a typed parameter (D-15). Computed keys are read-only. Quantities are
 - struct `SetCategory` — Classify directly edited geometry as a BIM category (D-12, ADR 0004),
 - struct `SetProjectName` — Rename the project.

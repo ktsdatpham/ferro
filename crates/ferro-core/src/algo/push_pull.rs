@@ -22,6 +22,11 @@ pub enum PushPullMode {
 ///
 /// * Open single face → extruded into a closed solid.
 /// * Closed solid, all neighbours perpendicular → face moves, neighbours stretch.
+///   Pulled back flush (moved corners within `VERTEX_TOL` of the far corners
+///   of the stretched faces), those faces vanish; a pocket floor that now
+///   fills its hole merges into the surrounding face, so the face is in
+///   `Lineage::deleted` and the surrounding face keeps its id. Further than
+///   flush, the pocket turns into a boss (SketchUp behaviour).
 /// * Closed solid, no neighbour perpendicular → a prism (boss or pocket) is added.
 /// * Mixed neighbours (e.g. half of a split top face) → a prism whose side
 ///   faces that lie in the plane of a perpendicular neighbour are merged into
@@ -86,6 +91,10 @@ pub fn push_pull_face(
                 .map(|v| (*v, work.point(*v).expect("loop vertex") + offset))
                 .collect();
             work.move_vertices(&moves)?;
+            // Pulled back flush (a pocket floor to the top, a step to its
+            // neighbour): the moved corners land on the far corners of the
+            // stretched faces, which vanish; a filled hole heals.
+            let deleted = merge_flush(&mut work, face, &loops[0], &neighbors, n)?;
             // A step pulled back below an old corner leaves that corner as
             // the tip of a spike in its faces: drop it.
             remove_spikes(&mut work)?;
@@ -93,6 +102,9 @@ pub fn push_pull_face(
             // neighbour flips), but it must not vanish or cross itself; the
             // solid check below catches a turned-inside-out body.
             for nf in neighbors.iter().flatten() {
+                if deleted.contains(nf) {
+                    continue;
+                }
                 let a = work.face_area_vector(*nf)?;
                 if a.length() <= tol::VERTEX_TOL * tol::VERTEX_TOL * 100.0 {
                     return Err(AlgoError::Collapse);
@@ -107,7 +119,8 @@ pub fn push_pull_face(
                 PushPullMode::Stretch,
                 Lineage {
                     kept: work.face_ids().collect(),
-                    ..Default::default()
+                    created: Vec::new(),
+                    deleted,
                 },
             )
         } else if flags.iter().all(|x| !*x) {
@@ -120,6 +133,108 @@ pub fn push_pull_face(
     check_solid(&work)?;
     *body = work;
     Ok(result)
+}
+
+/// After a stretch: merge each moved vertex of `outer` (the loop of `face`)
+/// that landed within `VERTEX_TOL` of another vertex of a stretched
+/// neighbour into that vertex, drop loops that collapse to fewer than three
+/// vertices, and, when `face` now exactly fills a hole of a coplanar face
+/// with the same normal, remove that hole and `face` (the pocket is gone, one
+/// face again). Returns the deleted faces; no merge leaves the body alone.
+fn merge_flush(
+    work: &mut Body,
+    face: FaceId,
+    outer: &[VertexId],
+    neighbors: &[Option<FaceId>],
+    n: crate::math::UnitVec3,
+) -> Result<Vec<FaceId>, AlgoError> {
+    use std::collections::{BTreeMap, BTreeSet};
+    let moved: BTreeSet<VertexId> = outer.iter().copied().collect();
+    let mut candidates = BTreeSet::new();
+    for nf in neighbors.iter().flatten() {
+        let f = work.face(*nf)?;
+        for l in std::iter::once(&f.outer).chain(&f.holes) {
+            candidates.extend(
+                work.loop_vertices(*l)
+                    .into_iter()
+                    .filter(|v| !moved.contains(v)),
+            );
+        }
+    }
+    let mut map: BTreeMap<VertexId, VertexId> = BTreeMap::new();
+    for v in outer {
+        let p = work.point(*v).ok_or(AlgoError::Collapse)?;
+        let mut best: Option<(f64, VertexId)> = None;
+        for w in &candidates {
+            let d = work.point(*w).ok_or(AlgoError::Collapse)?.distance_to(p);
+            if d <= tol::VERTEX_TOL && best.is_none_or(|(bd, _)| d < bd) {
+                best = Some((d, *w));
+            }
+        }
+        if let Some((_, w)) = best {
+            map.insert(*v, w);
+        }
+    }
+    if map.is_empty() {
+        return Ok(Vec::new());
+    }
+    let fix = |lp: &[VertexId]| -> Vec<VertexId> {
+        let mut out: Vec<VertexId> = Vec::with_capacity(lp.len());
+        for v in lp.iter().map(|v| *map.get(v).unwrap_or(v)) {
+            if out.last() != Some(&v) {
+                out.push(v);
+            }
+        }
+        while out.len() > 1 && out.first() == out.last() {
+            out.pop();
+        }
+        out
+    };
+    let mut deleted = Vec::new();
+    let mut specs = Vec::new();
+    for mut s in work.face_specs() {
+        s.outer = fix(&s.outer);
+        s.holes = s
+            .holes
+            .iter()
+            .map(|h| fix(h))
+            .filter(|h| h.len() >= 3)
+            .collect();
+        match s.id {
+            Some(id) if s.outer.len() < 3 => deleted.push(id),
+            None if s.outer.len() < 3 => {}
+            _ => specs.push(s),
+        }
+    }
+    // Heal: `face` fills a hole of a coplanar face pointing the same way.
+    let same_cycle = |a: &[VertexId], b: &[VertexId]| {
+        a.len() == b.len()
+            && (0..b.len()).any(|k| (0..a.len()).all(|i| a[i] == b[(i + k) % b.len()]))
+    };
+    if let Some(fi) = specs.iter().position(|s| s.id == Some(face)) {
+        if specs[fi].holes.is_empty() {
+            let mut rev = specs[fi].outer.clone();
+            rev.reverse();
+            let host = specs.iter().enumerate().find_map(|(si, s)| {
+                let coplanar = s.id != Some(face)
+                    && matches!(s.surface, Some(crate::geom::Surface::Plane(pl))
+                        if pl.normal().dot(n) >= 1.0 - tol::ANGLE_TOL);
+                let hole = s.holes.iter().position(|h| same_cycle(h, &rev))?;
+                coplanar.then_some((si, hole))
+            });
+            if let Some((si, hole)) = host {
+                specs[si].holes.remove(hole);
+                specs.remove(fi);
+                deleted.push(face);
+            }
+        }
+    }
+    let verts = work.vertex_map();
+    work.rebuild(verts, specs)
+        .map_err(|_| AlgoError::Collapse)?;
+    // Refit the planes of faces whose corners snapped onto the merged vertices.
+    work.move_vertices(&[])?;
+    Ok(deleted)
 }
 
 /// Distance (mm) from `p` to the line through `a` and `b` (to `a` when the
@@ -476,19 +591,6 @@ fn prism(
         }
         cap_loops.push(top);
     }
-    if heal {
-        for sp in &specs {
-            let pts: Vec<Point3> = sp
-                .outer
-                .iter()
-                .map(|v| work.point(*v).expect("v"))
-                .collect();
-            let n = crate::geom::polygon::polygon_normal(&pts).ok_or(AlgoError::Collapse)?;
-            if !is_simple(&pts, n) {
-                return Err(AlgoError::Collapse);
-            }
-        }
-    }
     let mut cap = FaceSpec::new(cap_loops[0].clone());
     cap.id = Some(face);
     cap.holes = cap_loops[1..].to_vec();
@@ -497,6 +599,19 @@ fn prism(
     specs.extend(sides);
     let verts = work.vertex_map();
     let ids = work.rebuild(verts, specs)?;
+    if heal {
+        // A merged side pushed below an old corner of its neighbour leaves
+        // that corner as a spike tip (e.g. half of a split top pushed down):
+        // drop it, then every grown neighbour must be a simple polygon.
+        remove_spikes(work)?;
+        let fids: Vec<FaceId> = work.face_ids().collect();
+        for f in fids {
+            let pts = work.face_points(f)?;
+            if !is_simple(&pts, work.face_normal(f)?) {
+                return Err(AlgoError::Collapse);
+            }
+        }
+    }
     let created = ids[side_start..].iter().map(|f| (*f, Some(face))).collect();
     Ok((
         PushPullMode::Prism,
@@ -650,6 +765,79 @@ mod tests {
         push_pull_face(&mut b, imp2.new_faces[0], 1000.0).unwrap();
         b.validate_solid().unwrap();
         assert!((b.volume() - (1.2e10 - 2e8 + 2e9)).abs() < 1.0);
+    }
+
+    fn pocket(depth: f64) -> (Body, FaceId, FaceId) {
+        use crate::algo::imprint_face;
+        let (mut b, ids) = box_body(4000.0, 3000.0, 2000.0);
+        let r = [
+            Point3::new(1000.0, 1000.0, 2000.0),
+            Point3::new(2000.0, 1000.0, 2000.0),
+            Point3::new(2000.0, 2000.0, 2000.0),
+            Point3::new(1000.0, 2000.0, 2000.0),
+        ];
+        let (imp, _) = imprint_face(&mut b, ids[1], &r, true).unwrap();
+        let f = imp.new_faces[0];
+        push_pull_face(&mut b, f, -depth).unwrap();
+        (b, ids[1], f)
+    }
+
+    #[test]
+    fn pocket_pulled_back_flush_heals_the_top() {
+        let v = 4000.0 * 3000.0 * 2000.0;
+        // Tolerance edge: exactly flush and 0.005 mm short or past.
+        for d in [800.0, 799.995, 800.005] {
+            let (mut b, top, f) = pocket(800.0);
+            let (mode, lin) = push_pull_face(&mut b, f, d).unwrap();
+            assert_eq!(mode, PushPullMode::Stretch);
+            b.validate_solid().unwrap();
+            assert!((b.volume() - v).abs() < 1.0, "{d}");
+            assert_eq!(b.face_count(), 6, "{d}");
+            assert!(b.face(top).unwrap().holes.is_empty());
+            assert!(b.face(f).is_err());
+            // The pocket floor and its four walls are gone; the top is kept.
+            assert_eq!(lin.deleted.len(), 5);
+            assert!(lin.deleted.contains(&f) && lin.kept.contains(&top));
+            // The square's corners went with the hole.
+            assert_eq!(b.vertex_count(), 8);
+        }
+    }
+
+    #[test]
+    fn pocket_pulled_past_flush_becomes_a_boss() {
+        let (mut b, top, f) = pocket(800.0);
+        let (_, lin) = push_pull_face(&mut b, f, 1000.0).unwrap();
+        b.validate_solid().unwrap();
+        assert!((b.volume() - (4000.0 * 3000.0 * 2000.0 + 1e6 * 200.0)).abs() < 1.0);
+        assert!(lin.deleted.is_empty() && lin.kept.contains(&f));
+        assert_eq!(b.face(top).unwrap().holes.len(), 1);
+        // 0.02 mm short of flush: a 0.02 mm pocket stays (the transaction
+        // then refuses its sub-0.5 mm edges).
+        let (mut b, _, f) = pocket(800.0);
+        let (_, lin) = push_pull_face(&mut b, f, 799.98).unwrap();
+        assert!(lin.deleted.is_empty());
+        assert_eq!(b.face_count(), 11);
+    }
+
+    #[test]
+    fn step_pulled_back_flush_restores_the_split_top() {
+        use crate::algo::imprint_face;
+        let (mut b, ids) = box_body(4000.0, 3000.0, 1000.0);
+        let chord = [
+            Point3::new(1500.0, 0.0, 1000.0),
+            Point3::new(1500.0, 3000.0, 1000.0),
+        ];
+        let (imp, _) = imprint_face(&mut b, ids[1], &chord, false).unwrap();
+        let small = imp.faces[1];
+        push_pull_face(&mut b, small, -400.0).unwrap();
+        assert_eq!(b.face_count(), 8);
+        let (_, lin) = push_pull_face(&mut b, small, 400.0).unwrap();
+        b.validate_solid().unwrap();
+        assert!((b.volume() - 4000.0 * 3000.0 * 1000.0).abs() < 1.0);
+        // Back to the imprinted box: two top halves and the step wall gone.
+        assert_eq!(b.face_count(), 7);
+        assert_eq!(lin.deleted.len(), 1);
+        assert!(b.face(small).is_ok());
     }
 
     #[test]
