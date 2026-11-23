@@ -73,7 +73,17 @@ Legend: `[ ]` open · `[~]` in progress · `[x]` done · `✓` verified ·
 - [ ] **M5-9 Curved geometry**
   - [ ] M5-9.1 Surface / curve types incl. Cone, Sphere, Torus, NURBS in data, file and writers
   - [ ] M5-9.2 Kernel spike: truck / monstertruck vs OCCT, report with recommendation
-- [ ] **M5-10 `ferro-scene`** (ADR 0004 §6)
+- [~] **M5-10 `ferro-scene`** (ADR 0004 §6) @agent-scene
+  - [x] M5-10.1 Crate `ferro-scene`: `DisplayScene` with per-element `DrawRecord`s (mesh, offset, colour, bounds, revision), incremental `sync` by structural sharing, view state kept out @agent-scene
+    - accept: `cargo test -p ferro-scene` passes (box, empty doc, element without geometry, open body, one-element change re-meshes only it, determinism, section cut)
+  - [x] M5-10.2 Instancing of translated copies: meshes stored in local coordinates, shared by quantised content hash + verified match (`INSTANCE_TOL`) @agent-scene
+    - accept: test `array_copies_share_one_mesh` (array of 5 → 1 mesh, 5 users; moved copy stays; edited copy leaves) and `rotated_copy_is_not_an_instance` pass
+  - [x] M5-10.3 `ferro-app` builds its vertex lists from `ferro-scene`: per-element vertex chunks, rebuilt only on record / selection / style change; hidden and section never re-mesh @agent-scene
+    - accept: `cargo test -p ferro-app scene` passes; in the app selection colours, X-ray, Wireframe, Hidden line, hidden elements / tags, section cut lines, hover face highlight, window / crossing selection all look as before
+  - [x] M5-10.4 Benchmarks (ignored tests): 2,000 boxes full build, one element changed, selection change @agent-scene
+    - accept: `cargo test -p ferro-scene --release -- --ignored --nocapture` and `cargo test -p ferro-app --release scene -- --ignored --nocapture` print timings
+  - [ ] M5-10.5 GPU instancing: upload each shared mesh once plus per-record transforms / colours (renderer API change)
+  - [ ] M5-10.6 Picking and snapping read the scene (`SnapScene` from `DisplayScene` instead of the document)
 - [x] **M5-11 Commands and keymaps** (SketchUp / Revit / Ferro presets, command palette) @lead
   - accept: `cargo test -p ferro-app keymap` passes; in the app (Ferro preset) `S` `B` picks Floor, `W` `A` Wall, `L` Line, Ctrl+K opens the palette and Enter runs the first match; Edit > Keyboard shortcuts switches preset and writes `~/.ferro/keymap.json`
 - [ ] **M5-12 Tooling for many contributors** (ADR 0003)

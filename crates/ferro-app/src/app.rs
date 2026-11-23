@@ -2317,7 +2317,7 @@ impl FerroApp {
         ));
         if let Some((e, f)) = hover_face {
             if let Some(m) = self.scene.mesh(e) {
-                for t in scene::face_triangles(m, f) {
+                for t in scene::face_triangles(&m, f) {
                     let n = (t[1] - t[0])
                         .cross(t[2] - t[0])
                         .normalize()
@@ -2341,7 +2341,7 @@ impl FerroApp {
                     match p {
                         SubPick::Face(f) => {
                             if let Some(m) = self.scene.mesh(e) {
-                                for t in scene::face_triangles(m, *f) {
+                                for t in scene::face_triangles(&m, *f) {
                                     let n = (t[1] - t[0])
                                         .cross(t[2] - t[0])
                                         .normalize()

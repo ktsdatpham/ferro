@@ -29,6 +29,7 @@ math     Point3, Vec3, UnitVec3, Transform, BoundingBox3, Length, Angle, tol
 | `ferro-core` | `serde`, minimal math deps | Everything in 7.1 |
 | `ferro-io` | `ferro-core`, `rusqlite` | `.fro` / `.fro.json` files, OBJ / glTF export |
 | `ferro-snap` | `ferro-core` | Inference (snapping) |
+| `ferro-scene` | `ferro-core` | Display scene derived from a document snapshot (ADR 0004 §6): draw records, shared meshes for translated copies, incremental sync; pure, no GPU |
 | `ferro-tools` | `ferro-core` | Tool schemas, unit normalisation, dispatch, Ferro Link protocol (ADR 0001) |
 | `ferro-mcp` | `ferro-core`, `ferro-io`, `ferro-tools` | MCP server; forwards to the open app over Ferro Link |
 | `ferro-revit` | `ferro-core` | Revit edge: Ferro → Revit operations (feet), Revit → Ferro import (ADR 0002) |

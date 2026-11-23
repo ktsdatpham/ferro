@@ -128,16 +128,14 @@ Problem reports (ADR 0003 §4, M5-12.5).
 
 ### `ferro_app::scene`
 
-Turns a `Document` into GPU vertex lists. Meshes are cached per element and reused while the element's storage is shared between versions (D-24), so previews only re-mesh what changed.
+Turns the display scene (`ferro-scene`) into GPU vertex lists.
 
 - const `EDGE`
 - const `SELECT`
 - const `CUT` — Section cut lines.
 - struct `SceneCache`
-- fn `SceneCache::update` — Rebuild vertex lists if `doc` (or the selection) differs from last time.
-- fn `SceneCache::mesh`
-- fn `section_segments` — Segments where the plane through `p` with normal `n` crosses the mesh's
-- fn `same_doc` — Cheap identity check: same version and every element shares storage.
+- fn `SceneCache::update` — Bring the vertex lists up to date with `doc`, the selection and the
+- fn `SceneCache::mesh` — The element's mesh in model coordinates (a copy; instanced meshes
 - fn `line_vertex` — An edge vertex (drawn over its faces).
 - fn `guide_vertex` — A grid / guide vertex (depth-tested normally, hidden by faces).
 - fn `grid_lines` — Ground grid (major every 5 cells) and the red / green / blue axes.
@@ -958,6 +956,53 @@ Ferro → Revit: the operations that make a Revit model match a document.
 - enum `RevitOp` — One operation for the add-in. Every upsert carries the Ferro `uid` (stored
 - fn `RevitOp::uid`
 - fn `plan` — Operations that bring a Revit model holding `state` up to date with
+
+## `ferro-scene`
+
+### `ferro_scene`
+
+Display scene derived from a `Document` snapshot (ADR 0004 §6).
+
+- const `INSTANCE_TOL` — Position tolerance for sharing a mesh between translated copies, in mm.
+- struct `MeshId` — Id of a mesh in the scene's shared store. Local to one [`DisplayScene`];
+- struct `SharedMesh` — A mesh in local coordinates, shared by every element drawn with it.
+- struct `DrawRecord` — What to draw for one element. Derived data, never saved.
+- struct `SyncStats` — What one [`DisplayScene::sync`] did.
+- struct `DisplayScene` — Scene derived from a document snapshot. See the crate docs.
+- fn `DisplayScene::new` — Empty scene.
+- fn `DisplayScene::from_document` — Scene of `doc`, built from scratch.
+- fn `DisplayScene::sync` — Move the scene to `doc`. Elements whose storage is shared with the
+- fn `DisplayScene::revision` — Increases whenever a sync changed any record; unchanged otherwise.
+- fn `DisplayScene::document` — The document last synced, if any.
+- fn `DisplayScene::records` — Draw records in `ElementId` order.
+- fn `DisplayScene::len` — Number of draw records.
+- fn `DisplayScene::is_empty` — No draw records.
+- fn `DisplayScene::record` — Draw record of one element; `None` if it has no geometry.
+- fn `DisplayScene::shared_mesh` — A mesh of the shared store.
+- fn `DisplayScene::shared_meshes` — Shared meshes in `MeshId` order.
+- fn `DisplayScene::local_mesh` — The element's record and its local mesh.
+- fn `DisplayScene::world_mesh` — The element's mesh in model coordinates (allocates a copy).
+- fn `DisplayScene::bounds` — Union of all record bounds (mm); `None` for an empty scene.
+- fn `DisplayScene::section_segments` — Section cut: segments (model coordinates) where the plane through
+- fn `same_doc` — Cheap identity check: same version, same elements, every element shares
+
+### `ferro_scene::color`
+
+Display colour of an element (the compiled material, for now a colour).
+
+- fn `element_color` — Display colour (sRGB + alpha, 0–1): the element's material parameter, else
+
+### `ferro_scene::edges`
+
+Edges to draw for a body.
+
+- fn `visible_edges` — Edges to draw (model coordinates, mm): every edge of the body except one
+
+### `ferro_scene::section`
+
+Section cut of a mesh by a plane.
+
+- fn `section_segments` — Segments (mm) where the plane through `p` with normal `n` crosses the
 
 ## `ferro-snap`
 
