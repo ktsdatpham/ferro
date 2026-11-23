@@ -36,6 +36,8 @@ pub struct FrameData<'a> {
     pub scene_tris: &'a [Vertex],
     pub scene_lines: &'a [Vertex],
     pub overlay_tris: &'a [Vertex],
+    /// Scene faces do not hide edges behind them.
+    pub xray: bool,
     pub overlay_lines: &'a [Vertex],
     pub clear: [f64; 3],
 }
@@ -51,6 +53,8 @@ struct Targets {
 
 pub struct Renderer {
     mesh_pipeline: wgpu::RenderPipeline,
+    /// Faces that do not hide what is behind them (X-ray style).
+    xray_pipeline: wgpu::RenderPipeline,
     line_pipeline: wgpu::RenderPipeline,
     globals: wgpu::Buffer,
     bind_group: wgpu::BindGroup,
@@ -105,7 +109,8 @@ impl Renderer {
                         fs: &str,
                         topology: wgpu::PrimitiveTopology,
                         label: &str,
-                        bias: wgpu::DepthBiasState| {
+                        bias: wgpu::DepthBiasState,
+                        depth_write: bool| {
             device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
                 label: Some(label),
                 layout: Some(&layout),
@@ -126,7 +131,7 @@ impl Renderer {
                 },
                 depth_stencil: Some(wgpu::DepthStencilState {
                     format: DEPTH_FORMAT,
-                    depth_write_enabled: Some(true),
+                    depth_write_enabled: Some(depth_write),
                     depth_compare: Some(wgpu::CompareFunction::LessEqual),
                     stencil: Default::default(),
                     bias,
@@ -156,6 +161,15 @@ impl Renderer {
                 wgpu::PrimitiveTopology::TriangleList,
                 "mesh",
                 Default::default(),
+                true,
+            ),
+            xray_pipeline: pipeline(
+                "vs_mesh",
+                "fs_mesh",
+                wgpu::PrimitiveTopology::TriangleList,
+                "mesh xray",
+                Default::default(),
+                false,
             ),
             line_pipeline: pipeline(
                 "vs_line",
@@ -163,6 +177,7 @@ impl Renderer {
                 wgpu::PrimitiveTopology::LineList,
                 "lines",
                 Default::default(),
+                true,
             ),
             globals,
             bind_group,
@@ -284,8 +299,17 @@ impl Renderer {
                 multiview_mask: None,
             });
             pass.set_bind_group(0, &self.bind_group, &[]);
+            pass.set_pipeline(if f.xray {
+                &self.xray_pipeline
+            } else {
+                &self.mesh_pipeline
+            });
+            if let Some((buf, n)) = &self.scene_tris {
+                pass.set_vertex_buffer(0, buf.slice(..));
+                pass.draw(0..*n, 0..1);
+            }
             pass.set_pipeline(&self.mesh_pipeline);
-            for (buf, n) in [&self.scene_tris, &overlay_tris].into_iter().flatten() {
+            if let Some((buf, n)) = &overlay_tris {
                 pass.set_vertex_buffer(0, buf.slice(..));
                 pass.draw(0..*n, 0..1);
             }

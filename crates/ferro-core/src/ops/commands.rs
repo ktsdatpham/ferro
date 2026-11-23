@@ -4,6 +4,7 @@
 //! radians; the MCP edge converts user units (`"3m"`, degrees).
 
 use super::bim_commands::*;
+use super::form_commands::*;
 use super::{CommandError, Transaction};
 use crate::algo::{push_pull_face, PushPullMode};
 use crate::geom::{polygon, Plane};
@@ -274,6 +275,7 @@ impl Command for PushPullFace {
             PushPullMode::Extrude => "extrude",
             PushPullMode::Stretch => "stretch",
             PushPullMode::Prism => "prism",
+            PushPullMode::Through => "through",
         };
         Ok(json!({ "element": self.element, "mode": mode, "lineage": lineage }))
     }
@@ -628,6 +630,13 @@ any_command!(
     SetOpening,
     SetWall,
     SetFloor,
+    ImprintFace,
+    CreateCircle,
+    OffsetFace,
+    MoveGeometry,
+    ScaleElements,
+    EraseEdges,
+    EraseFaces,
 );
 
 impl AnyCommand {

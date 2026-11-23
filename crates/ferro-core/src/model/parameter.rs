@@ -50,6 +50,8 @@ pub mod keys {
     pub const COMMENTS: &str = "ferro.common.comments";
     /// Development level (D-69), e.g. 100, 200, 300.
     pub const LOD: &str = "ferro.common.lod";
+    /// Material painted on an element (element reference to a material).
+    pub const MATERIAL: &str = "ferro.common.material";
     /// Classification code (Uniclass / OmniClass / Vietnamese code), D-40.
     pub const CLASSIFICATION: &str = "ferro.common.classification";
 

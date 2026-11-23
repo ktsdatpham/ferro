@@ -34,6 +34,11 @@ pub enum SnapKind {
     Midpoint,
     OnEdge,
     OnAxis(Axis),
+    /// On the line from the anchor parallel to the reference edge.
+    Parallel,
+    /// On the horizontal line from the anchor perpendicular to the
+    /// reference edge.
+    Perpendicular,
     OnFace,
     Ground,
 }
@@ -49,6 +54,8 @@ impl SnapKind {
             SnapKind::OnAxis(Axis::X) => "On Red Axis",
             SnapKind::OnAxis(Axis::Y) => "On Green Axis",
             SnapKind::OnAxis(Axis::Z) => "On Blue Axis",
+            SnapKind::Parallel => "Parallel to Edge",
+            SnapKind::Perpendicular => "Perpendicular to Edge",
             SnapKind::OnFace => "On Face",
             SnapKind::Ground => "On Ground",
         }
@@ -58,7 +65,7 @@ impl SnapKind {
             SnapKind::Endpoint | SnapKind::Origin => 0,
             SnapKind::Midpoint => 1,
             SnapKind::OnEdge => 2,
-            SnapKind::OnAxis(_) => 3,
+            SnapKind::OnAxis(_) | SnapKind::Parallel | SnapKind::Perpendicular => 3,
             SnapKind::OnFace => 4,
             SnapKind::Ground => 5,
         }
@@ -73,6 +80,9 @@ pub struct SnapResult {
     pub face: Option<FaceId>,
     /// Normal of the face under the cursor, when there is one.
     pub normal: Option<UnitVec3>,
+    /// Direction of the edge snapped to (on-edge and midpoint snaps): the
+    /// app keeps it as the reference for parallel / perpendicular inference.
+    pub edge_dir: Option<UnitVec3>,
 }
 
 /// A picking ray in model space.
@@ -102,6 +112,8 @@ pub struct SnapPoint {
     pub point: Point3,
     pub kind: SnapKind,
     pub element: Option<ElementId>,
+    /// For midpoints: the direction of their edge.
+    pub edge_dir: Option<UnitVec3>,
 }
 
 #[derive(Debug, Clone)]
@@ -135,6 +147,7 @@ impl SnapScene {
             point: Point3::ORIGIN,
             kind: SnapKind::Origin,
             element: None,
+            edge_dir: None,
         });
         for e in doc.elements() {
             if exclude.contains(&e.id) {
@@ -146,6 +159,7 @@ impl SnapScene {
                     point: p,
                     kind: SnapKind::Endpoint,
                     element: Some(e.id),
+                    edge_dir: None,
                 });
             }
             for (_, a, b) in g.edges() {
@@ -153,6 +167,7 @@ impl SnapScene {
                     point: Point3::midpoint(a, b),
                     kind: SnapKind::Midpoint,
                     element: Some(e.id),
+                    edge_dir: (b - a).normalize(),
                 });
                 s.edges.push(SnapEdge {
                     a,
@@ -200,6 +215,9 @@ pub struct SnapSettings {
     pub ground_z: f64,
     /// Infer axis directions from the anchor point.
     pub axes: bool,
+    /// Reference edge direction for parallel / perpendicular inference
+    /// (usually the last edge the cursor hovered).
+    pub reference: Option<UnitVec3>,
 }
 
 impl Default for SnapSettings {
@@ -208,6 +226,7 @@ impl Default for SnapSettings {
             tolerance_px: 10.0,
             ground_z: 0.0,
             axes: true,
+            reference: None,
         }
     }
 }
@@ -268,9 +287,10 @@ pub fn snap(
     settings: &SnapSettings,
 ) -> Option<SnapResult> {
     let hit = scene.raycast(ray);
-    let depth_limit = hit
-        .map(|(t, _)| t * (1.0 + 1e-6) + 1.0)
-        .unwrap_or(f64::INFINITY);
+    // Points and edges a little behind the hovered face (its own boundary
+    // seen at a grazing angle) still count as visible: the slack grows with
+    // the viewing distance (0.3 %), like the screen-space tolerance does.
+    let depth_limit = hit.map(|(t, _)| t * 1.003 + 1.0).unwrap_or(f64::INFINITY);
     let visible = |p: Point3| ray.param_of(p) <= depth_limit;
     let tol = settings.tolerance_px;
 
@@ -295,6 +315,7 @@ pub fn snap(
                     element: p.element,
                     face: None,
                     normal: None,
+                    edge_dir: p.edge_dir,
                 },
             );
         }
@@ -319,35 +340,67 @@ pub fn snap(
                     element: Some(e.element),
                     face: None,
                     normal: None,
+                    edge_dir: u.normalize(),
                 },
             );
         }
     }
     // 3. Axes from the anchor.
     if let (Some(a), true) = (anchor, settings.axes) {
-        for axis in [Axis::X, Axis::Y, Axis::Z] {
-            let Some((q, t)) = closest_on_line(ray, a, axis.dir().as_vec()) else {
+        let mut lines: Vec<(SnapKind, Vec3)> = [Axis::X, Axis::Y, Axis::Z]
+            .into_iter()
+            .map(|ax| (SnapKind::OnAxis(ax), ax.dir().as_vec()))
+            .collect();
+        if let Some(r) = settings.reference {
+            let off_axis = |d: Vec3| {
+                [Vec3::X, Vec3::Y, Vec3::Z]
+                    .iter()
+                    .all(|ax| d.dot(*ax).abs() < 1.0 - ferro_core::math::tol::ANGLE_TOL)
+            };
+            let r = r.as_vec();
+            if off_axis(r) {
+                lines.push((SnapKind::Parallel, r));
+            }
+            if let Some(p) = r.cross(Vec3::Z).normalize() {
+                if off_axis(p.as_vec()) {
+                    lines.push((SnapKind::Perpendicular, p.as_vec()));
+                }
+            }
+        }
+        for (kind, dir) in lines {
+            // Lines run both ways from the anchor.
+            let Some((q, _)) = closest_on_line(ray, a, dir) else {
                 continue;
             };
-            if t <= 0.0 || q.is_almost_equal(a) {
+            if q.is_almost_equal(a) {
                 continue;
             }
             if let Some(d) = screen_dist(proj, q, cursor).filter(|d| *d <= tol) {
                 consider(
-                    SnapKind::OnAxis(axis).rank(),
+                    kind.rank(),
                     d,
                     SnapResult {
                         point: q,
-                        kind: SnapKind::OnAxis(axis),
+                        kind,
                         element: None,
                         face: None,
                         normal: None,
+                        edge_dir: None,
                     },
                 );
             }
         }
     }
-    if let Some((_, _, r)) = best {
+    if let Some((_, _, mut r)) = best {
+        // A point or edge of the element under the cursor also reports the
+        // face being hovered, so tools know which face the user means.
+        if let Some((_, i)) = hit {
+            let tri = &scene.triangles[i];
+            if r.element == Some(tri.element) && r.face.is_none() {
+                r.face = Some(tri.face);
+                r.normal = Some(tri.normal);
+            }
+        }
         return Some(r);
     }
     // 4. Face under the cursor.
@@ -359,6 +412,7 @@ pub fn snap(
             element: Some(tri.element),
             face: Some(tri.face),
             normal: Some(tri.normal),
+            edge_dir: None,
         });
     }
     // 5. Ground / work plane.
@@ -372,10 +426,130 @@ pub fn snap(
                 element: None,
                 face: None,
                 normal: Some(UnitVec3::Z),
+                edge_dir: None,
             });
         }
     }
     None
+}
+
+#[cfg(test)]
+mod edge_visibility_tests {
+    use super::*;
+
+    struct Ortho;
+    impl Projector for Ortho {
+        fn project(&self, p: Point3) -> Option<[f32; 2]> {
+            // Looking along +Y: screen x = model x, screen y = -model z.
+            Some([p.x as f32, -p.z as f32])
+        }
+    }
+
+    #[test]
+    fn the_edge_of_the_hovered_face_wins_over_the_face() {
+        // A wall face at y = 0 (facing -y); the bottom edge sits 5 mm below
+        // where the ray hits the face, within the pixel tolerance.
+        let scene = SnapScene {
+            points: vec![],
+            edges: vec![SnapEdge {
+                a: Point3::new(0.0, 0.0, 0.0),
+                b: Point3::new(1000.0, 0.0, 0.0),
+                element: ElementId(1),
+            }],
+            triangles: vec![SnapTriangle {
+                tri: [
+                    Point3::new(0.0, 0.0, 0.0),
+                    Point3::new(1000.0, 0.0, 0.0),
+                    Point3::new(0.0, 0.0, 1000.0),
+                ],
+                element: ElementId(1),
+                face: FaceId(1),
+                normal: -UnitVec3::Y,
+            }],
+        };
+        // A ray coming down at an angle, hitting the face at z = 5.
+        let dir = Vec3::new(0.0, 1.0, -0.6).normalize().unwrap();
+        let hit = Point3::new(500.0, 0.0, 5.0);
+        let ray = Ray {
+            origin: hit - dir.as_vec() * 10_000.0,
+            dir,
+        };
+        let r = snap(
+            &scene,
+            &ray,
+            [500.0, -5.0],
+            &Ortho,
+            None,
+            &SnapSettings::default(),
+        )
+        .unwrap();
+        assert_eq!(r.kind, SnapKind::OnEdge);
+        assert_eq!(r.face, Some(FaceId(1)), "the hovered face is reported too");
+    }
+}
+
+#[cfg(test)]
+mod inference_tests {
+    use super::*;
+
+    /// Plan view: screen x = model x, screen y = -model y.
+    struct Top;
+    impl Projector for Top {
+        fn project(&self, p: Point3) -> Option<[f32; 2]> {
+            Some([p.x as f32, -p.y as f32])
+        }
+    }
+
+    fn at(x: f64, y: f64, reference: Option<Vec3>) -> SnapResult {
+        let ray = Ray {
+            origin: Point3::new(x, y, 10_000.0),
+            dir: -UnitVec3::Z,
+        };
+        let settings = SnapSettings {
+            reference: reference.and_then(|r| r.normalize()),
+            ..Default::default()
+        };
+        let anchor = Some(Point3::new(0.0, 0.0, 0.0));
+        snap(
+            &SnapScene::default(),
+            &ray,
+            [x as f32, -y as f32],
+            &Top,
+            anchor,
+            &settings,
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn parallel_and_perpendicular_to_the_reference_edge() {
+        let r = Some(Vec3::new(1.0, 1.0, 0.0));
+        // Near the 45° line: parallel, snapped exactly onto it.
+        let s = at(1000.0, 1004.0, r);
+        assert_eq!(s.kind, SnapKind::Parallel);
+        assert!((s.point.x - s.point.y).abs() < 1e-6);
+        // Near the -45° line, either side of the anchor: perpendicular.
+        for (x, y) in [(1000.0, -996.0), (-1000.0, 1003.0)] {
+            let s = at(x, y, r);
+            assert_eq!(s.kind, SnapKind::Perpendicular);
+            assert!((s.point.x + s.point.y).abs() < 1e-6);
+        }
+    }
+
+    #[test]
+    fn no_reference_or_axis_aligned_reference_gives_only_axes() {
+        assert_eq!(at(1000.0, 1004.0, None).kind, SnapKind::Ground);
+        // An edge along X: parallel and perpendicular are the red and green axes.
+        let x = Some(Vec3::X);
+        assert_eq!(at(1000.0, 3.0, x).kind, SnapKind::OnAxis(Axis::X));
+        assert_eq!(at(3.0, -1000.0, x).kind, SnapKind::OnAxis(Axis::Y));
+        assert_eq!(at(1000.0, 1004.0, x).kind, SnapKind::Ground);
+        // Just outside the pixel tolerance: no inference.
+        assert_eq!(
+            at(1000.0, 1015.0, Some(Vec3::new(1.0, 1.0, 0.0))).kind,
+            SnapKind::Ground
+        );
+    }
 }
 
 #[cfg(test)]

@@ -3,10 +3,12 @@
 
 mod error;
 mod extrude;
+mod imprint;
 mod mesh;
 mod push_pull;
 
 pub use error::AlgoError;
 pub use extrude::{extrude_profile, ExtrudeFaces};
+pub use imprint::{imprint_face, Imprinted};
 pub use mesh::{body_mesh, triangulate_face, Mesh};
 pub use push_pull::{push_pull_face, PushPullMode};

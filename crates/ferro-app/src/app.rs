@@ -6,7 +6,7 @@ use crate::camera::{FrameCamera, OrbitCamera};
 use crate::link::{self, LinkServer};
 use crate::render::{FrameData, Renderer, Vertex};
 use crate::scene::{self, line_vertex, SceneCache};
-use crate::tools::{SelectOp, ToolCtx, ToolEvent, ToolKind, ToolState};
+use crate::tools::{pick_sub, SelectOp, SubPick, ToolCtx, ToolEvent, ToolKind, ToolState};
 use eframe::egui::{self, Color32, Key, PointerButton, Pos2, Rect, RichText, Sense, Vec2};
 use eframe::wgpu;
 use ferro_core::model::{keys, Category, ElementBody};
@@ -131,6 +131,32 @@ pub struct FerroApp {
     show_agents: bool,
     last_snap: Option<SnapResult>,
     link: LinkServer,
+    /// Material the Paint tool applies.
+    material: Option<ElementId>,
+    new_material_color: [f32; 3],
+    new_material_name: String,
+    clipboard: Vec<ElementId>,
+    /// Last Move-copy, for arrays typed afterwards (`5x`, `/5`).
+    last_copy: Option<CopyElements>,
+    /// Screen position where a selection window drag started.
+    select_drag: Option<Pos2>,
+    /// Elements hidden by the user (view state, not saved).
+    hidden: HashSet<ElementId>,
+    /// Tags whose elements are not shown (view state).
+    hidden_tags: HashSet<String>,
+    /// Tag name typed in the Tags panel.
+    new_tag: String,
+    /// Form being edited (double-click, SketchUp group editing).
+    editing: Option<ElementId>,
+    /// Faces / edges / vertices picked inside it.
+    sub_sel: Vec<SubPick>,
+    /// Axis locked with the arrow keys (→ red X, ← green Y, ↑ blue Z).
+    axis_lock: Option<ferro_snap::Axis>,
+    /// Axis locked while Shift is held over an axis inference.
+    shift_lock: Option<(SnapKind, ferro_core::Vec3)>,
+    /// Direction of the last edge hovered: reference for parallel /
+    /// perpendicular inference (SketchUp: hover an edge to teach it).
+    ref_dir: Option<ferro_core::UnitVec3>,
     autonomy: Autonomy,
     proposal: Option<Proposal>,
     chat: Chat,
@@ -174,6 +200,20 @@ impl FerroApp {
             show_agents: false,
             last_snap: None,
             link: LinkServer::start("Untitled", cc.egui_ctx.clone()),
+            material: None,
+            new_material_color: [0.80, 0.55, 0.40],
+            new_material_name: "Material 1".into(),
+            clipboard: Vec::new(),
+            last_copy: None,
+            select_drag: None,
+            hidden: HashSet::new(),
+            hidden_tags: HashSet::new(),
+            new_tag: String::new(),
+            editing: None,
+            sub_sel: Vec::new(),
+            axis_lock: None,
+            shift_lock: None,
+            ref_dir: None,
             autonomy: Autonomy::Propose,
             proposal: None,
             chat: Chat {
@@ -220,6 +260,11 @@ impl FerroApp {
         if self.proposal.is_some() {
             self.accept_proposal();
         }
+        self.sub_sel.clear();
+        self.last_copy = match &cmd {
+            AnyCommand::CopyElements(c) => Some(c.clone()),
+            _ => None,
+        };
         let name = cmd.name();
         match self.session.execute(cmd, &self.ctx()) {
             Ok(o) => {
@@ -292,7 +337,174 @@ impl FerroApp {
         self.vcb.clear();
     }
 
+    /// Tags of an element (`ferro.common.tags`).
+    fn tags_of(e: &ferro_core::Element) -> &[String] {
+        match e.params.get(keys::TAGS) {
+            Some(ParamValue::Tags(t)) => t,
+            _ => &[],
+        }
+    }
+
+    /// Elements not shown: hidden ones and those on a hidden Tag.
+    fn hidden_elements(&self) -> HashSet<ElementId> {
+        let mut h: HashSet<ElementId> = self
+            .hidden
+            .iter()
+            .copied()
+            .filter(|id| self.session.doc().get(*id).is_some())
+            .collect();
+        if !self.hidden_tags.is_empty() {
+            for e in self.session.doc().elements() {
+                if Self::tags_of(e)
+                    .iter()
+                    .any(|t| self.hidden_tags.contains(t))
+                {
+                    h.insert(e.id);
+                }
+            }
+        }
+        h
+    }
+
+    fn hide_selection(&mut self) {
+        self.hidden.extend(self.selection.drain());
+    }
+
+    fn tags_ui(&mut self, ui: &mut egui::Ui) {
+        ui.heading("Tags");
+        let mut all: Vec<String> = self
+            .session
+            .doc()
+            .elements()
+            .flat_map(|e| Self::tags_of(e).iter().cloned())
+            .collect();
+        all.sort();
+        all.dedup();
+        if all.is_empty() {
+            ui.label(RichText::new("No tags yet.").weak());
+        }
+        for t in &all {
+            ui.horizontal(|ui| {
+                let mut shown = !self.hidden_tags.contains(t);
+                if ui.checkbox(&mut shown, t).changed() {
+                    if shown {
+                        self.hidden_tags.remove(t);
+                    } else {
+                        self.hidden_tags.insert(t.clone());
+                    }
+                }
+                if ui
+                    .small_button("Select")
+                    .on_hover_text("Select the elements with this tag")
+                    .clicked()
+                {
+                    self.selection = self
+                        .session
+                        .doc()
+                        .elements()
+                        .filter(|e| Self::tags_of(e).contains(t))
+                        .map(|e| e.id)
+                        .collect();
+                }
+            });
+        }
+        ui.horizontal(|ui| {
+            ui.add(
+                egui::TextEdit::singleline(&mut self.new_tag)
+                    .hint_text("tag")
+                    .desired_width(90.0),
+            );
+            let tag = self.new_tag.trim().to_string();
+            let ok = !tag.is_empty() && !self.selection.is_empty();
+            if ui
+                .add_enabled(ok, egui::Button::new("Tag selection"))
+                .clicked()
+            {
+                self.tag_selection(&tag, true);
+                self.new_tag.clear();
+            }
+            if ui.add_enabled(ok, egui::Button::new("Untag")).clicked() {
+                self.tag_selection(&tag, false);
+            }
+        });
+        if !self.hidden.is_empty()
+            && ui
+                .button(format!("Unhide all ({})", self.hidden.len()))
+                .clicked()
+        {
+            self.hidden.clear();
+        }
+    }
+
+    /// Add (or remove) `tag` on the selected elements, as one undo step.
+    fn tag_selection(&mut self, tag: &str, add: bool) {
+        let mut ids: Vec<ElementId> = self.selection.iter().copied().collect();
+        ids.sort();
+        let cmds: Vec<AnyCommand> = ids
+            .into_iter()
+            .filter_map(|id| {
+                let e = self.session.doc().get(id)?;
+                let mut tags = Self::tags_of(e).to_vec();
+                let has = tags.iter().any(|t| t == tag);
+                if add == has {
+                    return None;
+                }
+                if add {
+                    tags.push(tag.to_string());
+                } else {
+                    tags.retain(|t| t != tag);
+                }
+                Some(
+                    SetParameter {
+                        element: id,
+                        key: keys::TAGS.into(),
+                        value: ParamValue::Tags(tags),
+                    }
+                    .into(),
+                )
+            })
+            .collect();
+        if cmds.is_empty() {
+            return;
+        }
+        let name = if add { "Tag" } else { "Untag" };
+        let opened = self.session.begin_group(name, self.ctx());
+        for c in cmds {
+            self.run(c);
+        }
+        if opened {
+            self.session.end_group();
+        }
+    }
+
     fn delete_selection(&mut self) {
+        if let (Some(e), false) = (self.editing, self.sub_sel.is_empty()) {
+            let edges: Vec<_> = self
+                .sub_sel
+                .iter()
+                .filter_map(|p| match p {
+                    SubPick::Edge(x) => Some(*x),
+                    _ => None,
+                })
+                .collect();
+            let faces: Vec<_> = self
+                .sub_sel
+                .iter()
+                .filter_map(|p| match p {
+                    SubPick::Face(x) => Some(*x),
+                    _ => None,
+                })
+                .collect();
+            if !edges.is_empty() {
+                self.run(ferro_core::ops::form_commands::EraseEdges { element: e, edges }.into());
+            } else if !faces.is_empty() {
+                self.run(ferro_core::ops::form_commands::EraseFaces { element: e, faces }.into());
+            }
+            if !self.session.doc().contains(e) {
+                self.editing = None;
+            }
+            return;
+        }
         if self.selection.is_empty() {
             return;
         }
@@ -457,6 +669,78 @@ impl FerroApp {
             .unwrap_or(3.3);
     }
 
+    /// Paste: the copied elements follow the cursor from their corner; click
+    /// to place (a Move-copy).
+    fn paste(&mut self) {
+        let elems: Vec<ElementId> = self
+            .clipboard
+            .iter()
+            .copied()
+            .filter(|e| self.session.doc().contains(*e))
+            .collect();
+        if elems.is_empty() {
+            return;
+        }
+        let bb = elems
+            .iter()
+            .filter_map(|e| self.session.doc().get(*e).and_then(|x| x.bounding_box()))
+            .reduce(|a, b| a.union(b));
+        let Some(bb) = bb else { return };
+        self.tool.start_paste(elems, bb.min);
+        self.vcb.clear();
+        self.say("Click to place the copy", false);
+    }
+
+    fn materials_ui(&mut self, ui: &mut egui::Ui) {
+        ui.heading("Materials");
+        let mats: Vec<(ElementId, String, [f32; 3])> = self
+            .session
+            .doc()
+            .elements()
+            .filter_map(|e| match &e.body {
+                ElementBody::Material(m) => Some((e.id, e.label(), m.color)),
+                _ => None,
+            })
+            .collect();
+        for (id, name, [r, g, b]) in &mats {
+            ui.horizontal(|ui| {
+                let c = Color32::from_rgb((r * 255.0) as u8, (g * 255.0) as u8, (b * 255.0) as u8);
+                let (rect, _) = ui.allocate_exact_size(Vec2::new(18.0, 18.0), Sense::hover());
+                ui.painter().rect_filled(rect, 3.0, c);
+                if ui
+                    .selectable_label(self.material == Some(*id), name)
+                    .clicked()
+                {
+                    self.material = Some(*id);
+                    self.set_tool(ToolKind::Paint);
+                }
+            });
+        }
+        ui.horizontal(|ui| {
+            ui.color_edit_button_rgb(&mut self.new_material_color);
+            ui.add(egui::TextEdit::singleline(&mut self.new_material_name).desired_width(110.0));
+            if ui.button("+ Add").clicked() {
+                let [r, g, b] = self.new_material_color.map(|c| (c * 255.0).round() as u8);
+                let name = self.new_material_name.trim().to_string();
+                if !name.is_empty()
+                    && self.run(
+                        ferro_core::ops::bim_commands::CreateMaterial {
+                            name,
+                            color: format!("#{r:02x}{g:02x}{b:02x}"),
+                            roughness: None,
+                        }
+                        .into(),
+                    )
+                {
+                    self.material = self.selection.iter().next().copied();
+                    self.selection.clear();
+                    self.set_tool(ToolKind::Paint);
+                    self.new_material_name = format!("Material {}", mats.len() + 2);
+                }
+            }
+        });
+    }
+
     fn level_info(&self) -> Option<(ElementId, f64)> {
         let id = self.active_level?;
         let e = self.session.doc().get(id)?;
@@ -492,19 +776,43 @@ impl FerroApp {
         if cmd && pressed(Key::N) {
             self.new_document();
         }
+        // egui turns Ctrl+C / Ctrl+V into Copy / Paste events.
+        let copy_ev = ctx.input(|i| i.events.iter().any(|e| matches!(e, egui::Event::Copy)));
+        let paste_ev = ctx.input(|i| i.events.iter().any(|e| matches!(e, egui::Event::Paste(_))));
+        if (copy_ev || cmd && pressed(Key::C)) && !typing {
+            let mut v: Vec<ElementId> = self.selection.iter().copied().collect();
+            v.sort();
+            // Put a marker on the system clipboard too: egui only reports
+            // Ctrl+V when the clipboard holds text.
+            ctx.copy_text(format!(
+                "ferro-elements:{}",
+                v.iter()
+                    .map(|e| e.0.to_string())
+                    .collect::<Vec<_>>()
+                    .join(",")
+            ));
+            self.clipboard = v;
+            let n = self.clipboard.len();
+            self.say(format!("Copied {n} element(s)"), false);
+        }
+        if (paste_ev || cmd && pressed(Key::V)) && !typing {
+            self.paste();
+        }
         if cmd && pressed(Key::A) && !typing {
             self.selection = self
                 .session
                 .doc()
-                .by_category(Category::Forms)
+                .elements()
+                .filter(|e| e.geometry().is_some())
                 .map(|e| e.id)
                 .collect();
         }
         if typing || cmd {
             return;
         }
-        // "Just type" a value while a tool is active (SketchUp VCB).
-        if self.tool.is_active() {
+        // "Just type" a value while a tool is active (SketchUp VCB), or
+        // right after a Move-copy (arrays: 5x, /5).
+        if self.tool.is_active() || self.last_copy.is_some() {
             let text: String = ctx.input(|i| {
                 i.events
                     .iter()
@@ -514,15 +822,49 @@ impl FerroApp {
                     })
                     .collect()
             });
+            // After a copy only array input is captured (5x, /5); other keys
+            // stay tool shortcuts.
+            let array_only = !self.tool.is_active();
+            let text: String = if array_only {
+                text.chars()
+                    .filter(|c| c.is_ascii_digit() || "xX*/".contains(*c))
+                    .collect()
+            } else {
+                text
+            };
             if !text.is_empty() {
                 self.vcb.push_str(&text);
                 return;
             }
         }
+        // Arrow keys lock drawing to an axis (press again to release).
+        for (k, a) in [
+            (Key::ArrowRight, ferro_snap::Axis::X),
+            (Key::ArrowLeft, ferro_snap::Axis::Y),
+            (Key::ArrowUp, ferro_snap::Axis::Z),
+        ] {
+            if pressed(k) {
+                self.axis_lock = if self.axis_lock == Some(a) {
+                    None
+                } else {
+                    Some(a)
+                };
+            }
+        }
+        if pressed(Key::ArrowDown) {
+            self.axis_lock = None;
+        }
         if pressed(Key::Escape) {
+            self.axis_lock = None;
             if self.tool.is_active() || !self.vcb.is_empty() {
                 self.tool.cancel();
                 self.vcb.clear();
+            } else if self.editing.is_some() {
+                if self.sub_sel.is_empty() {
+                    self.editing = None;
+                } else {
+                    self.sub_sel.clear();
+                }
             } else {
                 self.selection.clear();
             }
@@ -542,18 +884,33 @@ impl FerroApp {
         if !self.tool.is_active() {
             for (k, t) in [
                 (Key::Space, ToolKind::Select),
+                (Key::L, ToolKind::Line),
                 (Key::R, ToolKind::Rectangle),
+                (Key::C, ToolKind::Circle),
+                (Key::A, ToolKind::Arc),
+                (Key::T, ToolKind::Tape),
                 (Key::G, ToolKind::Polygon),
                 (Key::P, ToolKind::PushPull),
+                (Key::F, ToolKind::Offset),
                 (Key::M, ToolKind::Move),
+                (Key::Q, ToolKind::Rotate),
+                (Key::S, ToolKind::Scale),
                 (Key::E, ToolKind::Eraser),
+                (Key::B, ToolKind::Paint),
                 (Key::W, ToolKind::Wall),
-                (Key::F, ToolKind::Floor),
+                (Key::U, ToolKind::Floor),
                 (Key::D, ToolKind::Door),
                 (Key::N, ToolKind::Window),
             ] {
                 if pressed(k) {
                     self.set_tool(t);
+                }
+            }
+            if pressed(Key::H) {
+                if ctx.input(|i| i.modifiers.shift) {
+                    self.hidden.clear();
+                } else {
+                    self.hide_selection();
                 }
             }
             if pressed(Key::Z) {
@@ -626,6 +983,22 @@ impl FerroApp {
                 {
                     self.delete_selection();
                 }
+                ui.separator();
+                if ui
+                    .add_enabled(!self.selection.is_empty(), egui::Button::new("Hide (H)"))
+                    .clicked()
+                {
+                    self.hide_selection();
+                }
+                if ui
+                    .add_enabled(
+                        !self.hidden.is_empty(),
+                        egui::Button::new("Unhide all (Shift+H)"),
+                    )
+                    .clicked()
+                {
+                    self.hidden.clear();
+                }
                 if ui.button("Select all").clicked() {
                     self.selection = self
                         .session
@@ -652,6 +1025,16 @@ impl FerroApp {
                 if ui.button("Right").clicked() {
                     self.camera.set_view(0.0, 0.0);
                 }
+                if ui.button("Back").clicked() {
+                    self.camera.set_view(90.0, 0.0);
+                }
+                if ui.button("Left").clicked() {
+                    self.camera.set_view(180.0, 0.0);
+                }
+                ui.separator();
+                ui.checkbox(&mut self.camera.parallel, "Parallel projection");
+                ui.checkbox(&mut self.scene.xray, "X-ray");
+                ui.checkbox(&mut self.scene.wireframe, "Wireframe");
             });
             ui.menu_button("AI", |ui| {
                 if ui.button("AI chat…").clicked() {
@@ -730,6 +1113,10 @@ impl FerroApp {
             self.levels_ui(ui);
             ui.separator();
             self.properties_ui(ui);
+            ui.separator();
+            self.materials_ui(ui);
+            ui.separator();
+            self.tags_ui(ui);
             if let Some(note) = self.workspace.roadmap() {
                 ui.separator();
                 ui.label(RichText::new(self.workspace.label()).strong());
@@ -1078,6 +1465,34 @@ impl FerroApp {
 
     fn apply_vcb(&mut self) {
         let text = std::mem::take(&mut self.vcb);
+        // After a Move-copy: "5x" repeats it 5 times, "/5" divides it in 5.
+        let t = text.trim();
+        if let Some(copy) = self.last_copy.clone().filter(|_| !self.tool.is_active()) {
+            let times = t
+                .strip_suffix(['x', 'X', '*'])
+                .or_else(|| t.strip_prefix(['x', 'X', '*']));
+            let parts = t.strip_prefix('/');
+            let array = match (
+                times.and_then(|n| n.trim().parse::<u32>().ok()),
+                parts.and_then(|n| n.trim().parse::<u32>().ok()),
+            ) {
+                (Some(n), _) if n >= 1 => Some(CopyElements {
+                    count: n,
+                    ..copy.clone()
+                }),
+                (_, Some(n)) if n >= 1 => Some(CopyElements {
+                    count: n,
+                    vector: copy.vector * (1.0 / n as f64),
+                    ..copy.clone()
+                }),
+                _ => None,
+            };
+            if let Some(a) = array {
+                self.session.undo();
+                self.run(a.into());
+                return;
+            }
+        }
         let Some(ctx_parts) = self.tool_ctx_parts() else {
             return;
         };
@@ -1092,6 +1507,9 @@ impl FerroApp {
                 level,
                 copy: false,
                 near_first_px: None,
+                material: self.material,
+                editing: self.editing,
+                sub: &self.sub_sel,
             };
             self.tool.typed(&text, &ctx)
         };
@@ -1164,7 +1582,13 @@ impl FerroApp {
         );
 
         // Snapping against the committed document (excluding moved elements).
-        let moving: Vec<ElementId> = self.tool.moving().to_vec();
+        let mut moving: Vec<ElementId> = self.tool.moving().to_vec();
+        let hidden = self.hidden_elements();
+        moving.extend(hidden.iter().copied());
+        moving.sort();
+        moving.dedup();
+        self.selection.retain(|id| !hidden.contains(id));
+        self.scene.hidden = hidden;
         let rebuild = match &self.snap_scene {
             Some((d, m, _)) => !scene::same_doc(d, self.session.doc()) || *m != moving,
             None => true,
@@ -1188,10 +1612,77 @@ impl FerroApp {
             ray = fc.ray([p.x, p.y]);
             let settings = SnapSettings {
                 ground_z: level.map(|l| l.1).unwrap_or(0.0),
+                reference: self.ref_dir,
                 ..Default::default()
             };
-            let sc = &self.snap_scene.as_ref().expect("built").2;
-            snap_res = snap(sc, &ray, [p.x, p.y], &fc, self.tool.anchor(), &settings);
+            if let Some((_, _, sc)) = &self.snap_scene {
+                snap_res = snap(sc, &ray, [p.x, p.y], &fc, self.tool.anchor(), &settings);
+            }
+            if let Some(d) = snap_res.and_then(|s| s.edge_dir) {
+                self.ref_dir = Some(d);
+            }
+            // Inference locking: Shift keeps the axis currently inferred;
+            // arrow keys force one.
+            if ctx.input(|i| i.modifiers.shift) && self.tool.anchor().is_some() {
+                if self.shift_lock.is_none() {
+                    if let (Some(s), Some(a)) = (snap_res, self.tool.anchor()) {
+                        let lockable = matches!(
+                            s.kind,
+                            SnapKind::OnAxis(_) | SnapKind::Parallel | SnapKind::Perpendicular
+                        );
+                        if let (true, Some(d)) = (lockable, (s.point - a).normalize()) {
+                            self.shift_lock = Some((s.kind, d.as_vec()));
+                        }
+                    }
+                }
+            } else {
+                self.shift_lock = None;
+            }
+            let arrow = self.axis_lock.map(|axis| {
+                let d = match axis {
+                    ferro_snap::Axis::X => ferro_core::Vec3::X,
+                    ferro_snap::Axis::Y => ferro_core::Vec3::Y,
+                    ferro_snap::Axis::Z => ferro_core::Vec3::Z,
+                };
+                (SnapKind::OnAxis(axis), d)
+            });
+            if let (Some((kind, d)), Some(anchor)) = (arrow.or(self.shift_lock), self.tool.anchor())
+            {
+                // Closest point on the locked line to the cursor ray; a
+                // snapped point is projected onto the line instead.
+                let point = match snap_res.filter(|s| {
+                    !matches!(
+                        s.kind,
+                        SnapKind::Ground
+                            | SnapKind::OnFace
+                            | SnapKind::OnAxis(_)
+                            | SnapKind::Parallel
+                            | SnapKind::Perpendicular
+                    )
+                }) {
+                    Some(s) => anchor + d * (s.point - anchor).dot(d),
+                    None => {
+                        let r = ray.dir.as_vec();
+                        let w = ray.origin - anchor;
+                        let (dr, rr, dw, rw) = (d.dot(r), r.dot(r), d.dot(w), r.dot(w));
+                        let den = rr - dr * dr;
+                        let t = if den.abs() < 1e-9 {
+                            0.0
+                        } else {
+                            (rr * dw - dr * rw) / den
+                        };
+                        anchor + d * t
+                    }
+                };
+                snap_res = Some(SnapResult {
+                    point,
+                    kind,
+                    element: None,
+                    face: None,
+                    normal: None,
+                    edge_dir: None,
+                });
+            }
             near_first = self
                 .tool
                 .polygon_first()
@@ -1200,10 +1691,70 @@ impl FerroApp {
         }
         self.last_snap = snap_res;
 
+        // Window (left→right: fully inside) / crossing (right→left: touching)
+        // selection with the Select tool.
+        let mut sel_rect: Option<(Rect, bool)> = None;
+        if self.tool.kind == ToolKind::Select && !ctx.input(|i| i.modifiers.alt) {
+            if resp.drag_started_by(PointerButton::Primary) {
+                self.select_drag = ctx.input(|i| i.pointer.press_origin());
+            }
+            if let (Some(a), Some(b)) = (self.select_drag, hover) {
+                let r = Rect::from_two_pos(a, b);
+                let window = b.x >= a.x;
+                sel_rect = Some((r, window));
+                if resp.drag_stopped_by(PointerButton::Primary) {
+                    let mut picked = Vec::new();
+                    for e in self.session.doc().elements() {
+                        if self.scene.hidden.contains(&e.id) {
+                            continue;
+                        }
+                        let Some(m) = self.scene.mesh(e.id) else {
+                            continue;
+                        };
+                        let pts: Vec<Pos2> = m
+                            .positions
+                            .iter()
+                            .filter_map(|p| fc.project(*p))
+                            .map(|q| Pos2::new(q[0], q[1]))
+                            .collect();
+                        if pts.is_empty() {
+                            continue;
+                        }
+                        let hit = if window {
+                            pts.len() == m.positions.len() && pts.iter().all(|q| r.contains(*q))
+                        } else {
+                            let bb = Rect::from_points(&pts);
+                            pts.iter().any(|q| r.contains(*q)) || bb.intersects(r)
+                        };
+                        if hit {
+                            picked.push(e.id);
+                        }
+                    }
+                    if !ctx.input(|i| i.modifiers.shift) {
+                        self.selection.clear();
+                    }
+                    for id in picked {
+                        if !self.selection.insert(id) && ctx.input(|i| i.modifiers.shift) {
+                            self.selection.remove(&id);
+                        }
+                    }
+                    self.select_drag = None;
+                    sel_rect = None;
+                }
+            }
+            if !resp.dragged_by(PointerButton::Primary)
+                && !resp.drag_stopped_by(PointerButton::Primary)
+            {
+                self.select_drag = None;
+            }
+        }
+
         // Tool interaction.
         let shift = ctx.input(|i| i.modifiers.shift);
         let copy = ctx.input(|i| i.modifiers.ctrl || i.modifiers.mac_cmd);
         let mut event = ToolEvent::None;
+        let (mut enter_edit, mut exit_edit) = (None, false);
+        let (mut sub_set, mut sub_toggle) = (None, None);
         let (preview_cmd, hover_face, rubber) = {
             let tctx = ToolCtx {
                 doc: self.session.doc(),
@@ -1213,8 +1764,34 @@ impl FerroApp {
                 level,
                 copy,
                 near_first_px: near_first,
+                material: self.material,
+                editing: self.editing,
+                sub: &self.sub_sel,
             };
-            if resp.clicked_by(PointerButton::Primary) && !ctx.input(|i| i.modifiers.alt) {
+            let form_under = snap_res.and_then(|s| s.element).filter(|e| {
+                self.session
+                    .doc()
+                    .get(*e)
+                    .is_some_and(|x| x.as_form().is_some())
+            });
+            if self.tool.kind == ToolKind::Select && resp.double_clicked_by(PointerButton::Primary)
+            {
+                if let Some(e) = form_under {
+                    enter_edit = Some(e);
+                }
+            } else if resp.double_clicked_by(PointerButton::Primary) {
+                event = self.tool.double_click(&tctx);
+            } else if let (ToolKind::Select, Some(e), true) = (
+                self.tool.kind,
+                self.editing,
+                resp.clicked_by(PointerButton::Primary),
+            ) {
+                match snap_res.and_then(|s| pick_sub(self.session.doc(), e, &s)) {
+                    Some(p) if shift => sub_toggle = Some(p),
+                    Some(p) => sub_set = Some(p),
+                    None => exit_edit = true,
+                }
+            } else if resp.clicked_by(PointerButton::Primary) && !ctx.input(|i| i.modifiers.alt) {
                 event = self.tool.click(&tctx, shift);
             }
             if !self.tool.is_active() || self.vcb.is_empty() {
@@ -1231,9 +1808,32 @@ impl FerroApp {
         }
         if ctx.input(|i| i.key_pressed(Key::Enter))
             && !ctx.egui_wants_keyboard_input()
-            && (self.tool.is_active() || self.tool.kind.is_chain())
+            && (self.tool.is_active() || self.tool.kind.is_chain() || !self.vcb.is_empty())
         {
             self.apply_vcb();
+        }
+        if !matches!(event, ToolEvent::None) || resp.clicked_by(PointerButton::Primary) {
+            self.axis_lock = None;
+        }
+        if let Some(e) = enter_edit {
+            self.editing = Some(e);
+            self.sub_sel.clear();
+            self.selection.clear();
+            self.say("Editing the Form: click faces, edges or corners; Move stretches them; Esc to finish", false);
+        }
+        if exit_edit {
+            self.editing = None;
+            self.sub_sel.clear();
+        }
+        if let Some(p) = sub_set {
+            self.sub_sel = vec![p];
+        }
+        if let Some(p) = sub_toggle {
+            if let Some(i) = self.sub_sel.iter().position(|x| *x == p) {
+                self.sub_sel.remove(i);
+            } else {
+                self.sub_sel.push(p);
+            }
         }
         match event {
             ToolEvent::Commit(c) => {
@@ -1248,6 +1848,7 @@ impl FerroApp {
                 }
                 SelectOp::Clear => self.selection.clear(),
             },
+            ToolEvent::Message(m) => self.say(m, false),
             ToolEvent::None => {}
         }
 
@@ -1300,6 +1901,40 @@ impl FerroApp {
                 }
             }
         }
+        if let Some(e) = self.editing {
+            let sel = [0.18f32, 0.45, 0.95];
+            if let Some(g) = display.get(e).and_then(|x| x.geometry()) {
+                for p in &self.sub_sel {
+                    match p {
+                        SubPick::Face(f) => {
+                            if let Some(m) = self.scene.mesh(e) {
+                                for t in scene::face_triangles(m, *f) {
+                                    let n = (t[1] - t[0])
+                                        .cross(t[2] - t[0])
+                                        .normalize()
+                                        .map(|u| u.as_vec())
+                                        .unwrap_or_default();
+                                    for q in t {
+                                        otris.push(Vertex {
+                                            pos: rel(q + n * 2.0),
+                                            normal: [n.x as f32, n.y as f32, n.z as f32],
+                                            color: [sel[0], sel[1], sel[2], 0.45],
+                                        });
+                                    }
+                                }
+                            }
+                        }
+                        SubPick::Edge(x) => {
+                            if let Some((_, a, b)) = g.edges().find(|(id, _, _)| id == x) {
+                                olines.push(line_vertex(rel(a), [sel[0], sel[1], sel[2], 1.0]));
+                                olines.push(line_vertex(rel(b), [sel[0], sel[1], sel[2], 1.0]));
+                            }
+                        }
+                        SubPick::Vertex(_) => {}
+                    }
+                }
+            }
+        }
         for (a, b) in rubber {
             olines.push(line_vertex(rel(a), [0.05, 0.05, 0.05, 1.0]));
             olines.push(line_vertex(rel(b), [0.05, 0.05, 0.05, 1.0]));
@@ -1325,6 +1960,7 @@ impl FerroApp {
                     scene_tris: &self.scene.tris,
                     scene_lines: &self.scene.lines,
                     overlay_tris: &otris,
+                    xray: self.scene.xray,
                     overlay_lines: &olines,
                     clear: [0.93, 0.94, 0.96],
                 },
@@ -1368,6 +2004,43 @@ impl FerroApp {
             );
         }
 
+        if let Some((r, window)) = sel_rect {
+            let (fill, stroke) = if window {
+                (
+                    Color32::from_rgba_unmultiplied(40, 90, 220, 30),
+                    Color32::from_rgb(40, 90, 220),
+                )
+            } else {
+                (
+                    Color32::from_rgba_unmultiplied(40, 170, 80, 30),
+                    Color32::from_rgb(40, 150, 70),
+                )
+            };
+            painter.rect_filled(r, 0.0, fill);
+            if window {
+                painter.rect_stroke(
+                    r,
+                    0.0,
+                    egui::Stroke::new(1.0, stroke),
+                    egui::StrokeKind::Inside,
+                );
+            } else {
+                for (a, b) in [
+                    (r.left_top(), r.right_top()),
+                    (r.right_top(), r.right_bottom()),
+                    (r.right_bottom(), r.left_bottom()),
+                    (r.left_bottom(), r.left_top()),
+                ] {
+                    painter.extend(egui::Shape::dashed_line(
+                        &[a, b],
+                        egui::Stroke::new(1.0, stroke),
+                        6.0,
+                        4.0,
+                    ));
+                }
+            }
+        }
+
         // Snap marker and label (screen space).
         if let Some(s) = snap_res {
             if let Some(p) = fc.project(s.point) {
@@ -1379,6 +2052,9 @@ impl FerroApp {
                     SnapKind::OnAxis(ferro_snap::Axis::X) => (Color32::from_rgb(220, 40, 40), true),
                     SnapKind::OnAxis(ferro_snap::Axis::Y) => (Color32::from_rgb(40, 160, 60), true),
                     SnapKind::OnAxis(ferro_snap::Axis::Z) => (Color32::from_rgb(40, 80, 220), true),
+                    SnapKind::Parallel | SnapKind::Perpendicular => {
+                        (Color32::from_rgb(200, 40, 200), true)
+                    }
                     SnapKind::OnFace => (Color32::from_rgb(40, 60, 200), false),
                     SnapKind::Ground => (Color32::GRAY, false),
                 };
@@ -1405,6 +2081,9 @@ impl FerroApp {
                     level,
                     copy,
                     near_first_px: near_first,
+                    material: self.material,
+                    editing: self.editing,
+                    sub: &self.sub_sel,
                 };
                 self.tool.measurement(&tctx)
             };
@@ -1431,6 +2110,35 @@ impl FerroApp {
                 egui::FontId::proportional(13.0),
                 Color32::from_rgb(200, 40, 40),
             );
+        }
+        if let Some(e) = self.editing {
+            painter.text(
+                rect.left_top() + Vec2::new(10.0, 10.0),
+                egui::Align2::LEFT_TOP,
+                format!(
+                    "Editing {}  ·  Esc to finish",
+                    self.session
+                        .doc()
+                        .get(e)
+                        .map(|x| x.label())
+                        .unwrap_or_default()
+                ),
+                egui::FontId::proportional(13.0),
+                Color32::from_rgb(40, 90, 220),
+            );
+            if let Some(g) = self.session.doc().get(e).and_then(|x| x.geometry()) {
+                for p in &self.sub_sel {
+                    if let SubPick::Vertex(v) = p {
+                        if let Some(q) = g.point(*v).and_then(|q| fc.project(q)) {
+                            painter.circle_filled(
+                                Pos2::new(q[0], q[1]),
+                                4.0,
+                                Color32::from_rgb(40, 90, 220),
+                            );
+                        }
+                    }
+                }
+            }
         }
         // Axis gizmo label.
         painter.text(
