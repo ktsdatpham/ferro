@@ -34,7 +34,7 @@ fn handle(server: &mut Server, req: &Value) -> Option<Value> {
                 "serverInfo": { "name": "ferro", "version": env!("CARGO_PKG_VERSION") },
                 "instructions": "Ferro is an open-source, AI-native 3D design tool for architects. \
                     Units: millimetres unless a unit is given (\"3m\"); angles in degrees; Z is up. \
-                    Typical flow: create_level -> create_walls (closed, counter-clockwise) -> create_opening \
+                    Typical flow: create_level -> create_walls (closed, clockwise) -> create_opening \
                     -> create_floor; or massing with create_box + push_pull_face. Inspect with \
                     list_elements / get_element. If link_status says linked, you are editing the \
                     model open in the Ferro app and the user reviews your changes. Every change is one undo step and \

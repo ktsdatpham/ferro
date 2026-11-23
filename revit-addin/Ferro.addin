@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RevitAddIns>
+  <AddIn Type="Application">
+    <Name>Ferro</Name>
+    <Assembly>FerroRevit.dll</Assembly>
+    <AddInId>6d1f3b8e-2b0a-4f6b-9a51-3f0c7c1e9a01</AddInId>
+    <FullClassName>Ferro.Revit.App</FullClassName>
+    <VendorId>FERRO</VendorId>
+    <VendorDescription>Ferro — open-source design tool, github.com/ktsdatpham/ferro</VendorDescription>
+  </AddIn>
+</RevitAddIns>

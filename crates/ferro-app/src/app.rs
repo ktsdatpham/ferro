@@ -1507,7 +1507,8 @@ impl FerroApp {
             }
             _ => {}
         }
-        let is_command = AnyCommand::NAMES.contains(&tool);
+        // Imports from Revit change the model too: they are proposals.
+        let is_command = AnyCommand::NAMES.contains(&tool) || tool == "revit_import";
         if is_command && self.autonomy == Autonomy::Propose && self.proposal.is_none() {
             self.session
                 .begin_group(format!("AI proposal ({})", info.name), ctx.clone());

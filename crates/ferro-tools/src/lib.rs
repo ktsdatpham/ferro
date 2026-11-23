@@ -92,7 +92,7 @@ pub fn list() -> Vec<Value> {
             json!({"name": {"type":"string"}, "thickness": length(), "material": id("Optional material id"), "layers": layers()}), &["name"]),
         tool("create_floor_type", "Create a floor type (layers from top to bottom), like create_wall_type.",
             json!({"name": {"type":"string"}, "thickness": length(), "material": id("Optional material id"), "layers": layers()}), &["name"]),
-        tool("create_wall", "Create a straight wall from start to end (z ignored; the base is the level elevation + base_offset). The exterior face is on the LEFT of the direction of travel, so draw outer walls counter-clockwise seen from above. Height: top_level (+ top_offset), else height (default 3 m). Default type \"Generic - 200mm\". Returns {element}.",
+        tool("create_wall", "Create a straight wall from start to end (z ignored; the base is the level elevation + base_offset). The exterior face is on the LEFT of the direction of travel, so draw outer walls clockwise seen from above (as in Revit). Height: top_level (+ top_offset), else height (default 3 m). Default type \"Generic - 200mm\". Returns {element}.",
             wall_props(json!({"start": point("Start"), "end": point("End")})), &["start", "end"]),
         tool("create_walls", "Create a chain of walls through points (closed adds the closing wall). Corners are mitred automatically. Returns {elements}.",
             wall_props(json!({"points": {"type":"array","items": point("Vertex"), "minItems": 2}, "closed": {"type":"boolean"}})), &["points"]),
@@ -108,6 +108,16 @@ pub fn list() -> Vec<Value> {
             json!({"wall": id("Host wall id"), "kind": {"type":"string","enum":["door","window"]}, "position": length(), "width": length(), "height": length(), "sill": length(), "name": {"type":"string"}}), &["wall", "kind", "position"]),
         tool("set_opening", "Change a door or window: position along the wall, width, height, sill. Omitted fields keep their value.",
             json!({"opening": id("Door or window id"), "position": length(), "width": length(), "height": length(), "sill": length()}), &["opening"]),
+        tool("set_wall", "Change a wall: start + end (+ mid for a curved wall), base_offset, height (fixed top) or top_level (+ top_offset), location_line. Omitted fields keep their value.",
+            json!({"wall": id("Wall id"), "start": point("Start"), "end": point("End"), "mid": point("Point on the arc (curved walls)"), "base_offset": length(), "height": length(), "top_level": id("Level the top attaches to"), "top_offset": length(), "location_line": {"type":"string","enum":["wall_centerline","core_centerline","finish_exterior","finish_interior"]}}), &["wall"]),
+        tool("set_floor", "Change a floor's outline (points [x, y]), holes or offset. Omitted fields keep their value.",
+            json!({"floor": id("Floor id"), "points": {"type":"array","items": point("Vertex"), "minItems": 3}, "holes": {"type":"array","items":{"type":"array","items": point("Vertex")}}, "offset": length()}), &["floor"]),
+        // Revit link (used by the Ferro add-in for Revit).
+        tool("get_document_version", "Version number of the open document; it increases with every change. Revit polls it to pull changes live.", json!({}), &[]),
+        tool("revit_plan", "Ferro → Revit: the operations (in feet) that bring a Revit model up to date. `state` lists the Revit elements already tagged with Ferro uids and their signatures.",
+            json!({"state": {"type":"object","description":"{elements: [{ferro_uid, unique_id, signature}]}"}}), &[]),
+        tool("revit_import", "Revit → Ferro: apply a snapshot of the Revit model (levels, types, walls, floors, doors, windows; lengths in feet). Returns the Ferro uids of created elements.",
+            json!({"snapshot": {"type":"object"}}), &["snapshot"]),
         // Read-only and session tools.
         tool("list_elements", "Summarise the model: id, uid, name, category, level, faces, area (m²), volume (m³). Optional category filter.",
             json!({"category": {"type":"string"}}), &[]),
@@ -383,6 +393,29 @@ pub fn call(
             Some(c) => Ok(json!({"changed": c})),
             None => err("nothing to redo".into()),
         },
+        "get_document_version" => {
+            Ok(json!({"version": session.doc().version(), "project": session.doc().project().name}))
+        }
+        "revit_plan" => {
+            let state: ferro_revit::RevitState = match args.get("state") {
+                Some(v) if !v.is_null() => match serde_json::from_value(v.clone()) {
+                    Ok(s) => s,
+                    Err(e) => return Some(err(format!("invalid state: {e}"))),
+                },
+                _ => Default::default(),
+            };
+            Ok(
+                json!({"version": session.doc().version(), "ops": ferro_revit::plan(session.doc(), &state)}),
+            )
+        }
+        "revit_import" => {
+            let snap: ferro_revit::RevitSnapshot =
+                match serde_json::from_value(args.get("snapshot").cloned().unwrap_or_default()) {
+                    Ok(s) => s,
+                    Err(e) => return Some(err(format!("invalid snapshot: {e}"))),
+                };
+            Ok(json!({"report": ferro_revit::import(session, ctx, &snap)}))
+        }
         "get_journal" => {
             let n = args.get("limit").and_then(Value::as_u64).unwrap_or(20) as usize;
             let j = session.journal();

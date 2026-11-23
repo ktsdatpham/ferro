@@ -5,6 +5,7 @@ members = [
     "crates/ferro-io",
     "crates/ferro-snap",
     "crates/ferro-tools",
+    "crates/ferro-revit",
     "crates/ferro-mcp",
     "crates/ferro-ffi",
     "crates/ferro-app",

@@ -58,6 +58,78 @@ pub unsafe extern "C" fn ferro_document_to_json(doc: *const FerroDocument) -> *m
     }
 }
 
+fn take_str<'a>(p: *const c_char) -> Option<&'a str> {
+    if p.is_null() {
+        return None;
+    }
+    // SAFETY: callers pass NUL-terminated UTF-8 strings (documented on each
+    // exported function).
+    unsafe { CStr::from_ptr(p) }.to_str().ok()
+}
+
+fn out_json(v: serde_json::Value) -> *mut c_char {
+    CString::new(v.to_string()).map_or(ptr::null_mut(), CString::into_raw)
+}
+
+/// Revit link, file mode: operations that bring a Revit model holding
+/// `state_json` (`{elements: [{ferro_uid, unique_id, signature}]}`) up to
+/// date with the document. Returns `{"ops": [...]}` or `{"error": "..."}`;
+/// free it with `ferro_string_free`.
+///
+/// # Safety
+/// `doc` must come from this library; `state_json` must be a NUL-terminated
+/// UTF-8 string or null (empty state).
+#[no_mangle]
+pub unsafe extern "C" fn ferro_revit_plan(
+    doc: *const FerroDocument,
+    state_json: *const c_char,
+) -> *mut c_char {
+    let Some(d) = doc.as_ref() else {
+        return out_json(serde_json::json!({"error": "null document"}));
+    };
+    let state = match take_str(state_json) {
+        None => ferro_revit::RevitState::default(),
+        Some(t) => match serde_json::from_str(t) {
+            Ok(s) => s,
+            Err(e) => return out_json(serde_json::json!({"error": format!("invalid state: {e}")})),
+        },
+    };
+    out_json(serde_json::json!({"ops": ferro_revit::plan(&d.0, &state)}))
+}
+
+/// Revit link, file mode: apply a Revit snapshot to the document in place.
+/// Returns `{"report": {...}}` or `{"error": "..."}`; free it with
+/// `ferro_string_free`. Save with `ferro_document_to_json`.
+///
+/// # Safety
+/// `doc` must come from this library and not be shared across threads;
+/// `snapshot_json` must be a NUL-terminated UTF-8 string.
+#[no_mangle]
+pub unsafe extern "C" fn ferro_revit_import(
+    doc: *mut FerroDocument,
+    snapshot_json: *const c_char,
+) -> *mut c_char {
+    let Some(d) = doc.as_mut() else {
+        return out_json(serde_json::json!({"error": "null document"}));
+    };
+    let snap: ferro_revit::RevitSnapshot = match take_str(snapshot_json).map(serde_json::from_str) {
+        Some(Ok(s)) => s,
+        Some(Err(e)) => {
+            return out_json(serde_json::json!({"error": format!("invalid snapshot: {e}")}))
+        }
+        None => return out_json(serde_json::json!({"error": "null snapshot"})),
+    };
+    let mut session = ferro_core::Session::new(d.0.clone(), Box::new(ferro_io::SystemIds));
+    let ctx = ferro_core::ops::ExecContext {
+        actor: ferro_core::ops::Actor::agent("Revit", "ferro-ffi"),
+        prompt: None,
+        timestamp_ms: 0,
+    };
+    let report = ferro_revit::import(&mut session, &ctx, &snap);
+    d.0 = session.doc().clone();
+    out_json(serde_json::json!({"report": report}))
+}
+
 /// Number of elements in the document, or -1 for a null handle.
 ///
 /// # Safety
@@ -111,6 +183,20 @@ mod tests {
             let out = ferro_document_to_json(h);
             assert!(CStr::from_ptr(out).to_str().unwrap().contains("\"forms\""));
             ferro_string_free(out);
+            let plan = ferro_revit_plan(h, ptr::null());
+            let text = CStr::from_ptr(plan).to_str().unwrap().to_string();
+            ferro_string_free(plan);
+            assert!(text.contains("\"op\":\"direct_shape\""), "{text}");
+            let snap =
+                CString::new(r#"{"levels":[{"unique_id":"a","name":"Level 1","elevation":10.0}]}"#)
+                    .unwrap();
+            let rep = ferro_revit_import(h, snap.as_ptr());
+            assert!(CStr::from_ptr(rep)
+                .to_str()
+                .unwrap()
+                .contains("\"created\":[[\"a\""));
+            ferro_string_free(rep);
+            assert_eq!(ferro_document_element_count(h), 2);
             ferro_document_free(h);
         }
     }

@@ -1,0 +1,12 @@
+[package]
+name = "ferro-revit"
+description = "Revit link for Ferro: maps documents to Revit operations and imports Revit snapshots (units in feet at this edge)."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+ferro-core = { path = "../ferro-core" }
+serde.workspace = true
+serde_json.workspace = true
