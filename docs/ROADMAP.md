@@ -16,7 +16,7 @@ Each milestone should ship something a designer can actually try.
 - [x] Inference snapping; undo / redo; `.fro` files with autosave; OBJ / glTF export
 - [x] Half-edge kernel with persistent ids; MCP server on kernel commands
 
-## Milestone 2: BIM elements + AI inside the app ✅
+## Milestone 2: BIM elements + AI inside the app ✅ (v0.2.0)
 
 - [x] Walls (straight, curved, mitred corners), floors, doors, windows (`docs/milestones/M2.md`)
 - [x] Wall / floor types with layers, materials; computed quantities

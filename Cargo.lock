@@ -738,7 +738,7 @@ checksum = "b97b65636e5b9ef369943878ac74335ba1c55c1cb6adbf1e2c293c624248d693"
 
 [[package]]
 name = "ferro-app"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "bytemuck",
  "eframe",
@@ -756,7 +756,7 @@ dependencies = [
 
 [[package]]
 name = "ferro-core"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "earcutr",
  "imbl",
@@ -767,7 +767,7 @@ dependencies = [
 
 [[package]]
 name = "ferro-ffi"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "ferro-core",
  "ferro-io",
@@ -776,7 +776,7 @@ dependencies = [
 
 [[package]]
 name = "ferro-io"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "ferro-core",
  "rusqlite",
@@ -788,7 +788,7 @@ dependencies = [
 
 [[package]]
 name = "ferro-mcp"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "ferro-core",
  "ferro-io",
@@ -799,7 +799,7 @@ dependencies = [
 
 [[package]]
 name = "ferro-snap"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "ferro-core",
  "serde_json",
@@ -807,7 +807,7 @@ dependencies = [
 
 [[package]]
 name = "ferro-tools"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "ferro-core",
  "serde",
