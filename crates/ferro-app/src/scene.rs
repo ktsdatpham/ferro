@@ -15,7 +15,13 @@ pub const SELECT: [f32; 4] = [0.18, 0.45, 0.95, 1.0];
 /// Display colour: the material of the element's type (core layer), else a
 /// category colour.
 fn element_color(doc: &Document, e: &ferro_core::Element) -> [f32; 4] {
-    use ferro_core::model::ElementBody;
+    use ferro_core::model::{keys, ElementBody, ParamValue};
+    if let Some(ParamValue::ElementRef(m)) = e.param(keys::MATERIAL) {
+        if let Some(ElementBody::Material(mat)) = doc.get(*m).map(|x| &x.body) {
+            let [r, g, b] = mat.color;
+            return [r, g, b, 1.0];
+        }
+    }
     let structure = e
         .type_id
         .and_then(|t| doc.get(t))
@@ -61,7 +67,9 @@ pub struct SceneCache {
     pub version: u64,
     pub tris: Vec<Vertex>,
     pub lines: Vec<Vertex>,
-    key: Option<(u64, Vec<ElementId>)>,
+    key: Option<(u64, Vec<ElementId>, bool)>,
+    /// Translucent faces (X-ray style).
+    pub xray: bool,
 }
 
 impl SceneCache {
@@ -75,6 +83,7 @@ impl SceneCache {
                 ^ origin.y.to_bits().rotate_left(21)
                 ^ origin.z.to_bits().rotate_left(42),
             sel.clone(),
+            self.xray,
         );
         if same_doc && self.key.as_ref() == Some(&key) {
             return;
@@ -118,6 +127,11 @@ impl SceneCache {
                 ]
             } else {
                 element_color(doc, e)
+            };
+            let color = if self.xray {
+                [color[0], color[1], color[2], 0.3]
+            } else {
+                color
             };
             if let Some(m) = self.meshes.get(&e.id) {
                 for t in &m.indices {

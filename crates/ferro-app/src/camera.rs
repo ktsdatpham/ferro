@@ -15,6 +15,8 @@ pub struct OrbitCamera {
     /// Distance from target (mm).
     pub distance: f64,
     pub fov_y: f64,
+    /// Orthographic (parallel) projection.
+    pub parallel: bool,
 }
 
 impl Default for OrbitCamera {
@@ -25,6 +27,7 @@ impl Default for OrbitCamera {
             pitch: 30f64.to_radians(),
             distance: 20_000.0,
             fov_y: 45f64.to_radians(),
+            parallel: false,
         }
     }
 }
@@ -101,7 +104,13 @@ impl OrbitCamera {
         let view = look_at_rh(rel(self.eye()), rel(self.target), up);
         let near = (self.distance * 0.002).max(5.0) as f32;
         let far = (self.distance * 200.0 + 2_000_000.0) as f32;
-        let proj = perspective_rh(self.fov_y as f32, aspect.max(0.01), near, far);
+        let proj = if self.parallel {
+            // Same framing as the perspective view at the target distance.
+            let h = (self.distance * (self.fov_y * 0.5).tan()) as f32;
+            orthographic_rh(h * aspect.max(0.01), h, -far, far)
+        } else {
+            perspective_rh(self.fov_y as f32, aspect.max(0.01), near, far)
+        };
         proj * view
     }
 }
@@ -127,6 +136,17 @@ fn perspective_rh(fov_y: f32, aspect: f32, near: f32, far: f32) -> Mat4 {
         Vec4::new(0.0, f, 0.0, 0.0),
         Vec4::new(0.0, 0.0, far / (near - far), -1.0),
         Vec4::new(0.0, 0.0, near * far / (near - far), 0.0),
+    )
+}
+
+/// Right-handed orthographic projection with depth in [0, 1]; `hw`, `hh` are
+/// half extents.
+fn orthographic_rh(hw: f32, hh: f32, near: f32, far: f32) -> Mat4 {
+    Mat4::from_cols(
+        Vec4::new(1.0 / hw, 0.0, 0.0, 0.0),
+        Vec4::new(0.0, 1.0 / hh, 0.0, 0.0),
+        Vec4::new(0.0, 0.0, 1.0 / (near - far), 0.0),
+        Vec4::new(0.0, 0.0, near / (near - far), 1.0),
     )
 }
 
@@ -201,6 +221,27 @@ mod tests {
         let r = fc.ray(s);
         let t = r.param_of(p);
         assert!(r.at(t).distance_to(p) < 5.0, "{}", r.at(t).distance_to(p));
+    }
+
+    #[test]
+    fn parallel_projection_picks_too() {
+        let cam = OrbitCamera {
+            parallel: true,
+            ..Default::default()
+        };
+        let fc = FrameCamera::new(
+            &cam,
+            Point3::new(1000.0, 1000.0, 0.0),
+            [0.0, 0.0, 800.0, 600.0],
+        );
+        let p = Point3::new(3000.0, 4000.0, 500.0);
+        let s = fc.project(p).unwrap();
+        let r = fc.ray(s);
+        let t = r.param_of(p);
+        assert!(r.at(t).distance_to(p) < 5.0);
+        // All rays are parallel.
+        let r2 = fc.ray([10.0, 10.0]);
+        assert!(r.dir.dot(r2.dir) > 1.0 - 1e-9);
     }
 
     #[test]

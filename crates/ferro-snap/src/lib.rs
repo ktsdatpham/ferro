@@ -268,9 +268,10 @@ pub fn snap(
     settings: &SnapSettings,
 ) -> Option<SnapResult> {
     let hit = scene.raycast(ray);
-    let depth_limit = hit
-        .map(|(t, _)| t * (1.0 + 1e-6) + 1.0)
-        .unwrap_or(f64::INFINITY);
+    // Points and edges a little behind the hovered face (its own boundary
+    // seen at a grazing angle) still count as visible: the slack grows with
+    // the viewing distance (0.3 %), like the screen-space tolerance does.
+    let depth_limit = hit.map(|(t, _)| t * 1.003 + 1.0).unwrap_or(f64::INFINITY);
     let visible = |p: Point3| ray.param_of(p) <= depth_limit;
     let tol = settings.tolerance_px;
 
@@ -347,7 +348,16 @@ pub fn snap(
             }
         }
     }
-    if let Some((_, _, r)) = best {
+    if let Some((_, _, mut r)) = best {
+        // A point or edge of the element under the cursor also reports the
+        // face being hovered, so tools know which face the user means.
+        if let Some((_, i)) = hit {
+            let tri = &scene.triangles[i];
+            if r.element == Some(tri.element) && r.face.is_none() {
+                r.face = Some(tri.face);
+                r.normal = Some(tri.normal);
+            }
+        }
         return Some(r);
     }
     // 4. Face under the cursor.
@@ -376,6 +386,61 @@ pub fn snap(
         }
     }
     None
+}
+
+#[cfg(test)]
+mod edge_visibility_tests {
+    use super::*;
+
+    struct Ortho;
+    impl Projector for Ortho {
+        fn project(&self, p: Point3) -> Option<[f32; 2]> {
+            // Looking along +Y: screen x = model x, screen y = -model z.
+            Some([p.x as f32, -p.z as f32])
+        }
+    }
+
+    #[test]
+    fn the_edge_of_the_hovered_face_wins_over_the_face() {
+        // A wall face at y = 0 (facing -y); the bottom edge sits 5 mm below
+        // where the ray hits the face, within the pixel tolerance.
+        let scene = SnapScene {
+            points: vec![],
+            edges: vec![SnapEdge {
+                a: Point3::new(0.0, 0.0, 0.0),
+                b: Point3::new(1000.0, 0.0, 0.0),
+                element: ElementId(1),
+            }],
+            triangles: vec![SnapTriangle {
+                tri: [
+                    Point3::new(0.0, 0.0, 0.0),
+                    Point3::new(1000.0, 0.0, 0.0),
+                    Point3::new(0.0, 0.0, 1000.0),
+                ],
+                element: ElementId(1),
+                face: FaceId(1),
+                normal: -UnitVec3::Y,
+            }],
+        };
+        // A ray coming down at an angle, hitting the face at z = 5.
+        let dir = Vec3::new(0.0, 1.0, -0.6).normalize().unwrap();
+        let hit = Point3::new(500.0, 0.0, 5.0);
+        let ray = Ray {
+            origin: hit - dir.as_vec() * 10_000.0,
+            dir,
+        };
+        let r = snap(
+            &scene,
+            &ray,
+            [500.0, -5.0],
+            &Ortho,
+            None,
+            &SnapSettings::default(),
+        )
+        .unwrap();
+        assert_eq!(r.kind, SnapKind::OnEdge);
+        assert_eq!(r.face, Some(FaceId(1)), "the hovered face is reported too");
+    }
 }
 
 #[cfg(test)]
