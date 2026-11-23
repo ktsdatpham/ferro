@@ -775,7 +775,7 @@ impl FerroApp {
                     self.set_tool(ToolKind::Paint);
                 }
                 if ui
-                    .small_button("✎")
+                    .small_button("Edit")
                     .on_hover_text("Edit material")
                     .clicked()
                 {
