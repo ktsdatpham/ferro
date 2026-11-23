@@ -213,7 +213,7 @@ impl FerroApp {
             active_level: None,
             workspace: Workspace::Sketch,
             new_level_name: "L2".into(),
-            new_level_elev: 3.3,
+            new_level_elev: 3300.0,
             level_edits: HashMap::new(),
             name_edit: None,
             comment_edit: None,
@@ -729,8 +729,8 @@ impl FerroApp {
         self.new_level_elev = levels
             .last()
             .and_then(|e| e.as_level())
-            .map(|l| l.elevation.m() + 3.3)
-            .unwrap_or(3.3);
+            .map(|l| l.elevation.mm() + 3300.0)
+            .unwrap_or(3300.0);
     }
 
     /// Paste: the copied elements follow the cursor from their corner; click
@@ -1490,14 +1490,13 @@ impl FerroApp {
                 (
                     e.id,
                     e.label(),
-                    e.as_level().map(|l| l.elevation.m()).unwrap_or(0.0),
+                    e.as_level().map(|l| l.elevation.mm()).unwrap_or(0.0),
                 )
             })
             .collect();
-        if ui
-            .radio(self.active_level.is_none(), "Ground (0.000 m)")
-            .clicked()
-        {
+        let u = self.session.doc().project().settings.units.clone();
+        let ground = format!("Ground ({})", units::length(&u, 0.0));
+        if ui.radio(self.active_level.is_none(), ground).clicked() {
             self.active_level = None;
         }
         let mut commit = None;
@@ -1510,12 +1509,7 @@ impl FerroApp {
                     self.active_level = Some(*id);
                 }
                 let v = self.level_edits.entry(*id).or_insert(*elev);
-                let r = ui.add(
-                    egui::DragValue::new(v)
-                        .speed(0.05)
-                        .suffix(" m")
-                        .fixed_decimals(3),
-                );
+                let r = units::length_drag(ui, &u, v);
                 if (r.drag_stopped() || r.lost_focus()) && (*v - elev).abs() > 1e-9 {
                     commit = Some((*id, *v));
                 }
@@ -1524,26 +1518,22 @@ impl FerroApp {
                 }
             });
         }
-        if let Some((level, m)) = commit {
+        if let Some((level, mm)) = commit {
             self.run(
                 SetLevelElevation {
                     level,
-                    elevation: Length::from_m(m),
+                    elevation: Length::from_mm(mm),
                 }
                 .into(),
             );
         }
         ui.horizontal(|ui| {
             ui.add(egui::TextEdit::singleline(&mut self.new_level_name).desired_width(60.0));
-            ui.add(
-                egui::DragValue::new(&mut self.new_level_elev)
-                    .speed(0.05)
-                    .suffix(" m"),
-            );
+            units::length_drag(ui, &u, &mut self.new_level_elev);
             if ui.button("+ Level").clicked() {
                 let cmd = CreateLevel {
                     name: self.new_level_name.clone(),
-                    elevation: Length::from_m(self.new_level_elev),
+                    elevation: Length::from_mm(self.new_level_elev),
                     is_building_storey: true,
                 };
                 if self.run(cmd.into()) {

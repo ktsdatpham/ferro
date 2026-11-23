@@ -193,6 +193,8 @@ Drawing tools (D-72): app-side state machines. Each tool previews by evaluating 
 Showing and reading quantities in the project's display units (M5-24.2).
 
 - fn `quantity` — A stored value of `spec` in the project's display unit with its symbol,
+- fn `decimals` — Decimals used for `spec`: the project's, else [`default_decimals`].
+- fn `length_drag` — A drag box editing a length stored in mm, shown in the project's length
 - fn `length` — A length stored in mm, e.g. `"3300 mm"` or `"3.30 m"`.
 - fn `area` — An area stored in mm², e.g. `"12.00 m²"`.
 - fn `volume` — A volume stored in mm³, e.g. `"2.400 m³"`.

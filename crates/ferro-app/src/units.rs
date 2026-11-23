@@ -9,6 +9,7 @@
 //! Revit and SketchUp): with lengths in `m`, typing `4` means 4 m. A number
 //! with a unit (`4000mm`, `4m`, `10' 6"`) is read in that unit regardless.
 
+use eframe::egui;
 use ferro_core::math::QuantitySpec;
 use ferro_core::model::project_settings::{ProjectUnits, UnitChoice};
 use ferro_core::Length;
@@ -42,11 +43,7 @@ fn default_decimals(spec: QuantitySpec, symbol: &str) -> Option<u8> {
 /// else [`default_decimals`]. Never prints `-0`; non-finite values show `"—"`.
 pub fn quantity(u: &ProjectUnits, spec: QuantitySpec, stored: f64) -> String {
     let unit = u.display_unit(spec);
-    let decimals = u
-        .units
-        .get(&spec)
-        .and_then(|c| c.decimals)
-        .or_else(|| default_decimals(spec, unit.symbol));
+    let decimals = decimals(u, spec);
     // One formatting path: the core's, with the decimals filled in.
     let mut one = ProjectUnits::default();
     one.units.insert(
@@ -57,6 +54,35 @@ pub fn quantity(u: &ProjectUnits, spec: QuantitySpec, stored: f64) -> String {
         },
     );
     one.format(spec, stored)
+}
+
+/// Decimals used for `spec`: the project's, else [`default_decimals`].
+pub fn decimals(u: &ProjectUnits, spec: QuantitySpec) -> Option<u8> {
+    let unit = u.display_unit(spec);
+    u.units
+        .get(&spec)
+        .and_then(|c| c.decimals)
+        .or_else(|| default_decimals(spec, unit.symbol))
+}
+
+/// A drag box editing a length stored in mm, shown in the project's length
+/// unit. Returns the response; `mm` changes while the user drags or types.
+pub fn length_drag(ui: &mut egui::Ui, u: &ProjectUnits, mm: &mut f64) -> egui::Response {
+    let unit = u.display_unit(QuantitySpec::Length);
+    let mut shown = unit.from_storage(*mm);
+    // About 50 mm per pixel of drag, whatever the unit.
+    let speed = unit.from_storage(50.0) - unit.from_storage(0.0);
+    let mut d = egui::DragValue::new(&mut shown)
+        .speed(speed)
+        .suffix(format!(" {}", unit.symbol));
+    if let Some(n) = decimals(u, QuantitySpec::Length) {
+        d = d.fixed_decimals(n as usize);
+    }
+    let r = ui.add(d);
+    if r.changed() && shown.is_finite() {
+        *mm = unit.to_storage(shown);
+    }
+    r
 }
 
 /// A length stored in mm, e.g. `"3300 mm"` or `"3.30 m"`.
