@@ -10,6 +10,8 @@
 4. tasks     — docs/tasks/TREE.md: markers valid, claimed / done items have an
                owner, a done parent has only done children, ids are unique.
 5. api       — docs/api/TREE.md is up to date (scripts/api_tree.py --check).
+6. python    — python/ferro/_tools.py matches python/ferro/tools.json
+               (scripts/gen_python.py --check, ADR 0005).
 
 Exit code 1 and one line per problem when something is wrong.
 """
@@ -155,12 +157,20 @@ def check_api():
         problems.append(r.stdout.strip() or "docs/api/TREE.md is out of date")
 
 
+def check_python():
+    r = subprocess.run([sys.executable, os.path.join(ROOT, "scripts", "gen_python.py"), "--check"],
+                       capture_output=True, text=True)
+    if r.returncode != 0:
+        problems.append(r.stdout.strip() or "python/ferro/_tools.py is out of date")
+
+
 def main():
     check_glossary()
     check_layers()
     check_deps()
     check_tasks()
     check_api()
+    check_python()
     for p in problems:
         print(p)
     if problems:

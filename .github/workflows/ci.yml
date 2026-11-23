@@ -7,11 +7,13 @@ on:
 
 jobs:
   lint:
-    # Glossary, layers, ferro-core deps, task tree, API map (scripts/lint.py).
+    # Glossary, layers, ferro-core deps, task tree, API map, generated Python
+    # SDK freshness (scripts/lint.py), then the Python SDK tests.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - run: python3 scripts/lint.py
+      - run: python3 -m unittest discover -s python/tests
 
   test:
     strategy:

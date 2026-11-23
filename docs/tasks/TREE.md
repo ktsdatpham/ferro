@@ -74,9 +74,12 @@ Legend: `[ ]` open · `[~]` in progress · `[x]` done · `✓` verified ·
 - [ ] **M5-13 Code layout by discipline** (after M5-3 / M5-4 land): `model::bim` split into `model::architecture::{wall, floor, opening, …}`, room for `structure`, `mep`, `analysis`, `site`, like Revit's `DB.Architecture` / `DB.Structure`
 
 - [ ] **M5-14 Python SDK** (ADR 0005)
-  - [ ] M5-14.1 `ferro-mcp --tools-json` prints the tool list (schemas) for generators
-  - [ ] M5-14.2 Generated package `python/ferro/_tools.py`: one typed function per tool; generator script; CI freshness check
-  - [ ] M5-14.3 Ferro Link client and object layer (`connect`, `Document`, element wrappers, `transaction`), tests against a fake link server
+  - [x] M5-14.1 `ferro-mcp --tools-json` prints the tool list (schemas) for generators @agent-python
+    - accept: `cargo run -q -p ferro-mcp -- --tools-json` prints `{"tools": [...]}` equal to MCP `tools/list`; `cargo test -p ferro-mcp` passes (incl. `tools_json_matches_tools_list`, `python_sdk_snapshot_is_current`)
+  - [x] M5-14.2 Generated package `python/ferro/_tools.py`: one typed function per tool; generator script; CI freshness check @agent-python
+    - accept: `python3 scripts/gen_python.py --check` exits 0 and `python3 scripts/lint.py` prints `lint: ok`; editing `python/ferro/tools.json` makes both fail
+  - [x] M5-14.3 Ferro Link client and object layer (`connect`, `Document`, element wrappers, `transaction`), tests against a fake link server @agent-python
+    - accept: `python3 -m unittest discover -s python/tests` passes (14 tests) on Python ≥ 3.9 with no third-party packages
   - [ ] M5-14.4 `run_python` MCP tool (waits for ADR 0005 approval)
 
 ## M6 SketchUp parity, rest (on Foundation 2)

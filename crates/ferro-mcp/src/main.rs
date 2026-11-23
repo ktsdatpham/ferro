@@ -2,6 +2,7 @@
 //! model in Ferro. Transport: newline-delimited JSON-RPC 2.0 over stdio.
 //!
 //!   cargo run -p ferro-mcp
+//!   cargo run -p ferro-mcp -- --tools-json   # print the tool list and exit
 //!
 //! Every kernel command is a tool (D-17). Logs go to stderr.
 
@@ -66,7 +67,19 @@ fn handle(server: &mut Server, req: &Value) -> Option<Value> {
     })
 }
 
+/// The tool list as pretty JSON, `{"tools": [...]}` exactly as MCP
+/// `tools/list` returns it. Generators (the Python SDK, ADR 0005) read it.
+/// Keys are sorted, so the output is deterministic.
+fn tools_json() -> String {
+    let v = json!({ "tools": tools::list() });
+    serde_json::to_string_pretty(&v).unwrap_or_else(|_| v.to_string())
+}
+
 fn main() {
+    if std::env::args().skip(1).any(|a| a == "--tools-json") {
+        println!("{}", tools_json());
+        return;
+    }
     let mut server = Server::new();
     let stdin = io::stdin();
     let mut out = io::stdout().lock();
@@ -249,6 +262,34 @@ mod tests {
         let r = call(&mut s2, "open_document", json!({"path": path}));
         assert_eq!(r["body"]["elements"].as_array().unwrap().len(), 1);
         let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn tools_json_matches_tools_list() {
+        let printed: Value = serde_json::from_str(&tools_json()).unwrap();
+        let mut s = server();
+        let listed = handle(
+            &mut s,
+            &json!({"jsonrpc":"2.0","id":1,"method":"tools/list"}),
+        )
+        .unwrap()["result"]
+            .clone();
+        assert_eq!(printed, listed);
+        assert_eq!(tools_json(), tools_json(), "deterministic");
+        assert!(printed["tools"].as_array().unwrap().len() > 40);
+    }
+
+    #[test]
+    fn python_sdk_snapshot_is_current() {
+        // python/ferro/tools.json feeds scripts/gen_python.py (ADR 0005).
+        let path =
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../python/ferro/tools.json");
+        let snapshot = std::fs::read_to_string(&path).unwrap_or_default();
+        assert_eq!(
+            snapshot.trim_end(),
+            tools_json(),
+            "python/ferro/tools.json is stale: run `python3 scripts/gen_python.py --refresh`"
+        );
     }
 
     #[test]

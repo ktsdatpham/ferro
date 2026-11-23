@@ -8,3 +8,5 @@ revit-addin/bin/
 revit-addin/obj/
 *.user
 .claude/
+__pycache__/
+*.egg-info/
