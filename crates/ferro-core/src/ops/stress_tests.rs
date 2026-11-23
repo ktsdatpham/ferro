@@ -260,38 +260,65 @@ fn pocket_pulled_back_up() {
 }
 
 /// SketchUp: pulling a pocket floor exactly back to flush removes the
-/// pocket; pulling further makes a boss.
+/// pocket; pulling further makes a boss (M5-15.7).
 #[test]
-#[ignore = "bug: pulling a pocket floor back to flush (or past it) fails with ferro.algo.collapse (M5-15.7)"]
 fn pocket_back_to_flush_and_beyond() {
     for fr in frames() {
+        // Flush, exactly and within VERTEX_TOL: one top face again.
+        for d in [800.0, 799.995, 800.005] {
+            let mut s = session();
+            let (e, f) = pocket(&mut s, fr);
+            let o = expect_ok(
+                &mut s,
+                "push_pull_face",
+                json!({"element": e, "face": f, "distance": d}),
+            );
+            assert!((volume(&s, e) - W * D * H).abs() < 10.0, "{fr:?}: flush");
+            let b = geometry(&s, e);
+            assert_eq!(b.face_count(), 6, "{fr:?} {d}: healed");
+            assert!(b.face(f).is_err(), "{fr:?}: pulled face merged");
+            let deleted: Vec<FaceId> =
+                serde_json::from_value(o.output["lineage"]["deleted"].clone()).expect("lineage");
+            assert!(deleted.contains(&f));
+            let top = face(&s, e, fr, 0.0, 0.0, 1.0);
+            assert!(b.face(top).is_ok_and(|t| t.holes.is_empty()));
+            // The merged face is gone for good.
+            expect_code(
+                &mut s,
+                "push_pull_face",
+                json!({"element": e, "face": f, "distance": 100}),
+                "ferro.topo.not_found",
+            );
+        }
+        for (d, boss) in [(1000.0, 200.0), (1200.0, 400.0)] {
+            let mut s = session();
+            let (e, f) = pocket(&mut s, fr);
+            expect_ok(
+                &mut s,
+                "push_pull_face",
+                json!({"element": e, "face": f, "distance": d}),
+            );
+            assert!(
+                (volume(&s, e) - (W * D * H + 1e6 * boss)).abs() < 10.0,
+                "{fr:?}: boss"
+            );
+        }
+        // 0.02 mm short of flush leaves walls below 0.5 mm: refused.
         let mut s = session();
         let (e, f) = pocket(&mut s, fr);
-        expect_ok(
+        expect_code(
             &mut s,
             "push_pull_face",
-            json!({"element": e, "face": f, "distance": 800}),
-        );
-        assert!((volume(&s, e) - W * D * H).abs() < 10.0, "{fr:?}: flush");
-        let mut s = session();
-        let (e, f) = pocket(&mut s, fr);
-        expect_ok(
-            &mut s,
-            "push_pull_face",
-            json!({"element": e, "face": f, "distance": 1200}),
-        );
-        assert!(
-            (volume(&s, e) - (W * D * H + 1e6 * 400.0)).abs() < 10.0,
-            "{fr:?}: boss"
+            json!({"element": e, "face": f, "distance": 799.98}),
+            "ferro.geom.short_curve",
         );
     }
 }
 
-/// Pushing a pocket deeper than the box is refused (it would break through
-/// the bottom without landing on it) and leaves the body as it was.
+/// Half of a split top pushed down (a step), then pulled back flush: the
+/// step wall disappears and the volume is back (M5-15.7).
 #[test]
-#[ignore = "bug: a pocket pushed deeper than the solid is accepted as a self-intersecting body (M5-15.8)"]
-fn pocket_deeper_than_the_box_is_refused() {
+fn step_down_and_back_flush() {
     for fr in frames() {
         let mut s = session();
         let e = placed_box(&mut s, fr);
@@ -299,17 +326,56 @@ fn pocket_deeper_than_the_box_is_refused() {
         let o = expect_ok(
             &mut s,
             "imprint_face",
-            json!({"element": e, "face": top, "closed": true, "points": [
-                fr.pj(500.0, 500.0, H), fr.pj(1500.0, 500.0, H),
-                fr.pj(1500.0, 1500.0, H), fr.pj(500.0, 1500.0, H)]}),
+            json!({"element": e, "face": top, "closed": false, "points": [
+                fr.pj(1500.0, 0.0, H), fr.pj(1500.0, D, H)]}),
         );
-        let f = new_face(&o);
-        let r = checked(
+        let faces: Vec<FaceId> = serde_json::from_value(o.output["faces"].clone()).expect("faces");
+        let b = geometry(&s, e);
+        // The 1500-wide half.
+        let half = faces
+            .iter()
+            .copied()
+            .find(|f| b.face_area(*f).is_ok_and(|a| (a - 1500.0 * D).abs() < 1.0))
+            .expect("half");
+        expect_ok(
+            &mut s,
+            "push_pull_face",
+            json!({"element": e, "face": half, "distance": -400}),
+        );
+        assert!(
+            (volume(&s, e) - (W * D * H - 1500.0 * D * 400.0)).abs() < 10.0,
+            "{fr:?}"
+        );
+        let n = geometry(&s, e).face_count();
+        expect_ok(
+            &mut s,
+            "push_pull_face",
+            json!({"element": e, "face": half, "distance": 400}),
+        );
+        assert!((volume(&s, e) - W * D * H).abs() < 10.0, "{fr:?}");
+        assert_eq!(
+            geometry(&s, e).face_count(),
+            n - 1,
+            "{fr:?}: step wall gone"
+        );
+    }
+}
+
+/// Pushing a pocket deeper than the box is refused (it would break through
+/// the bottom without landing on it) and leaves the body as it was.
+/// (M5-15.8: it used to be committed as a self-intersecting body.)
+#[test]
+fn pocket_deeper_than_the_box_is_refused() {
+    for fr in frames() {
+        let mut s = session();
+        let e = placed_box(&mut s, fr);
+        let f = square_on_top(&mut s, e, fr);
+        expect_code(
             &mut s,
             "push_pull_face",
             json!({"element": e, "face": f, "distance": -(H + 100.0)}),
+            "ferro.topo.self_intersecting",
         );
-        assert!(r.is_err(), "{fr:?}: pocket through the bottom accepted");
         // Just short of the bottom (0.5 mm floor left) is fine.
         expect_ok(
             &mut s,
@@ -317,6 +383,80 @@ fn pocket_deeper_than_the_box_is_refused() {
             json!({"element": e, "face": f, "distance": -(H - 0.51)}),
         );
     }
+}
+
+/// Imprint the 1000 mm square (500..1500) on the top of the placed box.
+fn square_on_top(s: &mut Session, e: ElementId, fr: Frame) -> FaceId {
+    let top = face(s, e, fr, 0.0, 0.0, 1.0);
+    let o = expect_ok(
+        s,
+        "imprint_face",
+        json!({"element": e, "face": top, "closed": true, "points": [
+            fr.pj(500.0, 500.0, H), fr.pj(1500.0, 500.0, H),
+            fr.pj(1500.0, 1500.0, H), fr.pj(500.0, 1500.0, H)]}),
+    );
+    new_face(&o)
+}
+
+/// Tolerance edges of a pocket against the bottom of a 2000 mm box
+/// (M5-15.8): within `VERTEX_TOL` of the bottom (−1999.995, −2000,
+/// −2000.005) the pocket goes through (SketchUp push-through) and the volume
+/// is exact; 0.02 mm past the bottom is refused; 0.6 mm short is a pocket.
+#[test]
+fn pocket_depth_tolerance_edges_against_the_bottom() {
+    for fr in frames() {
+        for (depth, expect) in [
+            (H - 0.005, Some("through")),
+            (H, Some("through")),
+            (H + 0.005, Some("through")),
+            (H + 0.02, None),
+            (H - 0.6, Some("prism")),
+        ] {
+            let mut s = session();
+            let e = placed_box(&mut s, fr);
+            let f = square_on_top(&mut s, e, fr);
+            let args = json!({"element": e, "face": f, "distance": -depth});
+            match expect {
+                Some(mode) => {
+                    let o = expect_ok(&mut s, "push_pull_face", args);
+                    assert_eq!(o.output["mode"], mode, "{fr:?} {depth}");
+                    let removed = if mode == "through" { H } else { depth };
+                    assert!(
+                        (volume(&s, e) - (W * D * H - 1e6 * removed)).abs() < 1e-6 * W * D * H,
+                        "{fr:?} {depth}"
+                    );
+                }
+                None => expect_code(
+                    &mut s,
+                    "push_pull_face",
+                    args,
+                    "ferro.topo.self_intersecting",
+                ),
+            }
+        }
+    }
+}
+
+/// A pocket floor dragged sideways through a wall of the box (move_geometry
+/// can do that) leaves a self-intersecting body: refused by the Transaction's
+/// body validation, not only by push / pull.
+#[test]
+fn moving_a_pocket_floor_through_a_side_is_refused() {
+    let mut s = session();
+    let fr = frames()[0];
+    let e = placed_box(&mut s, fr);
+    let f = square_on_top(&mut s, e, fr);
+    expect_ok(
+        &mut s,
+        "push_pull_face",
+        json!({"element": e, "face": f, "distance": -800}),
+    );
+    let r = checked(
+        &mut s,
+        "move_geometry",
+        json!({"element": e, "faces": [f], "vector": p(-1000.0, 0.0, 0.0)}),
+    );
+    assert!(r.is_err(), "pocket floor moved out through a side");
 }
 
 /// Two holes through, side by side, then the web between them pushed out:

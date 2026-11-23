@@ -207,6 +207,17 @@ impl Command for CreatePolygon {
                 "points are not coplanar",
             ));
         }
+        // Exact simple-polygon test (D-53): no bow-ties, no repeated points.
+        let local: Vec<crate::math::Point2> = pts.iter().map(|p| plane.to_local(*p)).collect();
+        if crate::geom::predicates::points_are_collinear(&local) {
+            return Err(CommandError::new(
+                "ferro.geom.degenerate",
+                "points are collinear",
+            ));
+        }
+        if !crate::geom::predicates::polygon_is_simple(&local) {
+            return Err(crate::geom::GeomError::SelfIntersecting.into());
+        }
         let idx: Vec<usize> = (0..pts.len()).collect();
         let (body, faces) = Body::from_polygons(&pts, &[idx])?;
         let id = tx.create(
@@ -480,10 +491,13 @@ impl Command for DeleteElements {
 
 // ------------------------------------------------------------------ data
 
-/// Rename an element (`null` clears the name).
+/// Rename an element (`null` clears the name). `name` is required: a
+/// missing `name` is rejected as bad arguments, not read as `null`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SetName {
     pub element: ElementId,
+    /// `deserialize_with` makes the field required while still taking `null`.
+    #[serde(deserialize_with = "Option::deserialize")]
     pub name: Option<String>,
 }
 

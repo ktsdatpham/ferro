@@ -17,6 +17,9 @@ pub enum GeomError {
     InvalidProfile,
     /// Radius must be positive.
     InvalidRadius,
+    /// A loop crosses or touches itself (e.g. a bow-tie outline), decided
+    /// with exact predicates (D-53).
+    SelfIntersecting,
 }
 
 impl GeomError {
@@ -30,6 +33,7 @@ impl GeomError {
             GeomError::NotPlanar => "ferro.geom.not_planar",
             GeomError::InvalidProfile => "ferro.geom.invalid_profile",
             GeomError::InvalidRadius => "ferro.geom.invalid_radius",
+            GeomError::SelfIntersecting => "ferro.geom.self_intersecting_profile",
         }
     }
 }
@@ -46,6 +50,7 @@ impl fmt::Display for GeomError {
                 "profile loops overlap or a hole is outside the outer loop"
             }
             GeomError::InvalidRadius => "radius must be positive",
+            GeomError::SelfIntersecting => "outline crosses or touches itself",
         };
         write!(f, "{msg}")
     }

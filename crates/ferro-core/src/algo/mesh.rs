@@ -1,7 +1,7 @@
 use super::AlgoError;
-use crate::geom::{Plane, Surface};
+use crate::geom::Surface;
 use crate::math::{Point3, Vec3};
-use crate::topo::{Body, FaceId};
+use crate::topo::{Body, FaceId, TopoError};
 use serde::{Deserialize, Serialize};
 
 /// Triangle mesh for display and export. Tessellation is a cache, never the
@@ -16,36 +16,18 @@ pub struct Mesh {
 }
 
 /// Triangulate one face (holes supported) with ear clipping in the face plane.
+/// Triangles are counter-clockwise about the face normal
+/// ([`Body::face_triangles`]). Fails with `Triangulation` when ear clipping
+/// fails.
 pub fn triangulate_face(body: &Body, face: FaceId) -> Result<Vec<[Point3; 3]>, AlgoError> {
-    let f = body.face(face)?;
-    let n = body.face_normal(face)?;
-    let outer = body.loop_points(f.outer);
-    let plane = Plane::from_origin_normal(outer[0], n);
-    let mut pts: Vec<Point3> = outer;
-    let mut holes = Vec::new();
-    for h in &f.holes {
-        holes.push(pts.len());
-        pts.extend(body.loop_points(*h));
-    }
-    let flat: Vec<f64> = pts
-        .iter()
-        .flat_map(|p| {
-            let q = plane.to_local(*p);
-            [q.x, q.y]
-        })
-        .collect();
-    let idx = earcutr::earcut(&flat, &holes, 2).map_err(|_| AlgoError::Triangulation)?;
-    let mut tris = Vec::with_capacity(idx.len() / 3);
-    for t in idx.as_chunks::<3>().0 {
-        let (a, b, c) = (pts[t[0]], pts[t[1]], pts[t[2]]);
-        // earcut output winding is not guaranteed; orient to the face normal.
-        if (b - a).cross(c - a).dot(n.as_vec()) >= 0.0 {
-            tris.push([a, b, c]);
-        } else {
-            tris.push([a, c, b]);
-        }
-    }
-    Ok(tris)
+    let tris = body.face_triangles(face).map_err(|e| match e {
+        TopoError::DegenerateLoop => AlgoError::Triangulation,
+        e => AlgoError::Topo(e),
+    })?;
+    let at = |v| body.point(v).ok_or(AlgoError::Triangulation);
+    tris.into_iter()
+        .map(|t| Ok([at(t[0])?, at(t[1])?, at(t[2])?]))
+        .collect()
 }
 
 /// Mesh of a whole body. Planar faces get flat normals; curved faces get the
