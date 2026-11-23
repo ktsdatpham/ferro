@@ -45,6 +45,9 @@ A JSON array of calls with the same tool names and arguments as MCP
 - Unknown keys in a step are an error (typos are not ignored).
 
 Example: [`tests/scripts/house.json`](tests/scripts/house.json).
+[`tests/scripts/subtract.json`](tests/scripts/subtract.json) cuts an opening
+with `subtract_forms`: the CLI session has the geometry kernel attached
+(`ferro-kernel`, ADR 0007).
 
 ### `run` output
 
