@@ -128,6 +128,27 @@ fn spec_ids() -> String {
         .join(", ")
 }
 
+/// View properties shared by `create_view` and `set_view`, added to `base`.
+fn view_props(mut base: Value) -> Value {
+    let plane = json!({"type":["object","null"],"description":"Cutting plane: geometry on the side the normal points to is not drawn","properties":{"point": point("A point on the plane"), "normal": point("Normal of the side cut away")},"required":["point","normal"]});
+    let common = json!({
+        "camera": {"type":"object","description":"Camera; points in mm","properties":{"eye": point("Camera position"), "target": point("Point looked at"), "up": point("Up direction"), "projection": {"type":"string","enum":["perspective","parallel"]}, "fov_y": {"type":["number","string"],"description":"Vertical field of view, degrees (default 45)"}},"required":["eye","target","up"]},
+        "section_plane": plane,
+        "section_box": {"type":["object","null"],"description":"3D views: only what is inside is drawn (stored; not drawn by the app yet)","properties":{"min": point("Lowest corner"), "max": point("Highest corner")},"required":["min","max"]},
+        "view_range": {"type":"object","description":"Plan views (Revit View Range), offsets from the level; view_depth ≤ bottom ≤ cut_height ≤ top","properties":{"top": length(), "cut_height": length(), "bottom": length(), "view_depth": length()},"required":["top","cut_height","bottom","view_depth"]},
+        "depth": length(),
+        "display_style": {"type":"string","enum":["shaded","x_ray","wireframe","hidden_line"]},
+        "phase": {"type":["integer","null"],"description":"Phase shown by the view (null = the last phase)"},
+        "phase_filter": {"type":"string","enum":["show_all","show_complete","show_new","show_previous_and_demo","show_previous_and_new","show_demo_and_new","no_overrides"],"description":"Revit phase filter: which statuses are shown and with status graphics (default show_all)"},
+    });
+    if let (Some(b), Some(c)) = (base.as_object_mut(), common.as_object()) {
+        for (k, v) in c {
+            b.insert(k.clone(), v.clone());
+        }
+    }
+    base
+}
+
 fn tool(name: &str, description: &str, props: Value, required: &[&str]) -> Value {
     json!({"name": name, "description": description, "inputSchema": {"type": "object", "properties": props, "required": required}})
 }
@@ -244,6 +265,13 @@ pub fn list() -> Vec<Value> {
             json!({"relationship": {"type":"string","description":"Relationship uid (from create_relationship or list_relationships)"}}), &["relationship"]),
         tool("list_relationships", "Relationship rows, all or those linking `element`: [{relationship, kind, elements, phase}].",
             json!({"element": id("Optional element id")}), &[]),
+        // Views (D-33, M5-22).
+        tool("create_view", "Create a view (Revit View): `view_3d` (camera, optional section plane / section box), `plan_view` (needs `level`; cut at view_range.cut_height above it, default 1200 mm) or `section_view` (needs `section_plane`; shows `depth` beyond it, default 10 m). View names are unique. A view keeps camera, display style, hidden elements / tags and its phase; the Ferro app shows the active view. Returns {element}.",
+            view_props(json!({"name": {"type":"string"}, "view_type": {"type":"string","enum":["view_3d","plan_view","section_view"]}, "level": id("Level of a plan view")})), &["name", "view_type"]),
+        tool("set_view", "Change a view. Omit a field to keep it. `section_plane`, `section_box` and `phase` accept null to clear (a section view keeps its plane). `hide` / `unhide` add / remove elements from the view's hidden list (`unhide_all` empties it first); `hidden_tags` replaces the tags hidden in the view. Deleting an element removes it from every view.",
+            view_props(json!({"view": id("View id"), "name": {"type":"string"}, "hide": ids("Elements to hide in the view"), "unhide": ids("Elements to show again"), "unhide_all": {"type":"boolean"}, "hidden_tags": {"type":"array","items":{"type":"string"},"description":"Tags whose elements are not shown"}})), &["view"]),
+        tool("delete_view", "Delete a view (deleting a level also deletes its plan views).",
+            json!({"view": id("View id")}), &["view"]),
         // App-only (needs the Ferro app open, through Ferro Link).
         tool("get_selection", "Elements the user has selected in the Ferro app, with their summaries. Use it for requests like \"make the selected wall taller\".", json!({}), &[]),
         tool("select_elements", "Select elements in the Ferro app so the user sees what you mean.", json!({"elements": ids("Element ids (empty clears)")}), &["elements"]),
@@ -312,6 +340,36 @@ pub fn normalize(args: &Value) -> Result<Value, String> {
         }
         obj.insert("layers".into(), Value::Array(conv));
     }
+    // Views (M5-22): points, lengths and the field of view inside the
+    // nested camera / cut objects.
+    for (key, lengths, points) in [
+        ("camera", &[][..], &["eye", "target", "up"][..]),
+        ("section_plane", &[][..], &["point", "normal"][..]),
+        ("section_box", &[][..], &["min", "max"][..]),
+        (
+            "view_range",
+            &["top", "cut_height", "bottom", "view_depth"][..],
+            &[][..],
+        ),
+    ] {
+        let Some(Value::Object(mut inner)) = obj.get(key).cloned() else {
+            continue;
+        };
+        for f in lengths {
+            if let Some(v) = inner.get(*f).cloned() {
+                inner.insert((*f).into(), json!(parse_length(&v, f)?));
+            }
+        }
+        for f in points {
+            if let Some(v) = inner.get(*f).cloned() {
+                inner.insert((*f).into(), parse_point(&v, f)?);
+            }
+        }
+        if let Some(v) = inner.get("fov_y").cloned() {
+            inner.insert("fov_y".into(), json!(degrees(&v, "fov_y")?));
+        }
+        obj.insert(key.into(), Value::Object(inner));
+    }
     // Angles are degrees at this edge, radians inside (D-02).
     for f in ["angle", "latitude", "longitude"] {
         if let Some(v) = obj.get(f).cloned() {
@@ -326,6 +384,18 @@ pub fn normalize(args: &Value) -> Result<Value, String> {
         }
     }
     Ok(Value::Object(obj))
+}
+
+/// Degrees (number or text with a unit) → radians.
+fn degrees(v: &Value, f: &str) -> Result<f64, String> {
+    let deg = match v {
+        Value::Number(n) => n.as_f64().ok_or(format!("{f} must be a number"))?,
+        Value::String(s) => Angle::parse(s)
+            .ok_or(format!("cannot read {f} {s:?}"))?
+            .deg(),
+        _ => return Err(format!("{f} must be degrees")),
+    };
+    Ok(Angle::from_deg(deg).rad())
 }
 
 fn parse_length(v: &Value, field: &str) -> Result<f64, String> {
@@ -443,6 +513,16 @@ pub fn summary_of(doc: &Document, category: Option<&str>, only: Option<&[Element
                     m.insert("order".into(), json!(doc.phase_index(e.id)));
                     m.insert("start_date".into(), json!(p.start_date));
                     m.insert("end_date".into(), json!(p.end_date));
+                }
+                ElementBody::View(v) => {
+                    m.insert("view_type".into(), json!(v.view_type));
+                    let c = &v.camera;
+                    m.insert("camera".into(), json!({"eye": [c.eye.x, c.eye.y, c.eye.z], "target": [c.target.x, c.target.y, c.target.z], "up": c.up, "projection": c.projection, "fov_y_deg": round(c.fov_y.deg())}));
+                    m.insert("display_style".into(), json!(v.display_style));
+                    m.insert("hidden_elements".into(), json!(v.hidden_elements));
+                    m.insert("hidden_tags".into(), json!(v.hidden_tags));
+                    m.insert("phase".into(), json!(v.phase));
+                    m.insert("phase_filter".into(), json!(v.phase_filter));
                 }
                 ElementBody::Opening(o) => {
                     m.insert("host".into(), json!(e.host_id));
@@ -913,6 +993,63 @@ mod tests {
         assert_eq!(q["total"]["demolished"]["count"], 1);
         let d = detail(s.doc(), ElementId(b)).unwrap();
         assert!(d["phase_demolished"].is_u64(), "{d}");
+    }
+
+    #[test]
+    fn view_tools_take_user_units_and_report_views() {
+        let tools = list();
+        for name in ["create_view", "set_view", "delete_view"] {
+            let t = tools.iter().find(|t| t["name"] == name).expect(name);
+            assert_eq!(t["inputSchema"]["type"], "object", "{name}");
+        }
+        let mut s = session();
+        let l = ok(
+            &mut s,
+            "create_level",
+            json!({"name": "L1", "elevation": "3m"}),
+        )["result"]["element"]
+            .as_u64()
+            .unwrap();
+        let p = ok(
+            &mut s,
+            "create_view",
+            json!({"name": "Plan", "view_type": "plan_view", "level": l,
+                   "view_range": {"top": "2.5m", "cut_height": "1.1m", "bottom": 0, "view_depth": 0}}),
+        )["result"]["element"]
+            .as_u64()
+            .unwrap();
+        let v = ok(
+            &mut s,
+            "create_view",
+            json!({"name": "3D", "view_type": "view_3d",
+                   "camera": {"eye": ["10m", 0, "2m"], "target": [0, 0, 0], "up": [0, 0, 1], "fov_y": 60},
+                   "section_plane": {"point": [0, 0, "1.2m"], "normal": [0, 0, 1]}}),
+        )["result"]["element"]
+            .as_u64()
+            .unwrap();
+        let b = ok(
+            &mut s,
+            "create_box",
+            json!({"origin": [0, 0, 0], "width": "1m", "depth": "1m", "height": "1m"}),
+        )["result"]["element"]
+            .as_u64()
+            .unwrap();
+        ok(&mut s, "set_view", json!({"view": v, "hide": [b]}));
+        let doc = s.doc();
+        let view = doc.get(ElementId(v)).unwrap().as_view().unwrap();
+        assert!((view.camera.eye.x - 10_000.0).abs() < 1e-9);
+        assert!(
+            (view.camera.fov_y.deg() - 60.0).abs() < 1e-9,
+            "degrees at the edge"
+        );
+        let cut = doc.view_cut_plane(doc.get(ElementId(p)).unwrap()).unwrap();
+        assert!((cut.point.z - 4100.0).abs() < 1e-9, "3 m + 1.1 m");
+        let d = detail(doc, ElementId(v)).unwrap();
+        assert_eq!(d["hidden_elements"], json!([b]), "{d}");
+        assert_eq!(d["camera"]["fov_y_deg"], 60.0);
+        assert_eq!(d["view_type"]["type"], "view_3d");
+        ok(&mut s, "delete_view", json!({"view": v}));
+        assert!(s.doc().get(ElementId(v)).is_none());
     }
 
     #[test]

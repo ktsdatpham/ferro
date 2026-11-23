@@ -414,6 +414,9 @@ pub fn plan(doc: &Document, state: &RevitState) -> Vec<RevitOp> {
         let uid = e.uid.to_string();
         let name = e.name.clone();
         let (group, op) = match &e.body {
+            // Views are not synced to Revit yet (M5-22): Revit views need
+            // view family types and sheets; a later task maps them.
+            ElementBody::View(_) => continue,
             ElementBody::Material(m) => (
                 0,
                 RevitOp::Material {
