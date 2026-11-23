@@ -16,6 +16,7 @@ pub mod form_commands;
 pub mod geometry_source;
 pub mod material_commands;
 pub mod parameter_commands;
+pub mod phase_commands;
 pub mod project_commands;
 mod session;
 mod transaction;
@@ -35,6 +36,8 @@ mod fuzz_tests;
 mod geometry_source_tests;
 #[cfg(test)]
 mod material_tests;
+#[cfg(test)]
+mod phase_tests;
 #[cfg(test)]
 mod project_tests;
 #[cfg(test)]

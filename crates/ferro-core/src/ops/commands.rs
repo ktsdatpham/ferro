@@ -7,6 +7,7 @@ use super::bim_commands::*;
 use super::form_commands::*;
 use super::geometry_source::*;
 use super::parameter_commands::*;
+use super::phase_commands::*;
 use super::project_commands::*;
 use super::{CommandError, Transaction};
 use crate::algo::{push_pull_face, PushPullMode};
@@ -321,10 +322,13 @@ fn transform_elements(
                 "levels move with set_level_elevation",
             )
             .on(e.id)),
-            ElementBody::Material(_) | ElementBody::WallType(_) | ElementBody::FloorType(_) => {
+            ElementBody::Material(_)
+            | ElementBody::WallType(_)
+            | ElementBody::FloorType(_)
+            | ElementBody::Phase(_) => {
                 Err(CommandError::new(
                     "ferro.model.not_movable",
-                    "types and materials have no location",
+                    "types, materials and phases have no location",
                 )
                 .on(e.id))
             }
@@ -690,6 +694,11 @@ any_command!(
     SetProjectCurrency,
     SetMaterial,
     SetParameterDefinition,
+    CreatePhase,
+    SetPhase,
+    DeletePhase,
+    SetElementPhase,
+    SetRenovationStatus,
 );
 
 impl AnyCommand {
