@@ -143,7 +143,7 @@ impl FerroApp {
         &self,
         cmd: &AnyCommand,
     ) -> Result<(Document, CommandOutput), Vec<Failure>> {
-        ferro_core::Session::preview_on(self.doc(), cmd)
+        self.session.preview_on(self.doc(), cmd)
     }
 
     /// Status-line note while an option is edited or shown.

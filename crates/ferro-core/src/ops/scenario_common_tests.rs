@@ -211,3 +211,64 @@ impl XorShift {
         (self.next_u64() % n.max(1) as u64) as usize
     }
 }
+
+/// A stand-in geometry kernel for scenario sessions (the real one lives in
+/// `ferro-kernel`, which core does not depend on): it only answers booleans
+/// of operands whose bounding boxes are apart, where the answer is exact
+/// (a difference keeps `a`, an intersection is empty). Anything else is
+/// `ferro.kernel.unsupported`.
+pub(super) struct DisjointKernel;
+
+impl crate::algo::Kernel for DisjointKernel {
+    fn name(&self) -> &'static str {
+        "disjoint-test"
+    }
+    fn boolean(
+        &self,
+        op: crate::algo::BooleanOp,
+        a: &Body,
+        b: &Body,
+    ) -> Result<crate::algo::KernelResult, crate::algo::KernelError> {
+        use crate::algo::{BooleanOp, FaceSource, KernelError, KernelResult};
+        for x in [a, b] {
+            x.validate_solid()
+                .map_err(|e| KernelError::new(KernelError::NOT_SOLID, e.to_string()))?;
+        }
+        let apart = match (a.bounding_box(), b.bounding_box()) {
+            (Some(ba), Some(bb)) => !ba.intersects(bb),
+            _ => false,
+        };
+        if !apart {
+            return Err(KernelError::new(
+                KernelError::UNSUPPORTED,
+                "the test kernel only handles operands that are apart",
+            ));
+        }
+        match op {
+            BooleanOp::Difference => Ok(KernelResult {
+                body: a.clone(),
+                faces: a
+                    .face_ids()
+                    .map(|f| (f, vec![FaceSource::FromA(f)]))
+                    .collect(),
+                lineage: crate::topo::Lineage {
+                    kept: a.face_ids().collect(),
+                    ..Default::default()
+                },
+            }),
+            BooleanOp::Intersection => Err(KernelError::new(
+                KernelError::EMPTY_RESULT,
+                "the operands are apart",
+            )),
+            BooleanOp::Union => Err(KernelError::new(
+                KernelError::UNSUPPORTED,
+                "the test kernel has no union",
+            )),
+        }
+    }
+}
+
+/// A scenario session with the [`DisjointKernel`].
+pub(super) fn kernel_session() -> Session {
+    session().with_kernel(std::sync::Arc::new(DisjointKernel))
+}

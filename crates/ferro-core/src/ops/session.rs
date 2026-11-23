@@ -1,8 +1,10 @@
 use super::{
     AnyCommand, CommandOutput, DocumentChanged, Failure, IdSource, SequentialIds, Transaction,
 };
+use crate::algo::Kernel;
 use crate::model::Document;
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 
 /// Who performed a change (D-29). Agents are first-class actors (D-44).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -99,6 +101,7 @@ pub struct Session {
     journal: Vec<JournalEntry>,
     group: Option<Group>,
     ids: Box<dyn IdSource + Send>,
+    kernel: Option<Arc<dyn Kernel>>,
     seq: u64,
 }
 
@@ -111,8 +114,27 @@ impl Session {
             journal: Vec::new(),
             group: None,
             ids,
+            kernel: None,
             seq: 0,
         }
+    }
+
+    /// The same session with a geometry kernel (ADR 0007, D-78), injected
+    /// like the id source. Without one, commands that need it (booleans)
+    /// fail with `ferro.kernel.unavailable`.
+    pub fn with_kernel(mut self, kernel: Arc<dyn Kernel>) -> Session {
+        self.kernel = Some(kernel);
+        self
+    }
+
+    /// Attach or remove the geometry kernel.
+    pub fn set_kernel(&mut self, kernel: Option<Arc<dyn Kernel>>) {
+        self.kernel = kernel;
+    }
+
+    /// The attached geometry kernel, if any.
+    pub fn kernel(&self) -> Option<&Arc<dyn Kernel>> {
+        self.kernel.as_ref()
     }
 
     pub fn doc(&self) -> &Document {
@@ -145,7 +167,8 @@ impl Session {
     /// Run one command as one transaction (or inside the open group).
     pub fn execute(&mut self, cmd: AnyCommand, ctx: &ExecContext) -> Result<Outcome, Vec<Failure>> {
         let name = cmd.name().to_string();
-        let mut tx = Transaction::new(&name, &self.doc, self.ids.as_mut());
+        let mut tx =
+            Transaction::new(&name, &self.doc, self.ids.as_mut()).with_kernel(self.kernel.clone());
         let output = cmd.execute(&mut tx).map_err(|e| vec![e.into_failure()])?;
         let (after, changed, warnings) = tx.finish()?;
         let before = std::mem::replace(&mut self.doc, after);
@@ -221,17 +244,19 @@ impl Session {
     /// Evaluate a command on a copy without changing the session (tool
     /// previews, AI proposals). Returns the would-be document.
     pub fn preview(&self, cmd: &AnyCommand) -> Result<(Document, CommandOutput), Vec<Failure>> {
-        Self::preview_on(&self.doc, cmd)
+        self.preview_on(&self.doc, cmd)
     }
 
     /// [`Session::preview`] on any document, e.g. one resolved for a
-    /// design-option combination (the app's view while editing an option).
+    /// design-option combination (the app's view while editing an option),
+    /// with this session's geometry kernel.
     pub fn preview_on(
+        &self,
         doc: &Document,
         cmd: &AnyCommand,
     ) -> Result<(Document, CommandOutput), Vec<Failure>> {
         let mut ids = SequentialIds::new(0);
-        let mut tx = Transaction::new(cmd.name(), doc, &mut ids);
+        let mut tx = Transaction::new(cmd.name(), doc, &mut ids).with_kernel(self.kernel.clone());
         let output = cmd.execute(&mut tx).map_err(|e| vec![e.into_failure()])?;
         let (doc, _, _) = tx.finish()?;
         Ok((doc, output))
