@@ -1,6 +1,6 @@
-# 0003. Guides, dimensions, UI languages, failure reports and agent contributions
+# 0003. Reference lines, dimensions, UI languages, failure reports and agent contributions
 
-- **Status:** Proposed
+- **Status:** Accepted (2026-11-23). Names follow Revit, at the owner's request.
 - **Date:** 2026-11-23
 - **Affects:** D-20 (glossary), §3.9 (annotation left to Revit), chapter 7
 
@@ -22,18 +22,20 @@ The project owner also wants:
 
 ## Decision
 
-### 1. Construction geometry (Guides)
+### 1. Reference lines (SketchUp guides)
 
-1. New glossary terms: `ConstructionLine` (infinite line through a point with
-   a direction) and `ConstructionPoint`. UI label: "Guide", as in SketchUp.
-2. Both are elements of a new category `ConstructionGeometry`. They are saved
-   with the document, can be selected, moved, erased and hidden. They are not
-   building elements: they have no geometry body, are not exported to IFC,
-   and go to Revit only as reference planes when the user asks for it.
+1. Names follow Revit. New glossary term `ReferenceLine` (an infinite line
+   through a point with a direction), next to the existing `ReferencePlane`.
+   SketchUp guide points are `ReferencePoint`s (Revit's term). The UI may label the
+   Tape tool's output "Guide" in the SketchUp keymap only.
+2. They belong to the existing category `ReferencePlanes` (Revit
+   `OST_CLines`). They are saved with the document, can be selected, moved,
+   erased and hidden. They have no body and are not exported to IFC; they go
+   to Revit as reference planes (vertical through the line) when asked.
 3. Snapping uses them: points on them, and their intersections with edges,
    faces and each other.
-4. Commands: `create_construction_line`, `create_construction_point`. Erasing
-   and moving them uses the existing commands.
+4. Commands: `create_reference_line`, `create_reference_point`. Erasing and
+   moving them uses the existing commands.
 
 ### 2. Dimensions
 
@@ -86,8 +88,8 @@ The project owner also wants:
 - **Guides and dimensions as view state only** (not saved). Simpler and
   needs no new category, but SketchUp users expect them to be saved with the
   model and shared.
-- **Guides as `ReferencePlane`s.** A guide is a line, not a plane, and
-  reference planes are named datums that Revit users manage. Too heavy.
+- **A new "construction geometry" vocabulary.** Rejected: Revit already has
+  the words (reference plane, line, point) and Ferro follows Revit names.
 - **gettext instead of Fluent.** Fluent handles plurals and Vietnamese
   word order better and is pure Rust.
 - **Automatic crash upload.** Faster feedback, but it sends data from
@@ -97,8 +99,9 @@ The project owner also wants:
 
 ## Consequences
 
-- New categories `ConstructionGeometry` and `Dimensions` (a spec change to
-  the closed `Category` enum, with Revit and IFC mappings in chapter 6).
+- New category `Dimensions` (a spec change to the closed `Category` enum,
+  with Revit and IFC mappings in chapter 6); reference lines reuse
+  `ReferencePlanes`.
 - `ferro-app` gains the `fluent-bundle` dependency (not `ferro-core`).
 - A one-time sweep moves all UI strings into `en.ftl`.
 - New `ferro-check` script and PR template; `AGENTS.md` points to them.
