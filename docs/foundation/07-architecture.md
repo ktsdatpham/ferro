@@ -31,7 +31,8 @@ math     Point3, Vec3, UnitVec3, Transform, BoundingBox3, Length, Angle, tol
 | `ferro-snap` | `ferro-core` | Inference (snapping) |
 | `ferro-tools` | `ferro-core` | Tool schemas, unit normalisation, dispatch, Ferro Link protocol (ADR 0001) |
 | `ferro-mcp` | `ferro-core`, `ferro-io`, `ferro-tools` | MCP server; forwards to the open app over Ferro Link |
-| `ferro-ffi` | `ferro-core` | C ABI for the Revit add-in and native shells |
+| `ferro-revit` | `ferro-core` | Revit edge: Ferro → Revit operations (feet), Revit → Ferro import (ADR 0002) |
+| `ferro-ffi` | `ferro-core`, `ferro-io`, `ferro-revit` | C ABI for the Revit add-in and native shells |
 | `ferro-render` (M1) | `ferro-core`, `wgpu` | Turns elements into GPU meshes, camera-relative |
 | `ferro-app` | all above, `eframe` / `wgpu`, `ureq` | Tools, selection, UI, input, Ferro Link server, AI chat |
 

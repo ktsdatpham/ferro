@@ -184,6 +184,9 @@ struct Importer<'a> {
     report: ImportReport,
     /// Revit unique id → Ferro element.
     ids: HashMap<String, ElementId>,
+    /// Revit levels standing for "no level" in Ferro (the default level the
+    /// plan creates for level-less elements).
+    no_level: HashSet<String>,
 }
 
 impl Importer<'_> {
@@ -236,6 +239,10 @@ impl Importer<'_> {
     fn levels(&mut self, levels: &[RevitLevel]) {
         for l in levels {
             let elev = mm(l.elevation);
+            if l.ferro_uid.as_deref() == Some(crate::plan::DEFAULT_LEVEL_UID) {
+                self.no_level.insert(l.unique_id.clone());
+                continue;
+            }
             let existing = self.by_uid(&l.ferro_uid).or_else(|| {
                 // Same name already in Ferro: adopt it instead of duplicating.
                 self.doc()
@@ -350,9 +357,10 @@ impl Importer<'_> {
 
     fn walls(&mut self, walls: &[RevitWall]) {
         for w in walls {
-            let (Some(&level), Some(&ty)) = (
-                self.ids.get(&w.level_unique_id),
+            let level = self.ids.get(&w.level_unique_id).copied();
+            let (Some(&ty), true) = (
                 self.ids.get(&w.type_unique_id),
+                level.is_some() || self.no_level.contains(&w.level_unique_id),
             ) else {
                 self.report
                     .warnings
@@ -436,9 +444,10 @@ impl Importer<'_> {
 
     fn floors(&mut self, floors: &[RevitFloor]) {
         for f in floors {
-            let (Some(&level), Some(&ty)) = (
-                self.ids.get(&f.level_unique_id),
+            let level = self.ids.get(&f.level_unique_id).copied();
+            let (Some(&ty), true) = (
                 self.ids.get(&f.type_unique_id),
+                level.is_some() || self.no_level.contains(&f.level_unique_id),
             ) else {
                 self.report
                     .warnings
@@ -620,6 +629,7 @@ pub fn import(session: &mut Session, ctx: &ExecContext, snap: &RevitSnapshot) ->
         ctx,
         report: ImportReport::default(),
         ids: HashMap::new(),
+        no_level: HashSet::new(),
     };
     imp.levels(&snap.levels);
     imp.types(&snap.wall_types, false);
@@ -817,6 +827,36 @@ mod tests {
             unreachable!()
         };
         assert!((o.position.mm() - 8.0 * 304.8).abs() < 1e-6);
+    }
+
+    #[test]
+    fn the_default_level_maps_back_to_no_level() {
+        let mut s = empty();
+        let snap = RevitSnapshot {
+            levels: vec![RevitLevel {
+                unique_id: "l0".into(),
+                ferro_uid: Some(crate::plan::DEFAULT_LEVEL_UID.into()),
+                name: "Ferro Level 0".into(),
+                elevation: 0.0,
+            }],
+            ..revit_house()
+        };
+        let mut snap = snap;
+        for w in &mut snap.walls {
+            w.level_unique_id = "l0".into();
+            w.top_level_unique_id = None;
+            w.height = 10.0;
+        }
+        snap.floors.clear();
+        snap.openings.clear();
+        let r = import(&mut s, &ExecContext::user(), &snap);
+        assert!(r.warnings.is_empty(), "{:?}", r.warnings);
+        assert!(s.doc().levels().is_empty(), "no level created");
+        assert!(s
+            .doc()
+            .elements()
+            .filter(|e| e.as_wall().is_some())
+            .all(|e| e.level_id.is_none()));
     }
 
     #[test]

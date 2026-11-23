@@ -4,17 +4,19 @@
 //!   incremental saves; crash-safe.
 //! * `.fro.json`: JSON interchange with the same logical schema; element
 //!   references are written as `Uid`s.
-//! * OBJ and glTF (GLB) export (D-75, M1).
+//! * OBJ and glTF (GLB) export (D-75, M1); IFC4 export (M3).
 //! * [`SystemIds`]: time + random UUID v7 source for apps.
 
 mod export;
 mod fro;
 mod ids;
+mod ifc;
 mod json;
 
 pub use export::{export_glb, export_obj};
 pub use fro::{load_fro, save_fro, FroStore};
 pub use ids::SystemIds;
+pub use ifc::{export_ifc, ifc_guid};
 pub use json::{document_from_json, document_to_json, FORMAT_VERSION};
 
 use std::fmt;

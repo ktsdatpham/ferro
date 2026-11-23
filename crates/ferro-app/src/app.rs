@@ -429,6 +429,24 @@ impl FerroApp {
         }
     }
 
+    fn export_ifc(&mut self) {
+        let name = format!("{}.ifc", self.session.doc().project().name);
+        let Some(p) = rfd::FileDialog::new()
+            .add_filter("IFC4", &["ifc"])
+            .set_file_name(name)
+            .save_file()
+        else {
+            return;
+        };
+        let r = ferro_io::export_ifc(self.session.doc())
+            .map_err(|e| e.to_string())
+            .and_then(|t| std::fs::write(&p, t).map_err(|e| e.to_string()));
+        match r {
+            Ok(()) => self.say(format!("Exported {}", p.display()), false),
+            Err(e) => self.say(format!("Export failed: {e}"), true),
+        }
+    }
+
     fn suggest_level_name(&mut self) {
         let levels = self.session.doc().levels();
         self.new_level_name = format!("L{}", levels.len() + 2);
@@ -569,6 +587,9 @@ impl FerroApp {
                 }
                 if ui.button("Export glTF (.glb)…").clicked() {
                     self.export(true);
+                }
+                if ui.button("Export IFC4…").clicked() {
+                    self.export_ifc();
                 }
                 ui.separator();
                 if ui.button("Quit").clicked() {
@@ -1495,10 +1516,31 @@ impl FerroApp {
                 self.save();
                 return answer(Ok(json!({"saved": self.path})));
             }
-            "new_document" | "open_document" | "export_obj" | "export_glb" => {
+            "new_document" | "open_document" | "export_obj" | "export_glb" | "export_ifc" => {
                 return answer(Err(
                     json!({"error": format!("{tool} is not available while linked to the open app; ask the user to do it in Ferro")}),
                 ));
+            }
+            "get_selection" => {
+                let mut sel: Vec<ElementId> = self.selection.iter().copied().collect();
+                sel.sort();
+                return answer(Ok(ferro_tools::summary_of(
+                    self.session.doc(),
+                    None,
+                    Some(&sel),
+                )));
+            }
+            "select_elements" => {
+                let ids: Vec<ElementId> = req
+                    .args
+                    .get("elements")
+                    .and_then(|v| serde_json::from_value(v.clone()).ok())
+                    .unwrap_or_default();
+                self.selection = ids
+                    .into_iter()
+                    .filter(|id| self.session.doc().contains(*id))
+                    .collect();
+                return answer(Ok(json!({"selected": self.selection.len()})));
             }
             "undo" | "redo" if self.proposal.is_some() => {
                 return answer(Err(
@@ -1519,6 +1561,21 @@ impl FerroApp {
         }
         let r = ferro_tools::call(&mut self.session, &ctx, tool, &req.args)
             .unwrap_or_else(|| Err(json!({"error": format!("unknown tool: {tool}")})));
+        // An import that changed nothing is not a step.
+        let no_op = tool == "revit_import"
+            && r.as_ref().is_ok_and(|b| {
+                let rep = &b["report"];
+                rep["created"].as_array().is_none_or(|a| a.is_empty())
+                    && rep["updated"].as_u64() == Some(0)
+                    && rep["deleted"].as_u64() == Some(0)
+            });
+        if no_op {
+            if self.proposal.as_ref().is_some_and(|p| p.steps == 0) {
+                self.session.cancel_group();
+                self.proposal = None;
+            }
+            return answer(r);
+        }
         if is_command {
             match (&r, &mut self.proposal) {
                 (Ok(_), Some(p)) => {

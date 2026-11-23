@@ -559,3 +559,28 @@ fn set_wall_and_set_floor_edit_location_and_constraints() {
     );
     assert!((volume(&s, f) - 2000.0 * 2000.0 * 200.0).abs() < 1.0);
 }
+
+#[test]
+fn tee_join_trims_the_branch_to_the_face() {
+    let mut s = session();
+    let main = wall(&mut s, 0.0, 0.0, 6000.0, 0.0);
+    // Branch from the middle of `main` going north (and one going south).
+    let north = wall(&mut s, 3000.0, 0.0, 3000.0, 4000.0);
+    let south = wall(&mut s, 3000.0, -3000.0, 3000.0, 0.0);
+    assert!(
+        (volume(&s, main) - 6000.0 * T * H).abs() < 1.0,
+        "main is untouched"
+    );
+    // Each branch loses half the main wall's thickness.
+    for w in [north, south] {
+        let len = if w == north { 4000.0 } else { 3000.0 };
+        assert!((volume(&s, w) - (len - T / 2.0) * T * H).abs() < 1.0);
+    }
+    let bb = s.doc().get(north).unwrap().bounding_box().unwrap();
+    assert!((bb.min.y - T / 2.0).abs() < 1e-6);
+    // An angled branch is cut along the face too (no overlap, still a solid).
+    let angled = wall(&mut s, 1000.0, 0.0, 2000.0, 2000.0);
+    assert!(volume(&s, angled) > 0.0);
+    let bb = s.doc().get(angled).unwrap().bounding_box().unwrap();
+    assert!(bb.min.y >= T / 2.0 - 1e-6);
+}

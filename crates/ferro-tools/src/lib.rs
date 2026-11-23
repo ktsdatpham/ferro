@@ -112,6 +112,9 @@ pub fn list() -> Vec<Value> {
             json!({"wall": id("Wall id"), "start": point("Start"), "end": point("End"), "mid": point("Point on the arc (curved walls)"), "base_offset": length(), "height": length(), "top_level": id("Level the top attaches to"), "top_offset": length(), "location_line": {"type":"string","enum":["wall_centerline","core_centerline","finish_exterior","finish_interior"]}}), &["wall"]),
         tool("set_floor", "Change a floor's outline (points [x, y]), holes or offset. Omitted fields keep their value.",
             json!({"floor": id("Floor id"), "points": {"type":"array","items": point("Vertex"), "minItems": 3}, "holes": {"type":"array","items":{"type":"array","items": point("Vertex")}}, "offset": length()}), &["floor"]),
+        // App-only (needs the Ferro app open, through Ferro Link).
+        tool("get_selection", "Elements the user has selected in the Ferro app, with their summaries. Use it for requests like \"make the selected wall taller\".", json!({}), &[]),
+        tool("select_elements", "Select elements in the Ferro app so the user sees what you mean.", json!({"elements": ids("Element ids (empty clears)")}), &["elements"]),
         // Revit link (used by the Ferro add-in for Revit).
         tool("get_document_version", "Version number of the open document; it increases with every change. Revit polls it to pull changes live.", json!({}), &[]),
         tool("revit_plan", "Ferro → Revit: the operations (in feet) that bring a Revit model up to date. `state` lists the Revit elements already tagged with Ferro uids and their signatures.",
@@ -224,9 +227,15 @@ pub fn failures_json(f: &[Failure]) -> Value {
 
 /// Model summary (`list_elements`).
 pub fn summary(doc: &Document, category: Option<&str>) -> Value {
+    summary_of(doc, category, None)
+}
+
+/// Summary restricted to some elements (selection).
+pub fn summary_of(doc: &Document, category: Option<&str>, only: Option<&[ElementId]>) -> Value {
     let items: Vec<Value> = doc
         .elements()
         .filter(|e| category.is_none_or(|c| e.category.to_string() == c))
+        .filter(|e| only.is_none_or(|ids| ids.contains(&e.id)))
         .map(|e| {
             let mut m = Map::new();
             m.insert("id".into(), json!(e.id));
@@ -421,6 +430,9 @@ pub fn call(
             let j = session.journal();
             Ok(json!(j[j.len().saturating_sub(n)..]))
         }
+        "get_selection" | "select_elements" => {
+            err("this tool needs the Ferro app open (Ferro Link)".into())
+        }
         _ => return None,
     })
 }
@@ -448,13 +460,19 @@ pub fn file_tools() -> Vec<Value> {
         ),
         tool(
             "export_obj",
-            "Export Forms to Wavefront OBJ (Y-up, metres).",
+            "Export the model geometry to Wavefront OBJ (Y-up, metres).",
             json!({"path":{"type":"string"}}),
             &["path"],
         ),
         tool(
             "export_glb",
-            "Export Forms to binary glTF (Y-up, metres).",
+            "Export the model geometry to binary glTF (Y-up, metres).",
+            json!({"path":{"type":"string"}}),
+            &["path"],
+        ),
+        tool(
+            "export_ifc",
+            "Export to IFC4 (walls, slabs, doors, windows with openings, types with material layers, storeys, base quantities; millimetres).",
             json!({"path":{"type":"string"}}),
             &["path"],
         ),

@@ -6,13 +6,12 @@
 tool that lets designers sketch freely and fast, while real BIM data builds up
 underneath, ready to hand to Revit for documentation.
 
-> Status: **milestone 2 — BIM elements and live AI.** Sketch modelling with
-> SketchUp-style snapping and push/pull, plus real walls, floors, doors and
-> windows with types and materials. AI agents (any MCP client, or the built-in
-> chat with your own key) edit the model you have open, as a proposal you accept
-> or reject. The Revit link and rendering come next.
+> Status: **milestone 3 — Revit link and IFC.** Sketch modelling with
+> SketchUp-style snapping and push/pull, real walls, floors, doors and windows
+> with types and materials, AI agents that edit the open model as proposals,
+> a **two-way link with Revit 2025+** and **IFC4 export**.
 
-![Ferro milestone 2: an AI agent's proposal waiting for review](docs/images/screenshot-m2.png)
+![Ferro milestone 3: changes pushed from Revit waiting for review](docs/images/screenshot-m3.png)
 
 ## Download
 
@@ -49,16 +48,17 @@ Keeping the scope tight matters more than piling on features. Ferro core is
 Anything outside the core loop (sketch → AI → BIM data → Revit) should be an
 add-in.
 
-## What works today (milestone 2)
+## What works today (milestone 3)
 
 | Area | Status |
 |---|---|
 | Tools | Select, Rectangle, Polygon, Push/Pull, Move (Ctrl = copy), Eraser; Wall, Floor, Door, Window; type exact values while drawing (`4000,3000`, `3m`) |
-| BIM | Walls (straight and curved, mitred corners, top attached to a level or fixed height), floors with holes, doors and windows that cut their wall; wall / floor types with layers and materials; push/pull a wall's top to change its height, its end to change its length |
+| BIM | Walls (straight and curved, mitred corners and T-junctions, top attached to a level or fixed height), floors with holes, doors and windows that cut their wall; wall / floor types with layers and materials; push/pull a wall's top to change its height, its end to change its length |
 | Snapping | Endpoint, midpoint, on edge, on face, red / green / blue axis inference, ground / active level |
 | Model | Immutable document, elements with stable UUIDs, levels (Forms move with their level), Forms classifiable as walls / floors / roofs …, typed parameters, computed area and volume |
 | History | Every change is one command + transaction: undo / redo, journal of who did what (user or AI agent) |
-| Files | `.fro` (SQLite, autosave, crash-safe), `.fro.json` interchange, OBJ and glTF export |
+| Files | `.fro` (SQLite, autosave, crash-safe), `.fro.json` interchange, OBJ, glTF and **IFC4** export |
+| Revit | Add-in for Revit 2025+: **Pull** Ferro → Revit as native levels, types, walls, floors, doors, windows (Forms as DirectShapes); **Push** Revit → Ferro as a proposal; **Live sync** |
 | AI | `ferro-mcp`: every command is an MCP tool (units like `"3m"`, angles in degrees). With the app open, agents edit the open model over **Ferro Link**; their changes arrive as a proposal (Accept / Reject). Built-in **AI chat** with your own Anthropic key or any OpenAI-compatible endpoint (including local models) |
 | Platforms | Windows, macOS, Linux; kernel builds for WebAssembly |
 
@@ -81,11 +81,12 @@ add-in.
 | `crates/ferro-core` | Kernel: math, curves and profiles, half-edge B-rep with persistent ids, extrude / push-pull / triangulation, immutable `Document`, commands, transactions, undo |
 | `crates/ferro-io` | `.fro` SQLite files (incremental autosave), `.fro.json`, OBJ / glTF export |
 | `crates/ferro-snap` | Inference engine: SketchUp-style snapping in screen space |
+| `crates/ferro-revit` | Revit link logic: Ferro → Revit operations (feet), Revit → Ferro import |
 | `crates/ferro-tools` | Shared AI tool surface: schemas, unit conversion, dispatch, Ferro Link protocol |
 | `crates/ferro-mcp` | MCP server over stdio; forwards to the open app over Ferro Link, else works headless with save / export |
 | `crates/ferro-ffi` | C ABI for the Revit add-in and native shells |
 | `crates/ferro-app` | The desktop app (`ferro`): viewport, tools, levels, properties |
-| `revit-addin/` | C# shell that loads the Rust core inside Revit |
+| `revit-addin/` | Revit 2025+ add-in (C#): Pull / Push / Live sync, executes what `ferro-revit` decides |
 
 ## Build from source
 
@@ -130,7 +131,7 @@ See [docs/ROADMAP.md](docs/ROADMAP.md). In short:
 
 1. ✅ **Viewport + SketchUp basics**: window, orbit, rectangle, push-pull, snapping (`docs/milestones/M1.md`)
 2. ✅ **BIM elements + AI in the app**: walls, floors, doors, windows, types, materials; Ferro Link, proposals, chat (`docs/milestones/M2.md`)
-3. **Revit link**: solids → DirectShape, tags → native walls / floors / rooms
+3. ✅ **Revit link + IFC**: two-way sync with native elements, IFC4 export, T-joins (`docs/milestones/M3.md`)
 4. **Rhino-style power**: command line, parametric nodes, IFC export
 5. **Real-time rendering**: materials and lighting in the viewport, wgpu PBR
 
