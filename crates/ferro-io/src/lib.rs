@@ -17,7 +17,7 @@ mod migrate;
 pub use export::{export_glb, export_obj};
 pub use fro::{load_fro, save_fro, FroStore};
 pub use ids::SystemIds;
-pub use ifc::{export_ifc, export_ifc_phase, ifc_guid};
+pub use ifc::{export_ifc, export_ifc_combination, export_ifc_phase, ifc_guid};
 pub use json::{document_from_json, document_to_json};
 pub use migrate::{migrate, FORMAT_VERSION};
 

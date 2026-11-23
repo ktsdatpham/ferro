@@ -285,7 +285,45 @@ fn house(gaps: bool) -> Session {
         "create_phase",
         json!({"name": "Hoàn thiện", "start_date": "2027-01-15", "end_date": "2027-06-30"}),
     );
+    // Design options (M5-23.9): set "Mái" with A (primary: adds a
+    // pavilion) and B (renames the south wall, adds another pavilion).
+    let o = run(&mut s, "create_option_set", json!({"name": "Mái"}));
+    let a = ElementId(o["option"].as_u64().expect("option"));
+    let b = ElementId(el(&run(
+        &mut s,
+        "create_design_option",
+        json!({"set": el(&o), "name": "B"}),
+    )));
+    in_option(
+        &mut s,
+        a,
+        "create_box",
+        json!({"origin": p(0.0, 20_000.0, 0.0), "width": 3000, "depth": 3000, "height": 3000, "name": "Pavilion A"}),
+    );
+    in_option(
+        &mut s,
+        b,
+        "create_box",
+        json!({"origin": p(0.0, 20_000.0, 0.0), "width": 4000, "depth": 3000, "height": 3000, "name": "Pavilion B"}),
+    );
+    in_option(
+        &mut s,
+        b,
+        "set_name",
+        json!({"element": south, "name": "South wall B"}),
+    );
     s
+}
+
+fn in_option(s: &mut Session, option: ElementId, tool: &str, args: Value) {
+    let cmd = AnyCommand::from_tool(tool, &args).unwrap_or_else(|m| panic!("{tool}: {m}"));
+    s.execute_in_option(
+        option,
+        &ferro_core::model::Combination::primary(),
+        cmd,
+        &ExecContext::user(),
+    )
+    .unwrap_or_else(|f| panic!("{tool} in option: {f:?}"));
 }
 
 /// Element as JSON with every element reference replaced by the target's
@@ -392,6 +430,31 @@ fn every_element_kind_is_present() {
     assert!(!s.doc().project().parameter_definitions.is_empty());
     assert!(has(|e| matches!(e.body, ElementBody::Phase(_))));
     assert!(has(|e| e.phase_demolished.is_some()));
+    assert!(has(|e| matches!(e.body, ElementBody::OptionSet(_))));
+    assert!(has(|e| e
+        .as_design_option()
+        .is_some_and(|o| o.changes.len() >= 2)));
+}
+
+/// IFC shows the primary combination: option A's pavilion, not B's; option
+/// sets themselves are not exported.
+#[test]
+fn ifc_exports_the_primary_combination() {
+    let s = house(false);
+    let ifc = export_ifc(s.doc()).expect("ifc");
+    assert!(ifc.contains("'Pavilion A'"), "primary option exported");
+    assert!(!ifc.contains("Pavilion B"), "other options left out");
+    assert!(!ifc.contains("South wall B"), "B's rename left out");
+    // Another combination on request.
+    let b = s
+        .doc()
+        .elements()
+        .find(|e| e.name.as_deref() == Some("B"))
+        .expect("option B")
+        .id;
+    let combo = ferro_core::model::Combination { options: vec![b] };
+    let other = ferro_io::export_ifc_combination(s.doc(), &combo, None).expect("ifc");
+    assert!(other.contains("'Pavilion B'") && !other.contains("Pavilion A"));
 }
 
 #[test]
