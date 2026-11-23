@@ -23,6 +23,7 @@ pub enum ToolKind {
     Line,
     Rectangle,
     Circle,
+    Arc,
     Polygon,
     PushPull,
     Offset,
@@ -31,6 +32,7 @@ pub enum ToolKind {
     Scale,
     Eraser,
     Paint,
+    Tape,
     Wall,
     Floor,
     Door,
@@ -38,11 +40,12 @@ pub enum ToolKind {
 }
 
 impl ToolKind {
-    pub const ALL: [ToolKind; 16] = [
+    pub const ALL: [ToolKind; 18] = [
         ToolKind::Select,
         ToolKind::Line,
         ToolKind::Rectangle,
         ToolKind::Circle,
+        ToolKind::Arc,
         ToolKind::Polygon,
         ToolKind::PushPull,
         ToolKind::Offset,
@@ -51,6 +54,7 @@ impl ToolKind {
         ToolKind::Scale,
         ToolKind::Eraser,
         ToolKind::Paint,
+        ToolKind::Tape,
         ToolKind::Wall,
         ToolKind::Floor,
         ToolKind::Door,
@@ -75,6 +79,8 @@ impl ToolKind {
             ToolKind::Line => "Line",
             ToolKind::Rectangle => "Rectangle",
             ToolKind::Circle => "Circle",
+            ToolKind::Arc => "Arc",
+            ToolKind::Tape => "Tape Measure",
             ToolKind::Polygon => "Polygon",
             ToolKind::PushPull => "Push/Pull",
             ToolKind::Offset => "Offset",
@@ -96,6 +102,8 @@ impl ToolKind {
             ToolKind::Line => "L",
             ToolKind::Rectangle => "R",
             ToolKind::Circle => "C",
+            ToolKind::Arc => "A",
+            ToolKind::Tape => "T",
             ToolKind::Polygon => "G",
             ToolKind::PushPull => "P",
             ToolKind::Offset => "F",
@@ -173,6 +181,8 @@ pub enum SelectOp {
 
 pub enum ToolEvent {
     None,
+    /// Show a message (measurements).
+    Message(String),
     Commit(AnyCommand),
     Select(SelectOp),
 }
@@ -282,6 +292,10 @@ pub struct ToolState {
     pending_face_of: Option<ElementId>,
     /// Move of parts of a Form (stretch) instead of whole elements.
     geom: Option<(ElementId, Vec<SubPick>)>,
+    /// Arc: start and end points (the third click sets the bulge).
+    arc: Vec<Point3>,
+    /// Tape measure start.
+    tape: Option<Point3>,
 }
 
 fn is_point_snap(k: SnapKind) -> bool {
@@ -378,6 +392,51 @@ fn is_form(doc: &Document, e: ElementId) -> bool {
     doc.get(e).is_some_and(|x| x.as_form().is_some())
 }
 
+/// Points of the arc from `a` to `b` (in `plane`), about every 7.5°. As in
+/// SketchUp, `m` sets the bulge: the arc's apex is as far from the chord as
+/// `m` is, on the same side. `None` when there is no bulge.
+fn arc_points(plane: &DrawPlane, a: Point3, b: Point3, m: Point3) -> Option<Vec<Point3>> {
+    let (ax, ay) = plane.local(a);
+    let (bx, by) = plane.local(b);
+    let (px, py) = plane.local(m);
+    let len = ((bx - ax).powi(2) + (by - ay).powi(2)).sqrt();
+    if len < 1e-6 {
+        return None;
+    }
+    // Unit normal of the chord and the signed bulge.
+    let (nx, ny) = (-(by - ay) / len, (bx - ax) / len);
+    let h = (px - ax) * nx + (py - ay) * ny;
+    let (mx, my) = ((ax + bx) / 2.0 + h * nx, (ay + by) / 2.0 + h * ny);
+    let d = 2.0 * (ax * (by - my) + bx * (my - ay) + mx * (ay - by));
+    if d.abs() < 1e-6 {
+        return None;
+    }
+    let sq = |x: f64, y: f64| x * x + y * y;
+    let cx = (sq(ax, ay) * (by - my) + sq(bx, by) * (my - ay) + sq(mx, my) * (ay - by)) / d;
+    let cy = (sq(ax, ay) * (mx - bx) + sq(bx, by) * (ax - mx) + sq(mx, my) * (bx - ax)) / d;
+    let r = ((ax - cx).powi(2) + (ay - cy).powi(2)).sqrt();
+    let ang = |x: f64, y: f64| (y - cy).atan2(x - cx);
+    let (t0, t1, tm) = (ang(ax, ay), ang(bx, by), ang(mx, my));
+    let tau = std::f64::consts::TAU;
+    let ccw = |from: f64, to: f64| (to - from).rem_euclid(tau);
+    // Sweep from a to b passing through m.
+    let sweep = if ccw(t0, tm) <= ccw(t0, t1) {
+        ccw(t0, t1)
+    } else {
+        -(tau - ccw(t0, t1))
+    };
+    // Even, so the apex is one of the points.
+    let n = ((sweep.abs() / 15f64.to_radians()).ceil() as usize).max(1) * 2;
+    Some(
+        (0..=n)
+            .map(|i| {
+                let t = t0 + sweep * i as f64 / n as f64;
+                plane.at(cx + r * t.cos(), cy + r * t.sin())
+            })
+            .collect(),
+    )
+}
+
 /// Closest distance from `p` to the polygon boundary (2D in `plane`).
 fn distance_to_boundary(plane: &DrawPlane, p: Point3, boundary: &[Point3]) -> f64 {
     let (px, py) = plane.local(p);
@@ -413,12 +472,16 @@ impl ToolState {
             paste: false,
             pending_face_of: None,
             geom: None,
+            arc: Vec::new(),
+            tape: None,
         }
     }
 
     pub fn is_active(&self) -> bool {
         self.rect_first.is_some()
             || self.circle_center.is_some()
+            || !self.arc.is_empty()
+            || self.tape.is_some()
             || !self.poly.is_empty()
             || self.drag.is_some()
             || self.offset.is_some()
@@ -488,7 +551,11 @@ impl ToolState {
                 Some((e, f))
             }
             ToolKind::Offset => is_form(ctx.doc, e).then_some((e, f)),
-            ToolKind::Line | ToolKind::Rectangle | ToolKind::Circle | ToolKind::Polygon
+            ToolKind::Line
+            | ToolKind::Rectangle
+            | ToolKind::Circle
+            | ToolKind::Arc
+            | ToolKind::Polygon
                 if !self.is_active() && s.kind == SnapKind::OnFace =>
             {
                 is_form(ctx.doc, e).then_some((e, f))
@@ -676,6 +743,11 @@ impl ToolState {
                 let r = p.distance_to(c);
                 (r >= 1.0).then(|| self.circle_cmd(&plane, c, r))
             }
+            ToolKind::Arc => {
+                let plane = self.arc_plane(ctx)?;
+                let m = on_plane(ctx, &plane)?;
+                self.arc_cmd(&plane, m)
+            }
             ToolKind::Polygon | ToolKind::Line => None,
             ToolKind::Wall => {
                 let last = *self.poly.last()?;
@@ -769,6 +841,37 @@ impl ToolState {
         .into()
     }
 
+    /// The arc's plane. An arc started on a Form edge lies on the face that
+    /// holds its ends and the bulge point (decided while setting the bulge).
+    fn arc_plane(&self, ctx: &ToolCtx) -> Option<DrawPlane> {
+        match (self.pending_face_of, self.arc.as_slice(), ctx.snap) {
+            (Some(e), [a, b], Some(s)) => {
+                Some(match face_containing(ctx.doc, e, &[*a, *b, s.point]) {
+                    Some((f, n)) => DrawPlane::on_face(*a, n, Some((e, f))),
+                    None => self.plane?,
+                })
+            }
+            _ => self.plane,
+        }
+    }
+
+    /// The arc through the bulge point `m`: on a face it splits it (its ends
+    /// should be on the face's edges); elsewhere arc + chord make a face.
+    fn arc_cmd(&self, plane: &DrawPlane, m: Point3) -> Option<AnyCommand> {
+        let [a, b] = <[Point3; 2]>::try_from(self.arc.as_slice()).ok()?;
+        let pts = arc_points(plane, a, b, m)?;
+        Some(match plane.face {
+            Some((element, face)) => ImprintFace {
+                element,
+                face,
+                points: pts,
+                closed: false,
+            }
+            .into(),
+            None => self.shape_cmd(plane, pts),
+        })
+    }
+
     fn circle_cmd(&self, plane: &DrawPlane, c: Point3, r: f64) -> AnyCommand {
         let (element, face) = match plane.face {
             Some((e, f)) => (Some(e), Some(f)),
@@ -797,6 +900,11 @@ impl ToolState {
                 let (a0, b0) = plane.local(f);
                 let (a1, b1) = plane.local(p);
                 Some(format!("{}, {}", m((a1 - a0).abs()), m((b1 - b0).abs())))
+            })()
+            .unwrap_or_default(),
+            ToolKind::Tape => (|| {
+                let a = self.tape?;
+                Some(m(ctx.snap?.point.distance_to(a)))
             })()
             .unwrap_or_default(),
             ToolKind::Circle => (|| {
@@ -837,6 +945,7 @@ impl ToolState {
         match self.kind {
             ToolKind::Rectangle => "Dimensions",
             ToolKind::Circle => "Radius",
+            ToolKind::Tape => "Length",
             k if k.is_chain() => "Length",
             ToolKind::PushPull | ToolKind::Move | ToolKind::Offset => "Distance",
             ToolKind::Rotate => "Angle",
@@ -869,6 +978,11 @@ impl ToolState {
             ToolKind::Scale if self.reference.is_none() => "Click a reference point.",
             ToolKind::Scale => "Move to scale, click, or type a factor (e.g. 2 or 0.5) and press Enter.",
             ToolKind::Eraser => "Click an element to delete it.",
+            ToolKind::Arc if self.arc.is_empty() => "Click the start of the arc (on a face's edge to round a corner).",
+            ToolKind::Arc if self.arc.len() == 1 => "Click the end of the arc.",
+            ToolKind::Arc => "Move to set the bulge and click.",
+            ToolKind::Tape if self.tape.is_none() => "Click the first point to measure from.",
+            ToolKind::Tape => "Click the second point: the distance shows in the status bar.",
             ToolKind::Paint => "Click an element to paint it with the current material (pick one in the Materials panel).",
             ToolKind::Wall if self.poly.is_empty() => "Click the start of the wall. Draw clockwise so the exterior faces out (as in Revit).",
             ToolKind::Wall => "Click the next corner or type a length. Click the first point to close the loop, or press Enter to finish an open chain.",
@@ -926,6 +1040,63 @@ impl ToolState {
                     .into(),
                 ),
                 _ => ToolEvent::None,
+            },
+            ToolKind::Tape => match self.tape {
+                None => {
+                    self.tape = Some(s.point);
+                    ToolEvent::None
+                }
+                Some(a) => {
+                    self.tape = None;
+                    let d = s.point - a;
+                    ToolEvent::Message(format!(
+                        "Distance {:.0} mm  (Δx {:.0}, Δy {:.0}, Δz {:.0})",
+                        d.length(),
+                        d.x,
+                        d.y,
+                        d.z
+                    ))
+                }
+            },
+            ToolKind::Arc => match self.arc.len() {
+                0 => {
+                    let plane = self.pick_plane(ctx, &s);
+                    let on_edge = matches!(
+                        s.kind,
+                        SnapKind::Endpoint | SnapKind::Midpoint | SnapKind::OnEdge
+                    ) && s.element.is_some_and(|e| is_form(ctx.doc, e));
+                    if on_edge {
+                        // Which face? Decided with the bulge point.
+                        self.pending_face_of = s.element;
+                        self.arc.push(s.point);
+                    } else {
+                        self.arc.push(plane.project(s.point));
+                    }
+                    self.plane = Some(plane);
+                    ToolEvent::None
+                }
+                1 => {
+                    let p = if self.pending_face_of.is_some() {
+                        Some(s.point)
+                    } else {
+                        self.plane.and_then(|pl| on_plane(ctx, &pl))
+                    };
+                    if let Some(p) = p {
+                        if p.distance_to(self.arc[0]) >= 1.0 {
+                            self.arc.push(p);
+                        }
+                    }
+                    ToolEvent::None
+                }
+                _ => match self.preview(ctx) {
+                    Some(c) => {
+                        self.arc.clear();
+                        self.plane = None;
+                        self.pending_face_of = None;
+                        ToolEvent::Commit(c)
+                    }
+                    None => ToolEvent::None,
+                },
             },
             ToolKind::Rectangle => match self.rect_first {
                 None => {
@@ -1069,7 +1240,9 @@ impl ToolState {
             },
             ToolKind::Move => match self.move_base {
                 None if ctx.editing.is_some() => {
-                    let e = ctx.editing.expect("editing");
+                    let Some(e) = ctx.editing else {
+                        return ToolEvent::None;
+                    };
                     let parts: Vec<SubPick> = if ctx.sub.is_empty() {
                         pick_sub(ctx.doc, e, &s).into_iter().collect()
                     } else {
@@ -1395,6 +1568,21 @@ impl ToolState {
                 segs.push((c, p));
             }
         }
+        if let Some(a) = self.tape {
+            if let Some(p) = ctx.snap.map(|s| s.point) {
+                segs.push((a, p));
+            }
+        }
+        if let (1, Some(plane)) = (self.arc.len(), self.plane) {
+            let p = if self.pending_face_of.is_some() {
+                ctx.snap.map(|s| s.point)
+            } else {
+                on_plane(ctx, &plane)
+            };
+            if let Some(p) = p {
+                segs.push((self.arc[0], p));
+            }
+        }
         if let (Some(c), Some(plane)) = (self.circle_center, self.plane) {
             if let Some(p) = on_plane(ctx, &plane) {
                 segs.push((c, p));
@@ -1407,6 +1595,32 @@ impl ToolState {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn arcs_pass_through_the_bulge_point() {
+        let pl = DrawPlane::horizontal(0.0, None);
+        let p = |x: f64, y: f64| Point3::new(x, y, 0.0);
+        let near = |a: Point3, b: Point3| a.distance_to(b) < 1e-6;
+        // Half circle above the chord, and below it.
+        for m in [p(0.0, 1000.0), p(0.0, -1000.0)] {
+            let pts = arc_points(&pl, p(-1000.0, 0.0), p(1000.0, 0.0), m).unwrap();
+            assert!(near(pts[0], p(-1000.0, 0.0)) && near(*pts.last().unwrap(), p(1000.0, 0.0)));
+            assert!(pts.iter().any(|q| near(*q, m)));
+            assert!(pts
+                .iter()
+                .all(|q| (q.distance_to(p(0.0, 0.0)) - 1000.0).abs() < 1e-6));
+        }
+        // Major arc: the apex is 3000 from the chord wherever along it `m` is.
+        let pts = arc_points(&pl, p(-1000.0, 0.0), p(1000.0, 0.0), p(700.0, 3000.0)).unwrap();
+        assert!(pts.iter().any(|q| near(*q, p(0.0, 3000.0))));
+        // Wider than the chord (radius 1667), never below it.
+        assert!(pts.iter().any(|q| q.x > 1600.0) && pts.iter().all(|q| q.y > -1e-6));
+        // Shallow bulge still gives a few segments; a straight line gives none.
+        assert!(arc_points(&pl, p(0.0, 0.0), p(1000.0, 0.0), p(500.0, 0.01))
+            .is_some_and(|v| v.len() >= 3));
+        assert!(arc_points(&pl, p(0.0, 0.0), p(1000.0, 0.0), p(500.0, 0.0)).is_none());
+        assert!(arc_points(&pl, p(0.0, 0.0), p(0.0, 0.0), p(500.0, 50.0)).is_none());
+    }
 
     #[test]
     fn value_box_parsing() {

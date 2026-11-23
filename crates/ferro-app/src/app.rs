@@ -140,6 +140,12 @@ pub struct FerroApp {
     last_copy: Option<CopyElements>,
     /// Screen position where a selection window drag started.
     select_drag: Option<Pos2>,
+    /// Elements hidden by the user (view state, not saved).
+    hidden: HashSet<ElementId>,
+    /// Tags whose elements are not shown (view state).
+    hidden_tags: HashSet<String>,
+    /// Tag name typed in the Tags panel.
+    new_tag: String,
     /// Form being edited (double-click, SketchUp group editing).
     editing: Option<ElementId>,
     /// Faces / edges / vertices picked inside it.
@@ -197,6 +203,9 @@ impl FerroApp {
             clipboard: Vec::new(),
             last_copy: None,
             select_drag: None,
+            hidden: HashSet::new(),
+            hidden_tags: HashSet::new(),
+            new_tag: String::new(),
             editing: None,
             sub_sel: Vec::new(),
             axis_lock: None,
@@ -322,6 +331,146 @@ impl FerroApp {
     fn set_tool(&mut self, k: ToolKind) {
         self.tool = ToolState::new(k);
         self.vcb.clear();
+    }
+
+    /// Tags of an element (`ferro.common.tags`).
+    fn tags_of(e: &ferro_core::Element) -> &[String] {
+        match e.params.get(keys::TAGS) {
+            Some(ParamValue::Tags(t)) => t,
+            _ => &[],
+        }
+    }
+
+    /// Elements not shown: hidden ones and those on a hidden Tag.
+    fn hidden_elements(&self) -> HashSet<ElementId> {
+        let mut h: HashSet<ElementId> = self
+            .hidden
+            .iter()
+            .copied()
+            .filter(|id| self.session.doc().get(*id).is_some())
+            .collect();
+        if !self.hidden_tags.is_empty() {
+            for e in self.session.doc().elements() {
+                if Self::tags_of(e)
+                    .iter()
+                    .any(|t| self.hidden_tags.contains(t))
+                {
+                    h.insert(e.id);
+                }
+            }
+        }
+        h
+    }
+
+    fn hide_selection(&mut self) {
+        self.hidden.extend(self.selection.drain());
+    }
+
+    fn tags_ui(&mut self, ui: &mut egui::Ui) {
+        ui.heading("Tags");
+        let mut all: Vec<String> = self
+            .session
+            .doc()
+            .elements()
+            .flat_map(|e| Self::tags_of(e).iter().cloned())
+            .collect();
+        all.sort();
+        all.dedup();
+        if all.is_empty() {
+            ui.label(RichText::new("No tags yet.").weak());
+        }
+        for t in &all {
+            ui.horizontal(|ui| {
+                let mut shown = !self.hidden_tags.contains(t);
+                if ui.checkbox(&mut shown, t).changed() {
+                    if shown {
+                        self.hidden_tags.remove(t);
+                    } else {
+                        self.hidden_tags.insert(t.clone());
+                    }
+                }
+                if ui
+                    .small_button("Select")
+                    .on_hover_text("Select the elements with this tag")
+                    .clicked()
+                {
+                    self.selection = self
+                        .session
+                        .doc()
+                        .elements()
+                        .filter(|e| Self::tags_of(e).contains(t))
+                        .map(|e| e.id)
+                        .collect();
+                }
+            });
+        }
+        ui.horizontal(|ui| {
+            ui.add(
+                egui::TextEdit::singleline(&mut self.new_tag)
+                    .hint_text("tag")
+                    .desired_width(90.0),
+            );
+            let tag = self.new_tag.trim().to_string();
+            let ok = !tag.is_empty() && !self.selection.is_empty();
+            if ui
+                .add_enabled(ok, egui::Button::new("Tag selection"))
+                .clicked()
+            {
+                self.tag_selection(&tag, true);
+                self.new_tag.clear();
+            }
+            if ui.add_enabled(ok, egui::Button::new("Untag")).clicked() {
+                self.tag_selection(&tag, false);
+            }
+        });
+        if !self.hidden.is_empty()
+            && ui
+                .button(format!("Unhide all ({})", self.hidden.len()))
+                .clicked()
+        {
+            self.hidden.clear();
+        }
+    }
+
+    /// Add (or remove) `tag` on the selected elements, as one undo step.
+    fn tag_selection(&mut self, tag: &str, add: bool) {
+        let mut ids: Vec<ElementId> = self.selection.iter().copied().collect();
+        ids.sort();
+        let cmds: Vec<AnyCommand> = ids
+            .into_iter()
+            .filter_map(|id| {
+                let e = self.session.doc().get(id)?;
+                let mut tags = Self::tags_of(e).to_vec();
+                let has = tags.iter().any(|t| t == tag);
+                if add == has {
+                    return None;
+                }
+                if add {
+                    tags.push(tag.to_string());
+                } else {
+                    tags.retain(|t| t != tag);
+                }
+                Some(
+                    SetParameter {
+                        element: id,
+                        key: keys::TAGS.into(),
+                        value: ParamValue::Tags(tags),
+                    }
+                    .into(),
+                )
+            })
+            .collect();
+        if cmds.is_empty() {
+            return;
+        }
+        let name = if add { "Tag" } else { "Untag" };
+        let opened = self.session.begin_group(name, self.ctx());
+        for c in cmds {
+            self.run(c);
+        }
+        if opened {
+            self.session.end_group();
+        }
     }
 
     fn delete_selection(&mut self) {
@@ -734,6 +883,8 @@ impl FerroApp {
                 (Key::L, ToolKind::Line),
                 (Key::R, ToolKind::Rectangle),
                 (Key::C, ToolKind::Circle),
+                (Key::A, ToolKind::Arc),
+                (Key::T, ToolKind::Tape),
                 (Key::G, ToolKind::Polygon),
                 (Key::P, ToolKind::PushPull),
                 (Key::F, ToolKind::Offset),
@@ -749,6 +900,13 @@ impl FerroApp {
             ] {
                 if pressed(k) {
                     self.set_tool(t);
+                }
+            }
+            if pressed(Key::H) {
+                if ctx.input(|i| i.modifiers.shift) {
+                    self.hidden.clear();
+                } else {
+                    self.hide_selection();
                 }
             }
             if pressed(Key::Z) {
@@ -821,6 +979,22 @@ impl FerroApp {
                 {
                     self.delete_selection();
                 }
+                ui.separator();
+                if ui
+                    .add_enabled(!self.selection.is_empty(), egui::Button::new("Hide (H)"))
+                    .clicked()
+                {
+                    self.hide_selection();
+                }
+                if ui
+                    .add_enabled(
+                        !self.hidden.is_empty(),
+                        egui::Button::new("Unhide all (Shift+H)"),
+                    )
+                    .clicked()
+                {
+                    self.hidden.clear();
+                }
                 if ui.button("Select all").clicked() {
                     self.selection = self
                         .session
@@ -856,6 +1030,7 @@ impl FerroApp {
                 ui.separator();
                 ui.checkbox(&mut self.camera.parallel, "Parallel projection");
                 ui.checkbox(&mut self.scene.xray, "X-ray");
+                ui.checkbox(&mut self.scene.wireframe, "Wireframe");
             });
             ui.menu_button("AI", |ui| {
                 if ui.button("AI chat…").clicked() {
@@ -936,6 +1111,8 @@ impl FerroApp {
             self.properties_ui(ui);
             ui.separator();
             self.materials_ui(ui);
+            ui.separator();
+            self.tags_ui(ui);
             if let Some(note) = self.workspace.roadmap() {
                 ui.separator();
                 ui.label(RichText::new(self.workspace.label()).strong());
@@ -1401,7 +1578,13 @@ impl FerroApp {
         );
 
         // Snapping against the committed document (excluding moved elements).
-        let moving: Vec<ElementId> = self.tool.moving().to_vec();
+        let mut moving: Vec<ElementId> = self.tool.moving().to_vec();
+        let hidden = self.hidden_elements();
+        moving.extend(hidden.iter().copied());
+        moving.sort();
+        moving.dedup();
+        self.selection.retain(|id| !hidden.contains(id));
+        self.scene.hidden = hidden;
         let rebuild = match &self.snap_scene {
             Some((d, m, _)) => !scene::same_doc(d, self.session.doc()) || *m != moving,
             None => true,
@@ -1500,6 +1683,9 @@ impl FerroApp {
                 if resp.drag_stopped_by(PointerButton::Primary) {
                     let mut picked = Vec::new();
                     for e in self.session.doc().elements() {
+                        if self.scene.hidden.contains(&e.id) {
+                            continue;
+                        }
                         let Some(m) = self.scene.mesh(e.id) else {
                             continue;
                         };
@@ -1573,11 +1759,11 @@ impl FerroApp {
                 }
             } else if resp.double_clicked_by(PointerButton::Primary) {
                 event = self.tool.double_click(&tctx);
-            } else if self.tool.kind == ToolKind::Select
-                && self.editing.is_some()
-                && resp.clicked_by(PointerButton::Primary)
-            {
-                let e = self.editing.expect("editing");
+            } else if let (ToolKind::Select, Some(e), true) = (
+                self.tool.kind,
+                self.editing,
+                resp.clicked_by(PointerButton::Primary),
+            ) {
                 match snap_res.and_then(|s| pick_sub(self.session.doc(), e, &s)) {
                     Some(p) if shift => sub_toggle = Some(p),
                     Some(p) => sub_set = Some(p),
@@ -1640,6 +1826,7 @@ impl FerroApp {
                 }
                 SelectOp::Clear => self.selection.clear(),
             },
+            ToolEvent::Message(m) => self.say(m, false),
             ToolEvent::None => {}
         }
 

@@ -56,6 +56,10 @@ fn face_color(c: Category) -> [f32; 4] {
     }
 }
 
+/// What the vertex lists were built for: origin bits, selection, X-ray,
+/// wireframe, hidden elements.
+type SceneKey = (u64, Vec<ElementId>, bool, bool, Vec<ElementId>);
+
 struct Cached {
     doc: Document,
 }
@@ -67,9 +71,13 @@ pub struct SceneCache {
     pub version: u64,
     pub tris: Vec<Vertex>,
     pub lines: Vec<Vertex>,
-    key: Option<(u64, Vec<ElementId>, bool)>,
+    key: Option<SceneKey>,
     /// Translucent faces (X-ray style).
     pub xray: bool,
+    /// Edges only (Wireframe style).
+    pub wireframe: bool,
+    /// Elements not drawn (hidden, or on a hidden Tag). View state only.
+    pub hidden: HashSet<ElementId>,
 }
 
 impl SceneCache {
@@ -84,6 +92,12 @@ impl SceneCache {
                 ^ origin.z.to_bits().rotate_left(42),
             sel.clone(),
             self.xray,
+            self.wireframe,
+            {
+                let mut h: Vec<ElementId> = self.hidden.iter().copied().collect();
+                h.sort();
+                h
+            },
         );
         if same_doc && self.key.as_ref() == Some(&key) {
             return;
@@ -116,6 +130,9 @@ impl SceneCache {
         };
         for e in doc.elements() {
             let Some(g) = e.geometry() else { continue };
+            if self.hidden.contains(&e.id) {
+                continue;
+            }
             let selected = selection.contains(&e.id);
             let color = if selected {
                 let c = element_color(doc, e);
@@ -133,7 +150,7 @@ impl SceneCache {
             } else {
                 color
             };
-            if let Some(m) = self.meshes.get(&e.id) {
+            if let Some(m) = self.meshes.get(&e.id).filter(|_| !self.wireframe) {
                 for t in &m.indices {
                     for &i in t {
                         let n = m.normals[i as usize];
