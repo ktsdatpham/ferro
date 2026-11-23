@@ -894,9 +894,10 @@ mod tests {
                 .map(|e| e.geometry().unwrap().volume())
                 .sum()
         };
+        // The source walls have a door cut out; the imported ones do not.
         let (a, b, c) = (vol(src.doc()), vol(dst.doc()), door_volume(src.doc()));
         // Feet are rounded to 1e-9 ft in the plan: allow a relative 1e-8.
-        assert!((a - b - c).abs() < a * 1e-8, "src {a} dst {b} door {c}");
+        assert!((a + c - b).abs() < a * 1e-8, "src {a} dst {b} door {c}");
     }
 
     fn door_volume(d: &Document) -> f64 {
@@ -906,6 +907,5 @@ mod tests {
                 _ => None,
             })
             .sum::<f64>()
-            * -1.0
     }
 }
