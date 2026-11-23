@@ -1697,3 +1697,31 @@ fn preview_matches_execute() {
         assert_eq!(strip(&doc), strip(f.s.doc()), "{tool}");
     }
 }
+
+/// A self-intersecting (bow-tie) outline is not a valid face or floor.
+#[test]
+#[ignore = "bug: self-intersecting (bow-tie) outlines are accepted by create_polygon / create_floor (M5-15.10)"]
+fn self_intersecting_outlines_are_rejected() {
+    let mut f = Fx::new();
+    let bow = [(0.0, 0.0), (3000.0, 1000.0), (3000.0, 0.0), (0.0, 2000.0)];
+    let r = checked(
+        &mut f.s,
+        "create_polygon",
+        json!({"points": bow.iter().map(|(x, y)| p(*x, *y + 70_000.0, 0.0)).collect::<Vec<_>>()}),
+    );
+    assert!(r.is_err(), "bow-tie face accepted");
+}
+
+/// A self-intersecting (bow-tie) floor outline is rejected.
+#[test]
+#[ignore = "bug: self-intersecting (bow-tie) outlines are accepted by create_polygon / create_floor (M5-15.10)"]
+fn self_intersecting_floor_outlines_are_rejected() {
+    let mut f = Fx::new();
+    let bow = [(0.0, 0.0), (3000.0, 1000.0), (3000.0, 0.0), (0.0, 2000.0)];
+    let r = checked(
+        &mut f.s,
+        "create_floor",
+        json!({"points": bow.iter().map(|(x, y)| json!({"x": x, "y": y + 70_000.0})).collect::<Vec<_>>()}),
+    );
+    assert!(r.is_err(), "bow-tie floor accepted");
+}
