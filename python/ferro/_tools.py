@@ -376,6 +376,96 @@ def set_geometry_source(
     return _call("set_geometry_source", {"element": element, "source": source})
 
 
+def set_project_units(
+    *,
+    spec: Literal["length", "area", "volume", "angle", "mass", "density", "force", "moment", "pressure", "stress", "thermal_conductivity", "thermal_resistance", "u_value", "heat_capacity", "temperature", "power", "illuminance", "flow", "currency", "carbon_mass", "time", "ratio", "number"],
+    decimals: Optional[int] = None,
+    unit: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Choose how a quantity is shown and typed in this project, e.g. {spec: length,
+    unit: m, decimals: 2}. unit null = back to the default (mm for length). Values are
+    always stored in mm / SI; this changes display only.
+
+    Args:
+        spec: One of: length, area, volume, angle, mass, density, force, moment,
+            pressure, stress, thermal_conductivity, thermal_resistance, u_value,
+            heat_capacity, temperature, power, illuminance, flow, currency, carbon_mass,
+            time, ratio, number.
+        decimals: minimum=0. maximum=9. Optional.
+        unit: A unit of that quantity, e.g. mm, m, ft, W/(m·K). Optional.
+
+    Returns:
+        The tool's JSON body. Raises FerroError on failure.
+    """
+    args: Dict[str, Any] = {"spec": spec}
+    if decimals is not None:
+        args["decimals"] = decimals
+    if unit is not None:
+        args["unit"] = unit
+    return _call("set_project_units", args)
+
+
+def set_site_location(
+    *,
+    clear: Optional[bool] = None,
+    elevation: Optional[Length] = None,
+    latitude: Optional[float] = None,
+    longitude: Optional[float] = None,
+    place: Optional[str] = None,
+    utc_offset_minutes: Optional[int] = None,
+    weather_file: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Set where the project is (sun, energy, weather): latitude / longitude in degrees
+    (north / east positive), elevation of the internal origin above sea level (length),
+    UTC offset in minutes (Vietnam 420), place name, weather file (EPW). Omitted fields
+    keep their value; clear: true removes the location.
+
+    Args:
+        clear: True or False. Optional.
+        elevation: Length: number = millimetres, or a string with units ("3m", "300cm").
+            Optional.
+        latitude: Degrees, -90..90. Optional.
+        longitude: Degrees, -180..180. Optional.
+        place: Text. Optional.
+        utc_offset_minutes: Integer. Optional.
+        weather_file: Text. Optional.
+
+    Returns:
+        The tool's JSON body. Raises FerroError on failure.
+    """
+    args: Dict[str, Any] = {}
+    if clear is not None:
+        args["clear"] = clear
+    if elevation is not None:
+        args["elevation"] = elevation
+    if latitude is not None:
+        args["latitude"] = latitude
+    if longitude is not None:
+        args["longitude"] = longitude
+    if place is not None:
+        args["place"] = place
+    if utc_offset_minutes is not None:
+        args["utc_offset_minutes"] = utc_offset_minutes
+    if weather_file is not None:
+        args["weather_file"] = weather_file
+    return _call("set_site_location", args)
+
+
+def set_project_currency(*, currency: Optional[str] = None) -> Dict[str, Any]:
+    """Set the currency for costs (ISO 4217, e.g. VND, USD); null clears it.
+
+    Args:
+        currency: Text (None clears). Optional.
+
+    Returns:
+        The tool's JSON body. Raises FerroError on failure.
+    """
+    args: Dict[str, Any] = {}
+    if currency is not None:
+        args["currency"] = currency
+    return _call("set_project_currency", args)
+
+
 def set_project_name(*, name: str) -> Dict[str, Any]:
     """Rename the project.
 
@@ -1368,6 +1458,9 @@ TOOL_NAMES = (
     "set_parameter_definition",
     "set_category",
     "set_geometry_source",
+    "set_project_units",
+    "set_site_location",
+    "set_project_currency",
     "set_project_name",
     "create_material",
     "set_material",

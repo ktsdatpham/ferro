@@ -37,6 +37,13 @@ pub struct ProjectInfo {
     /// Omitted from files when empty, so files without it still load.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub parameter_definitions: Vec<ParameterDefinition>,
+    /// Display units, site location, currency (M5-24). Omitted when default.
+    #[serde(default, skip_serializing_if = "is_default_settings")]
+    pub settings: super::project_settings::ProjectSettings,
+}
+
+fn is_default_settings(s: &super::project_settings::ProjectSettings) -> bool {
+    *s == super::project_settings::ProjectSettings::default()
 }
 
 /// The project container (Revit: `Document`). Cheap to clone: elements live in

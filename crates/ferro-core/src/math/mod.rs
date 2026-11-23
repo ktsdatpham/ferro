@@ -13,6 +13,6 @@ pub mod tol;
 pub use bbox::BoundingBox3;
 pub use point::{Point2, Point3};
 pub use quantity::{Angle, Length};
-pub use quantity_spec::{DisplayUnit, QuantityError, QuantitySpec};
+pub use quantity_spec::{format_number, DisplayUnit, QuantityError, QuantitySpec};
 pub use transform::Transform;
 pub use vector::{UnitVec3, Vec2, Vec3};

@@ -7,6 +7,7 @@ use super::bim_commands::*;
 use super::form_commands::*;
 use super::geometry_source::*;
 use super::parameter_commands::*;
+use super::project_commands::*;
 use super::{CommandError, Transaction};
 use crate::algo::{push_pull_face, PushPullMode};
 use crate::geom::{polygon, Plane};
@@ -684,6 +685,9 @@ any_command!(
     EraseEdges,
     EraseFaces,
     SetGeometrySource,
+    SetProjectUnits,
+    SetSiteLocation,
+    SetProjectCurrency,
     SetMaterial,
     SetParameterDefinition,
 );

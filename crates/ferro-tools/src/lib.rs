@@ -173,6 +173,12 @@ pub fn list() -> Vec<Value> {
             json!({"element": id("Element with direct geometry"), "category": {"type":"string","enum": Category::ALL.iter().filter(|c| c.classifiable_form()).map(|c| c.to_string()).collect::<Vec<_>>()}}), &["element", "category"]),
         tool("set_geometry_source", "Switch where an element's geometry comes from. 'direct': freeze a parametric wall / floor so it can be edited freely like a SketchUp group (keeps category, type, parameters; hosted doors / windows freeze with it). 'parametric': turn a directly edited wall (rectangular box) or floor (flat slab with vertical sides) back into a parametric one, using a type of the same thickness; fails with ferro.model.not_recognised or ferro.model.no_matching_type. Returns {element, changed}.",
             json!({"element": id("Element id"), "source": {"type":"string","enum":["direct","parametric"]}}), &["element", "source"]),
+        tool("set_project_units", "Choose how a quantity is shown and typed in this project, e.g. {spec: length, unit: m, decimals: 2}. unit null = back to the default (mm for length). Values are always stored in mm / SI; this changes display only.",
+            json!({"spec": {"type":"string","enum": ferro_core::QuantitySpec::ALL.iter().map(|s| s.id()).collect::<Vec<_>>()}, "unit": {"type":["string","null"],"description":"A unit of that quantity, e.g. mm, m, ft, W/(m·K)"}, "decimals": {"type":["integer","null"],"minimum":0,"maximum":9}}), &["spec"]),
+        tool("set_site_location", "Set where the project is (sun, energy, weather): latitude / longitude in degrees (north / east positive), elevation of the internal origin above sea level (length), UTC offset in minutes (Vietnam 420), place name, weather file (EPW). Omitted fields keep their value; clear: true removes the location.",
+            json!({"latitude": {"type":"number","description":"Degrees, -90..90"}, "longitude": {"type":"number","description":"Degrees, -180..180"}, "elevation": length(), "utc_offset_minutes": {"type":"integer"}, "place": {"type":"string"}, "weather_file": {"type":"string"}, "clear": {"type":"boolean"}}), &[]),
+        tool("set_project_currency", "Set the currency for costs (ISO 4217, e.g. VND, USD); null clears it.",
+            json!({"currency": {"type":["string","null"]}}), &[]),
         tool("set_project_name", "Rename the project.", json!({"name":{"type":"string"}}), &["name"]),
         // BIM elements (milestone 2).
         tool("create_material", "Create a material with a base colour and optional assets (all optional, SI units named in each field): appearance (OpenPBR), physical, thermal, environmental (GWP from an EPD), cost. Wall / floor types using it then report U-value, mass, carbon and cost per m² (get_element on the type). Returns {element}.",
@@ -286,13 +292,18 @@ pub fn normalize(args: &Value) -> Result<Value, String> {
         }
         obj.insert("layers".into(), Value::Array(conv));
     }
-    if let Some(v) = obj.get("angle").cloned() {
-        let deg = match &v {
-            Value::Number(n) => n.as_f64().ok_or("angle must be a number")?,
-            Value::String(s) => Angle::parse(s).ok_or("cannot read angle")?.deg(),
-            _ => return Err("angle must be degrees".into()),
-        };
-        obj.insert("angle".into(), json!(Angle::from_deg(deg).rad()));
+    // Angles are degrees at this edge, radians inside (D-02).
+    for f in ["angle", "latitude", "longitude"] {
+        if let Some(v) = obj.get(f).cloned() {
+            let deg = match &v {
+                Value::Number(n) => n.as_f64().ok_or(format!("{f} must be a number"))?,
+                Value::String(s) => Angle::parse(s)
+                    .ok_or(format!("cannot read {f} {s:?}"))?
+                    .deg(),
+                _ => return Err(format!("{f} must be degrees")),
+            };
+            obj.insert(f.into(), json!(Angle::from_deg(deg).rad()));
+        }
     }
     Ok(Value::Object(obj))
 }

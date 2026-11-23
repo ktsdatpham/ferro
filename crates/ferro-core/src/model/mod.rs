@@ -14,6 +14,7 @@ mod ids;
 pub mod material;
 mod parameter;
 mod parameter_definition;
+pub mod project_settings;
 pub mod structure_quantities;
 
 pub use category::Category;

@@ -417,6 +417,7 @@ The fixed table of physical quantities for typed parameters (ADR 0004 §2).
 - fn `QuantitySpec::eq_values` — `true` if two stored values are equal within tolerance: lengths use
 - fn `QuantitySpec::format` — Format a stored value in the default display unit with up to six
 - fn `QuantitySpec::parse` — Read user / agent text such as `"0.8 W/mK"`, `"1200 kg/m3"`,
+- fn `format_number` — Up to six significant digits, no trailing zeros, no `-0`
 
 ### `ferro_core::math::tol`
 
@@ -622,6 +623,21 @@ Parameter definitions (ADR 0004 §2.3, Foundation Spec §3.5): what a parameter 
 - fn `builtin_definitions` — Definitions of every built-in key in [`keys`], sorted by key. Pure and
 - fn `builtin_definition` — The built-in definition of `key`, or `None` if `key` is not built in.
 
+### `ferro_core::model::project_settings`
+
+Project settings (M5-24): display units, site location and currency — one place that the UI, MCP and exports read. Revit: Project Units, `SiteLocation`, Project Information.
+
+- struct `UnitChoice` — How one quantity is shown: a unit symbol from the spec's table and a
+- struct `ProjectUnits` — Display units per quantity (Revit: Project Units). Quantities not listed
+- const `MAX_DECIMALS` — Largest number of decimals accepted.
+- fn `ProjectUnits::display_unit` — The display unit for a spec: the project's choice when it names one of
+- fn `ProjectUnits::format` — Format a stored value for display, e.g. `"3.3 m"` or `"3300 mm"`.
+- fn `ProjectUnits::validate_choice` — Check a choice: the unit must belong to the spec, decimals ≤ 9.
+- struct `SiteLocation` — Where the project is on Earth (Revit: `SiteLocation`), for sun, energy
+- fn `SiteLocation::validate` — Check ranges. Fails with a message for `ferro.model.invalid_location`.
+- struct `ProjectSettings` — Project settings carried by `ProjectInfo`. All parts are optional in
+- fn `valid_currency` — `true` for a three-letter upper-case code (ISO 4217 shape).
+
 ### `ferro_core::model::structure_quantities`
 
 Quantities of a wall / floor type derived from its `CompoundStructure` and the assets of its layer materials (ADR 0004 §3): thermal transmittance (U-value), mass, embodied carbon and cost, all per m² of wall / floor.
@@ -742,6 +758,14 @@ Commands on parameter definitions (ADR 0004 §2.3). Each `NAME` is also the MCP 
 
 - struct `SetParameterDefinition` — Add or replace a project parameter definition (Revit: create a shared /
 
+### `ferro_core::ops::project_commands`
+
+Project settings commands (M5-24): display units, site location, currency. Each `NAME` is also the MCP tool name.
+
+- struct `SetProjectUnits` — Choose how a quantity is shown and typed, e.g. lengths in `m` with 2
+- struct `SetSiteLocation` — Set (or with `clear: true` remove) the project's place on Earth. Degrees
+- struct `SetProjectCurrency` — Set the currency used for costs (ISO 4217, e.g. `VND`); `null` clears it.
+
 ### `ferro_core::ops::session`
 
 - enum `ActorKind` — Who performed a change (D-29). Agents are first-class actors (D-44).
@@ -786,6 +810,7 @@ Commands on parameter definitions (ADR 0004 §2.3). Each `NAME` is also the MCP 
 - fn `Transaction::delete` — Delete an element. Hosted elements (doors, windows) are deleted with
 - fn `Transaction::warn`
 - fn `Transaction::project_name`
+- fn `Transaction::project_settings` — Change the project settings (units, location, currency). The caller
 - fn `Transaction::put_parameter_definition` — Add or replace (by key) a project parameter definition, keeping the
 
 ### `ferro_core::topo`

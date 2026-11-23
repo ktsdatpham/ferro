@@ -622,8 +622,9 @@ fn normalize_unit(unit: &str) -> String {
         .collect()
 }
 
-/// Up to six significant digits, no trailing zeros, no `-0`.
-fn format_number(v: f64) -> String {
+/// Up to six significant digits, no trailing zeros, no `-0`
+/// (`3.3`, `1200`, `0.035`).
+pub fn format_number(v: f64) -> String {
     if !v.is_finite() {
         return v.to_string();
     }

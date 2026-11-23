@@ -27,6 +27,8 @@ for the same concept.
 | `Dimension` | Model distance annotation | Measure, Dim (as a type) |
 | `WorkPlane` | Active sketch plane | Sketch plane, Drawing plane |
 | `Form` | Geometry edited directly (geometry source `Direct`); any category, e.g. a free-form wall | Mass, Group, Blob, Mesh element |
+| `ProjectUnits` | How quantities are shown and typed in a project (display only) | Units settings, Display settings |
+| `SiteLocation` | The project's place on Earth: latitude, longitude, elevation, UTC offset, weather file | Location (that is an element's placement), Geo |
 | `GeometrySource` | Where an element's geometry comes from: `Parametric` (generated from parameters) or `Direct` | Mode, Kind, Origin (for this) |
 | `Profile` | Outer loop + holes | Shape, Outline, Polygon (for this) |
 | `CurveLoop` | Closed connected curves | Polyline, Path, Ring |

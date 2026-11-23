@@ -521,6 +521,114 @@
       "name": "set_geometry_source"
     },
     {
+      "description": "Choose how a quantity is shown and typed in this project, e.g. {spec: length, unit: m, decimals: 2}. unit null = back to the default (mm for length). Values are always stored in mm / SI; this changes display only.",
+      "inputSchema": {
+        "properties": {
+          "decimals": {
+            "maximum": 9,
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "spec": {
+            "enum": [
+              "length",
+              "area",
+              "volume",
+              "angle",
+              "mass",
+              "density",
+              "force",
+              "moment",
+              "pressure",
+              "stress",
+              "thermal_conductivity",
+              "thermal_resistance",
+              "u_value",
+              "heat_capacity",
+              "temperature",
+              "power",
+              "illuminance",
+              "flow",
+              "currency",
+              "carbon_mass",
+              "time",
+              "ratio",
+              "number"
+            ],
+            "type": "string"
+          },
+          "unit": {
+            "description": "A unit of that quantity, e.g. mm, m, ft, W/(m·K)",
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "spec"
+        ],
+        "type": "object"
+      },
+      "name": "set_project_units"
+    },
+    {
+      "description": "Set where the project is (sun, energy, weather): latitude / longitude in degrees (north / east positive), elevation of the internal origin above sea level (length), UTC offset in minutes (Vietnam 420), place name, weather file (EPW). Omitted fields keep their value; clear: true removes the location.",
+      "inputSchema": {
+        "properties": {
+          "clear": {
+            "type": "boolean"
+          },
+          "elevation": {
+            "description": "Length: number = millimetres, or a string with units such as \"3m\", \"300cm\", \"10'\".",
+            "type": [
+              "number",
+              "string"
+            ]
+          },
+          "latitude": {
+            "description": "Degrees, -90..90",
+            "type": "number"
+          },
+          "longitude": {
+            "description": "Degrees, -180..180",
+            "type": "number"
+          },
+          "place": {
+            "type": "string"
+          },
+          "utc_offset_minutes": {
+            "type": "integer"
+          },
+          "weather_file": {
+            "type": "string"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "name": "set_site_location"
+    },
+    {
+      "description": "Set the currency for costs (ISO 4217, e.g. VND, USD); null clears it.",
+      "inputSchema": {
+        "properties": {
+          "currency": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "name": "set_project_currency"
+    },
+    {
       "description": "Rename the project.",
       "inputSchema": {
         "properties": {

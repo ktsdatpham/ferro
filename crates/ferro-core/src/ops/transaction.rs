@@ -220,6 +220,15 @@ impl<'a> Transaction<'a> {
         self.work.project_mut().name = name;
     }
 
+    /// Change the project settings (units, location, currency). The caller
+    /// validates (`ops::project_commands`).
+    pub fn project_settings(
+        &mut self,
+        f: impl FnOnce(&mut crate::model::project_settings::ProjectSettings),
+    ) {
+        f(&mut self.work.project_mut().settings);
+    }
+
     /// Add or replace (by key) a project parameter definition, keeping the
     /// list sorted by key. The caller validates it (`SetParameterDefinition`).
     pub fn put_parameter_definition(&mut self, def: crate::model::ParameterDefinition) {
