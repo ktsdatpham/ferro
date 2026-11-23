@@ -126,6 +126,11 @@ impl Document {
                     return Err(format!("{} references missing element {r}", e.id));
                 }
             }
+            for r in [e.phase_created, e.phase_demolished].into_iter().flatten() {
+                if doc.get(r).and_then(|p| p.as_phase()).is_none() {
+                    return Err(format!("{} has phase {r}, which is not a phase", e.id));
+                }
+            }
         }
         Ok(doc)
     }

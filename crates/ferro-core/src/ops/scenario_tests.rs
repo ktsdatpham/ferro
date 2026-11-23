@@ -30,6 +30,9 @@ struct Fx {
     /// Open 1 m square sheet at (20 m, 0, 0) and its face.
     sheet: ElementId,
     sheet_face: FaceId,
+    /// Phases "Existing" and "New Construction" (used by no element).
+    ph_old: ElementId,
+    ph_new: ElementId,
 }
 
 impl Fx {
@@ -102,6 +105,12 @@ impl Fx {
             json!({"origin": p(20_000.0, 0.0, 0.0), "width": 1000, "depth": 1000}),
         );
         let (sheet, sheet_face) = (id(&o), face_of(&o));
+        let ph_old = id(&run(&mut s, "create_phase", json!({"name": "Existing"})));
+        let ph_new = id(&run(
+            &mut s,
+            "create_phase",
+            json!({"name": "New Construction"}),
+        ));
         check_document(s.doc()).expect("fixture is valid");
         Fx {
             s,
@@ -119,6 +128,8 @@ impl Fx {
             bx,
             sheet,
             sheet_face,
+            ph_old,
+            ph_new,
         }
     }
 
@@ -1437,6 +1448,24 @@ fn valid_calls(f: &Fx) -> Vec<(&'static str, Value)> {
             json!({"latitude": 0.28, "longitude": 1.89, "utc_offset_minutes": 420}),
         ),
         ("set_project_currency", json!({"currency": "VND"})),
+        // phases (M5-23)
+        (
+            "create_phase",
+            json!({"name": "Stage 2", "before": f.ph_new, "start_date": "2027-01-01"}),
+        ),
+        (
+            "set_phase",
+            json!({"phase": f.ph_new, "name": "Works", "position": 0, "end_date": "2027-06-30"}),
+        ),
+        ("delete_phase", json!({"phase": f.ph_new})),
+        (
+            "set_element_phase",
+            json!({"elements": [f.wall], "created": f.ph_old, "demolished": f.ph_new}),
+        ),
+        (
+            "set_renovation_status",
+            json!({"elements": [f.bx, f.door], "status": "demolish"}),
+        ),
         // a semantic push / pull on a wall (height)
         (
             "push_pull_face",
@@ -1473,6 +1502,11 @@ fn every_id_argument_accepts_any_element_kind_without_panicking() {
         "top_level",
         "material",
         "element_type",
+        "phase",
+        "before",
+        "merge_into",
+        "created",
+        "demolished",
     ];
     let base = Fx::new();
     let all = base.all_ids();

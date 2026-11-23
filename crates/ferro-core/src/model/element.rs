@@ -44,6 +44,8 @@ pub enum ElementBody {
     Wall(Wall),
     Floor(Floor),
     Opening(Opening),
+    /// A construction stage (category `Phases`, ADR 0006).
+    Phase(super::phase::Phase),
 }
 
 /// Anything in the document with identity (Foundation Spec §3.2).
@@ -61,8 +63,11 @@ pub struct Element {
     pub host_id: Option<ElementId>,
     /// Design option membership (D-32); `None` = shared model.
     pub design_option: Option<ElementId>,
-    /// Phase created / demolished (D-32, reserved).
+    /// Phase the element is built in (Revit: *Phase Created*; ADR 0006).
+    /// `None` = existing in every phase (`model::phase::phase_status`).
     pub phase_created: Option<ElementId>,
+    /// Phase the element is demolished in (Revit: *Phase Demolished*); the
+    /// same phase as `phase_created` or a later one. `None` = never.
     pub phase_demolished: Option<ElementId>,
     pub params: BTreeMap<String, ParamValue>,
     pub body: ElementBody,

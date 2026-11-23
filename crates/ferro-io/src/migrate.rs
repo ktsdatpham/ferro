@@ -9,25 +9,34 @@
 //! |---|---|---|
 //! | 1 | M1–M4 | levels, Forms, walls, floors, openings, types, materials (colour, roughness) |
 //! | 2 | M5 | quantity-typed parameters (`{"type":"quantity"}`), parameter definitions in the project, material assets (appearance, physical, thermal, environmental, cost), direct geometry of any category |
+//! | 3 | M5 | phases (ADR 0006): elements of category `phases` with a `{"kind":"phase"}` body; `phase_created` / `phase_demolished` filled in |
 //!
-//! Version 2 only adds data, so version 1 files need no rewriting; the step
-//! is still listed so every version has one and the chain is tested.
+//! Versions 2 and 3 only add data, so older files need no rewriting; the
+//! steps are still listed so every version has one and the chain is tested.
+//! Version 3 is needed because a format 2 reader refuses the new `phases`
+//! category and `phase` body (unknown enum variants), even though the
+//! element fields existed (always `null`) before.
 
 use crate::IoError;
 use serde_json::Value;
 
 /// Current file format version.
-pub const FORMAT_VERSION: u32 = 2;
+pub const FORMAT_VERSION: u32 = 3;
 
 /// One migration: from version `n` to `n + 1`, on the raw JSON of the project
 /// and the elements (before they are parsed).
 type Step = fn(&mut Value, &mut [Value]) -> Result<(), IoError>;
 
 /// `STEPS[i]` migrates version `i + 1` to `i + 2`.
-const STEPS: [Step; (FORMAT_VERSION - 1) as usize] = [v1_to_v2];
+const STEPS: [Step; (FORMAT_VERSION - 1) as usize] = [v1_to_v2, v2_to_v3];
 
 /// 1 → 2: additive (new optional fields and parameter types); nothing to rewrite.
 fn v1_to_v2(_project: &mut Value, _elements: &mut [Value]) -> Result<(), IoError> {
+    Ok(())
+}
+
+/// 2 → 3: additive (phases); nothing to rewrite.
+fn v2_to_v3(_project: &mut Value, _elements: &mut [Value]) -> Result<(), IoError> {
     Ok(())
 }
 
@@ -67,6 +76,7 @@ mod tests {
         let (mut p, mut e) = (json!({"name": "x"}), vec![json!({"kind": "level"})]);
         migrate(FORMAT_VERSION, &mut p, &mut e).unwrap();
         migrate(1, &mut p, &mut e).unwrap();
+        migrate(2, &mut p, &mut e).unwrap();
         assert_eq!(p, json!({"name": "x"}));
     }
 

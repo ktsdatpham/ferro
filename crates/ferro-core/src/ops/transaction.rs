@@ -132,7 +132,8 @@ impl<'a> Transaction<'a> {
 
     /// Delete an element. Hosted elements (doors, windows) are deleted with
     /// their host; other references are cleared and reported as warnings.
-    /// Deleting a type that is still used fails with `ferro.model.type_in_use`.
+    /// Deleting a type that is still used fails with `ferro.model.type_in_use`,
+    /// a phase that is still used with `ferro.model.phase_in_use`.
     pub fn delete(&mut self, id: ElementId) -> Result<(), CommandError> {
         let target = self.element(id)?.clone();
         if target.is_definition() {
@@ -144,6 +145,21 @@ impl<'a> Transaction<'a> {
                 return Err(CommandError::new(
                     "ferro.model.type_in_use",
                     format!("{} is used by {}", target.label(), user.label()),
+                )
+                .on(id));
+            }
+        }
+        if target.as_phase().is_some() {
+            if let Some(user) = self.work.elements().find(|e| {
+                e.id != id && (e.phase_created == Some(id) || e.phase_demolished == Some(id))
+            }) {
+                return Err(CommandError::new(
+                    "ferro.model.phase_in_use",
+                    format!(
+                        "{} is used by {}; delete_phase with merge_into moves its elements to a neighbouring phase",
+                        target.label(),
+                        user.label()
+                    ),
                 )
                 .on(id));
             }

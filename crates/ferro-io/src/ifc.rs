@@ -14,6 +14,12 @@
 //!   `Pset_MaterialMechanical`, `Pset_FerroMaterial`) and type
 //!   `ThermalTransmittance` when materials carry data, with SI units.
 //!
+//! * Phases (ADR 0006): with phases, the file shows the export phase (the
+//!   last by default): elements not built yet or already demolished are left
+//!   out, the others get `Pset_<Class>Common.Status` = `NEW`, `EXISTING`,
+//!   `DEMOLISH` or `TEMPORARY` (IFC4 `PEnum_ElementStatus`). Phases are not
+//!   IFC products and are not exported themselves.
+//!
 //! GlobalIds are the element uids in IFC's base-64 encoding, so a re-export
 //! keeps the same ids.
 
@@ -357,6 +363,16 @@ fn material_psets(w: &mut Writer, mat: usize, m: &ferro_core::model::bim::Materi
 
 /// Serialise a document as an IFC4 file.
 pub fn export_ifc(doc: &Document) -> Result<String, IoError> {
+    export_ifc_phase(doc, None)
+}
+
+/// IFC4 export of the document as it is in `phase` (`None` = the last
+/// phase; ignored when the document has no phases). See the module docs
+/// for how phases are written.
+pub fn export_ifc_phase(doc: &Document, phase: Option<ElementId>) -> Result<String, IoError> {
+    let export_phase = phase
+        .filter(|p| doc.phase_index(*p).is_some())
+        .or_else(|| doc.phases().last().map(|p| p.id));
     let mut w = Writer { lines: Vec::new() };
     let project_name = doc.project().name.clone();
 
@@ -558,6 +574,10 @@ pub fn export_ifc(doc: &Document) -> Result<String, IoError> {
     let mut styles: HashMap<[u16; 3], usize> = HashMap::new();
     for e in doc.elements() {
         let Some(g) = e.geometry() else { continue };
+        let status = export_phase.map(|p| doc.phase_status(e, p));
+        if status.is_some_and(|st| !st.is_shown()) {
+            continue;
+        }
         let mesh = body_mesh(g).map_err(|err| IoError::new("ferro.io.mesh", err.to_string()))?;
         if mesh.indices.is_empty() {
             continue;
@@ -643,6 +663,7 @@ pub fn export_ifc(doc: &Document) -> Result<String, IoError> {
                 }
             }
         };
+        let entity_class = entity.split('(').next().unwrap_or_default().to_string();
         let id = w.add(entity);
         ifc_of.insert(e.id, id);
         let host_container = match &e.body {
@@ -667,6 +688,9 @@ pub fn export_ifc(doc: &Document) -> Result<String, IoError> {
             "IFCRELDEFINESBYPROPERTIES({},$,$,$,(#{id}),#{pset})",
             s(&derived(&format!("relpset:{}", e.uid)))
         ));
+        if let Some(st) = status {
+            status_pset(&mut w, e, id, &entity_class, st);
+        }
         let lenp = |k: &str| match e.param(k) {
             Some(ParamValue::Length(l)) => Some(l.mm()),
             _ => None,
@@ -841,6 +865,45 @@ pub fn export_ifc(doc: &Document) -> Result<String, IoError> {
     Ok(out)
 }
 
+/// `Pset_<Class>Common.Status` (IFC4 `PEnum_ElementStatus`) of an element
+/// in the export phase. Classes whose common property set has no `Status`
+/// (furniture) get none.
+fn status_pset(
+    w: &mut Writer,
+    e: &Element,
+    id: usize,
+    class: &str,
+    status: ferro_core::model::PhaseStatus,
+) {
+    let pset_name = match class {
+        "IFCWALL" => "Pset_WallCommon",
+        "IFCSLAB" => "Pset_SlabCommon",
+        "IFCDOOR" => "Pset_DoorCommon",
+        "IFCWINDOW" => "Pset_WindowCommon",
+        "IFCROOF" => "Pset_RoofCommon",
+        "IFCCOLUMN" => "Pset_ColumnCommon",
+        "IFCCOVERING" => "Pset_CoveringCommon",
+        "IFCBUILDINGELEMENTPROXY" => "Pset_BuildingElementProxyCommon",
+        _ => return,
+    };
+    let Some(value) = status.ifc_status() else {
+        return;
+    };
+    let p = w.add(format!(
+        "IFCPROPERTYENUMERATEDVALUE('Status',$,(IFCLABEL({})),$)",
+        s(value)
+    ));
+    let ps = w.add(format!(
+        "IFCPROPERTYSET({},$,{},$,(#{p}))",
+        s(&derived(&format!("statuspset:{}", e.uid))),
+        s(pset_name)
+    ));
+    w.add(format!(
+        "IFCRELDEFINESBYPROPERTIES({},$,$,$,(#{id}),#{ps})",
+        s(&derived(&format!("relstatus:{}", e.uid)))
+    ));
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -893,6 +956,50 @@ mod tests {
             .unwrap_or_else(|f| panic!("{name}: {f:?}"));
         }
         s
+    }
+
+    #[test]
+    fn renovation_status_is_written_for_the_export_phase() {
+        let plain = export_ifc(house().doc()).unwrap();
+        assert!(!plain.contains("'Status'"), "no phases, no status");
+        let mut s = house();
+        for (els, st) in [
+            (json!([5]), "demolish"),
+            (json!([6]), "new"),
+            (json!([12]), "existing"),
+        ] {
+            s.execute(
+                AnyCommand::from_tool(
+                    "set_renovation_status",
+                    &json!({"elements": els, "status": st}),
+                )
+                .unwrap(),
+                &ExecContext::user(),
+            )
+            .unwrap();
+        }
+        let doc = s.doc();
+        let ifc = export_ifc(doc).unwrap();
+        for v in ["DEMOLISH", "NEW", "EXISTING"] {
+            assert!(
+                ifc.contains(&format!(
+                    "IFCPROPERTYENUMERATEDVALUE('Status',$,(IFCLABEL('{v}')),$)"
+                )),
+                "{v}"
+            );
+        }
+        assert!(ifc.contains("'Pset_WallCommon'"));
+        assert!(ifc.contains("'Pset_BuildingElementProxyCommon'"));
+        // In the Existing phase the new wall is not built yet: left out.
+        let phases: Vec<ElementId> = doc.phases().iter().map(|p| p.id).collect();
+        let new_wall = ifc_guid(doc.get(ElementId(6)).unwrap().uid.0);
+        assert!(ifc.contains(&new_wall));
+        let early = export_ifc_phase(doc, Some(phases[0])).unwrap();
+        assert!(!early.contains(&new_wall));
+        assert!(!early.contains("'DEMOLISH'"));
+        assert_eq!(export_ifc_phase(doc, Some(phases[1])).unwrap(), ifc);
+        // Deterministic.
+        assert_eq!(export_ifc(doc).unwrap(), ifc);
     }
 
     #[test]

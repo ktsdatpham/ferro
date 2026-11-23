@@ -29,6 +29,8 @@ use std::sync::mpsc::Receiver;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
+mod phases;
+
 /// How much an AI agent may do on its own (D-26 autonomy slider).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Autonomy {
@@ -181,6 +183,8 @@ pub struct FerroApp {
     autonomy: Autonomy,
     proposal: Option<Proposal>,
     chat: Chat,
+    /// View phase and phase display (M5-23; view state, not saved).
+    phasing: phases::PhaseState,
 }
 
 fn now_ms() -> u64 {
@@ -259,6 +263,7 @@ impl FerroApp {
                 show_settings: false,
                 settings_note: String::new(),
             },
+            phasing: Default::default(),
         };
         if let Some(p) = open {
             app.open_path(p);
@@ -303,7 +308,25 @@ impl FerroApp {
             _ => None,
         };
         let name = cmd.name();
+        // While phasing is used, created elements get the view phase in the
+        // same undo step (Revit behaviour, see `phases`).
+        let grouped = name.starts_with("create_")
+            && !self.session.in_group()
+            && self.phase_for_new_elements().is_some()
+            && self.session.begin_group(name, self.ctx());
         let result = self.session.execute(cmd, &self.ctx());
+        if grouped {
+            match &result {
+                Ok(o) => {
+                    let added: Vec<ElementId> = o.changed.added.clone();
+                    self.assign_view_phase(&added);
+                    self.session.end_group();
+                }
+                Err(_) => {
+                    self.session.cancel_group();
+                }
+            }
+        }
         crate::report::record(match &result {
             Ok(_) => format!("{name} ok"),
             Err(f) => format!(
@@ -1452,6 +1475,7 @@ impl FerroApp {
                     .on_disabled_hover_text("Arrives in milestone 3");
             }
         }
+        self.renovation_toolbar(ui);
     }
 
     fn side_panel(&mut self, ui: &mut egui::Ui) {
@@ -1465,6 +1489,8 @@ impl FerroApp {
             }
             ui.separator();
             self.levels_ui(ui);
+            ui.separator();
+            self.phases_ui(ui);
             ui.separator();
             self.properties_ui(ui);
             ui.separator();
@@ -1780,6 +1806,13 @@ impl FerroApp {
                         ui.colored_label(Color32::from_rgb(r, g, b), "■■■");
                         ui.end_row();
                     }
+                    ElementBody::Phase(p) => {
+                        for (label, d) in [("Start", &p.start_date), ("End", &p.end_date)] {
+                            ui.label(label);
+                            ui.label(d.as_deref().unwrap_or("—"));
+                            ui.end_row();
+                        }
+                    }
                 }
                 if let Some(ParamValue::Area(a)) = e.param(keys::FORM_AREA) {
                     ui.label("Surface area");
@@ -1805,6 +1838,8 @@ impl FerroApp {
                     });
                     ui.end_row();
                 }
+
+                self.element_phase_rows(ui, &e);
 
                 ui.label("Comments");
                 let current = match e.param(keys::COMMENTS) {
@@ -2050,7 +2085,10 @@ impl FerroApp {
 
         // Snapping against the committed document (excluding moved elements).
         let mut moving: Vec<ElementId> = self.tool.moving().to_vec();
-        let hidden = self.hidden_elements();
+        let mut hidden = self.hidden_elements();
+        let phased = self.phase_display();
+        hidden.extend(phased.hidden.iter().copied());
+        self.scene.phase = phased.looks;
         moving.extend(hidden.iter().copied());
         moving.sort();
         moving.dedup();

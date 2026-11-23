@@ -25,10 +25,13 @@ pub enum Category {
     Furniture,
     GenericModels,
     Materials,
+    /// Construction stages (ADR 0006). Not IFC products: a phase maps to
+    /// `Pset_*Common.Status` on the exported elements.
+    Phases,
 }
 
 impl Category {
-    pub const ALL: [Category; 17] = [
+    pub const ALL: [Category; 18] = [
         Category::Levels,
         Category::Grids,
         Category::ReferencePlanes,
@@ -46,6 +49,7 @@ impl Category {
         Category::Furniture,
         Category::GenericModels,
         Category::Materials,
+        Category::Phases,
     ];
 
     /// Revit `BuiltInCategory` name.
@@ -68,6 +72,7 @@ impl Category {
             Category::Furniture => "OST_Furniture",
             Category::GenericModels => "OST_GenericModel",
             Category::Materials => "OST_Materials",
+            Category::Phases => "OST_Phases",
         }
     }
 
@@ -91,6 +96,9 @@ impl Category {
             Category::Furniture => "IfcFurniture",
             Category::GenericModels => "IfcBuildingElementProxy",
             Category::Materials => "IfcMaterial",
+            // Not an IFC product: exported as `Pset_*Common.Status` values
+            // (ADR 0006); `IfcWorkSchedule` is not used.
+            Category::Phases => "IfcPropertySingleValue",
         }
     }
 
@@ -103,6 +111,7 @@ impl Category {
                 | Category::ReferencePlanes
                 | Category::Rooms
                 | Category::Materials
+                | Category::Phases
         )
     }
 }

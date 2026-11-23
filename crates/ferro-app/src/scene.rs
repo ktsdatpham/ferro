@@ -9,7 +9,7 @@
 
 use crate::render::Vertex;
 use ferro_core::algo::Mesh;
-use ferro_core::model::{Document, ElementId};
+use ferro_core::model::{Document, ElementId, PhaseStatus};
 use ferro_core::topo::FaceId;
 use ferro_core::{BoundingBox3, Point3, UnitVec3};
 use ferro_scene::{DisplayScene, DrawRecord, SharedMesh};
@@ -21,6 +21,15 @@ pub const EDGE: [f32; 4] = [0.08, 0.09, 0.11, 1.0];
 pub const SELECT: [f32; 4] = [0.18, 0.45, 0.95, 1.0];
 /// Section cut lines.
 pub const CUT: [f32; 4] = [0.0, 0.0, 0.0, 1.0];
+/// Demolished / temporary faces (translucent) and their dashed edges (M5-23).
+pub const DEMOLISHED: [f32; 4] = [0.86, 0.32, 0.26, 0.35];
+pub const DEMOLISHED_EDGE: [f32; 4] = [0.70, 0.12, 0.08, 1.0];
+/// Existing elements: faces blended towards this grey, lighter edges.
+pub const EXISTING_GREY: [f32; 4] = [0.72, 0.72, 0.72, 1.0];
+pub const EXISTING_EDGE: [f32; 4] = [0.45, 0.46, 0.48, 1.0];
+/// Dash and gap of demolished edges, mm.
+const DASH_MM: f64 = 120.0;
+const GAP_MM: f64 = 80.0;
 
 /// What every chunk depends on besides its record: origin bits, X-ray,
 /// wireframe, hidden line.
@@ -30,6 +39,7 @@ type StyleKey = (u64, bool, bool, bool);
 struct Chunk {
     revision: u64,
     selected: bool,
+    phase: Option<PhaseStatus>,
     tris: Vec<Vertex>,
     lines: Vec<Vertex>,
 }
@@ -41,6 +51,7 @@ struct ListKey {
     style: StyleKey,
     selection: Vec<ElementId>,
     hidden: Vec<ElementId>,
+    phase: Vec<(ElementId, PhaseStatus)>,
 }
 
 /// What the cut lines were built for: scene revision, origin, hidden, plane.
@@ -72,6 +83,9 @@ pub struct SceneCache {
     pub cut: Vec<Vertex>,
     /// Chunks rebuilt by the last `update` (for tests and diagnostics).
     pub rebuilt: usize,
+    /// Phase status of elements drawn differently in the view's phase
+    /// (existing greyed, demolished / temporary red and dashed). View state.
+    pub phase: HashMap<ElementId, PhaseStatus>,
 }
 
 fn sorted(set: &HashSet<ElementId>) -> Vec<ElementId> {
@@ -103,6 +117,12 @@ impl SceneCache {
             style,
             selection: sorted(selection),
             hidden,
+            phase: {
+                let mut v: Vec<(ElementId, PhaseStatus)> =
+                    self.phase.iter().map(|(k, v)| (*k, *v)).collect();
+                v.sort();
+                v
+            },
         };
         if self.list_key.as_ref() == Some(&key) {
             return;
@@ -115,12 +135,13 @@ impl SceneCache {
         self.chunks.retain(|id, _| scene.record(*id).is_some());
         self.tris.clear();
         self.lines.clear();
+        let mut translucent = Vec::new();
         for r in scene.records() {
             let selected = selection.contains(&r.element);
-            let fresh = self
-                .chunks
-                .get(&r.element)
-                .is_some_and(|c| c.revision == r.revision && c.selected == selected);
+            let phase = self.phase.get(&r.element).copied();
+            let fresh = self.chunks.get(&r.element).is_some_and(|c| {
+                c.revision == r.revision && c.selected == selected && c.phase == phase
+            });
             if !fresh {
                 if let Some(m) = scene.shared_mesh(r.mesh) {
                     self.chunks.insert(
@@ -130,9 +151,8 @@ impl SceneCache {
                             m,
                             selected,
                             origin,
-                            self.xray,
-                            self.wireframe,
-                            self.hidden_line,
+                            (self.xray, self.wireframe, self.hidden_line),
+                            phase,
                         ),
                     );
                     self.rebuilt += 1;
@@ -141,7 +161,22 @@ impl SceneCache {
             if self.hidden.contains(&r.element) {
                 continue;
             }
+            // Translucent (demolished) faces go last so opaque faces behind
+            // them are already drawn when they blend.
+            if matches!(
+                phase,
+                Some(PhaseStatus::Demolished | PhaseStatus::Temporary)
+            ) {
+                translucent.push(r.element);
+                continue;
+            }
             if let Some(c) = self.chunks.get(&r.element) {
+                self.tris.extend_from_slice(&c.tris);
+                self.lines.extend_from_slice(&c.lines);
+            }
+        }
+        for id in translucent {
+            if let Some(c) = self.chunks.get(&id) {
                 self.tris.extend_from_slice(&c.tris);
                 self.lines.extend_from_slice(&c.lines);
             }
@@ -196,9 +231,8 @@ fn chunk(
     m: &SharedMesh,
     selected: bool,
     origin: Point3,
-    xray: bool,
-    wireframe: bool,
-    hidden_line: bool,
+    (xray, wireframe, hidden_line): (bool, bool, bool),
+    phase: Option<PhaseStatus>,
 ) -> Chunk {
     // Local → camera-relative: add the record's offset, subtract the origin.
     let shift = r.offset - (origin - Point3::ORIGIN);
@@ -206,13 +240,30 @@ fn chunk(
         let v = (p - Point3::ORIGIN) + shift;
         [v.x as f32, v.y as f32, v.z as f32]
     };
-    let c = r.color;
+    let demolished = matches!(
+        phase,
+        Some(PhaseStatus::Demolished | PhaseStatus::Temporary)
+    );
+    let c = match phase {
+        _ if demolished => DEMOLISHED,
+        Some(PhaseStatus::Existing) => {
+            let g = EXISTING_GREY;
+            let k = 0.25;
+            [
+                r.color[0] * k + g[0] * (1.0 - k),
+                r.color[1] * k + g[1] * (1.0 - k),
+                r.color[2] * k + g[2] * (1.0 - k),
+                r.color[3],
+            ]
+        }
+        _ => r.color,
+    };
     let color = if selected {
         [
             c[0] * 0.7 + 0.3 * SELECT[0],
             c[1] * 0.7 + 0.3 * SELECT[1],
             c[2] * 0.7 + 0.3 * SELECT[2],
-            1.0,
+            c[3],
         ]
     } else {
         c
@@ -246,18 +297,54 @@ fn chunk(
             }
         }
     }
-    let edge = if selected { SELECT } else { EDGE };
+    let edge = match phase {
+        _ if selected => SELECT,
+        _ if demolished => DEMOLISHED_EDGE,
+        Some(PhaseStatus::Existing) => EXISTING_EDGE,
+        _ => EDGE,
+    };
     let mut lines = Vec::with_capacity(m.edges.len() * 2);
     for [a, b] in &m.edges {
-        lines.push(line_vertex(rel(*a), edge));
-        lines.push(line_vertex(rel(*b), edge));
+        if demolished {
+            for (p, q) in dashes(*a, *b) {
+                lines.push(line_vertex(rel(p), edge));
+                lines.push(line_vertex(rel(q), edge));
+            }
+        } else {
+            lines.push(line_vertex(rel(*a), edge));
+            lines.push(line_vertex(rel(*b), edge));
+        }
     }
     Chunk {
         revision: r.revision,
         selected,
+        phase,
         tris,
         lines,
     }
+}
+
+/// Dashes along the edge `a`–`b` (model mm): about [`DASH_MM`] on and
+/// [`GAP_MM`] off, scaled so the edge starts and ends with a dash; an edge
+/// shorter than one dash and gap stays whole.
+/// At most 200 dashes per edge.
+fn dashes(a: Point3, b: Point3) -> Vec<(Point3, Point3)> {
+    let len = a.distance_to(b);
+    let period = DASH_MM + GAP_MM;
+    if len <= DASH_MM + GAP_MM || !len.is_finite() {
+        return vec![(a, b)];
+    }
+    // n dashes and n - 1 gaps, scaled to fit exactly: both ends are dashed.
+    let n = (((len + GAP_MM) / period).round() as usize).clamp(1, 200);
+    let unit = len / (n as f64 * DASH_MM + (n - 1) as f64 * GAP_MM);
+    let (on, step) = (DASH_MM * unit, period * unit);
+    let d = (b - a) * (1.0 / len);
+    (0..n)
+        .map(|i| {
+            let s = step * i as f64;
+            (a + d * s, a + d * (s + on))
+        })
+        .collect()
 }
 
 /// An edge vertex (drawn over its faces).
@@ -438,6 +525,47 @@ mod tests {
         assert_eq!(c.rebuilt, 3);
         assert!(c.tris.is_empty());
         assert_eq!(c.scene.revision(), rev);
+    }
+
+    #[test]
+    fn phase_looks_grey_existing_and_dash_demolished_last() {
+        let (s, ids) = boxes(2);
+        let mut c = SceneCache::default();
+        let none = HashSet::new();
+        c.update(s.doc(), Point3::ORIGIN, &none);
+        let plain_lines = c.lines.len();
+        c.phase.insert(ids[0], PhaseStatus::Demolished);
+        c.phase.insert(ids[1], PhaseStatus::Existing);
+        c.update(s.doc(), Point3::ORIGIN, &none);
+        assert_eq!(c.rebuilt, 2, "both looks changed");
+        // Demolished faces are translucent and drawn after the opaque ones.
+        assert_eq!(c.tris.len(), 2 * 36);
+        assert!(c.tris[..36].iter().all(|v| v.color[3] > 0.99));
+        assert!(c.tris[36..].iter().all(|v| v.color == DEMOLISHED));
+        // Its edges are dashed: more, shorter segments in the edge colour.
+        assert!(c.lines.len() > plain_lines);
+        assert!(c.lines.iter().any(|v| v.color == DEMOLISHED_EDGE));
+        assert!(c.lines.iter().any(|v| v.color == EXISTING_EDGE));
+        // Same looks again: nothing rebuilt.
+        let v = c.version;
+        c.update(s.doc(), Point3::ORIGIN, &none);
+        assert_eq!((c.version, c.rebuilt), (v, 0));
+    }
+
+    #[test]
+    fn dashes_cover_the_edge_from_end_to_end() {
+        let a = Point3::ORIGIN;
+        let b = Point3::new(1000.0, 0.0, 0.0);
+        let d = dashes(a, b);
+        assert_eq!(d.len(), 5);
+        assert!(d[0].0.distance_to(a) < 1e-9);
+        assert!(d[4].1.distance_to(b) < 1e-9);
+        assert!(d.iter().all(|(p, q)| p.distance_to(*q) < DASH_MM * 1.2));
+        // Short and zero-length edges stay whole.
+        assert_eq!(dashes(a, Point3::new(50.0, 0.0, 0.0)).len(), 1);
+        assert_eq!(dashes(a, a), vec![(a, a)]);
+        // Very long edges are capped.
+        assert_eq!(dashes(a, Point3::new(1e9, 0.0, 0.0)).len(), 200);
     }
 
     #[test]

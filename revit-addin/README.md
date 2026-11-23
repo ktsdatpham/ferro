@@ -45,5 +45,9 @@ The project references Revit 2025 API reference assemblies from NuGet
       top constraint, location line), floors with holes, doors, windows, Forms
 - [x] Revit → Ferro: levels, types, walls, floors, doors, windows; deletions
 - [x] Live pull
+- [x] Phases (ADR 0006): Phase Created / Phase Demolished set by phase name.
+      The Revit API cannot create phases, so a Ferro phase missing in Revit
+      renames the Revit phase at the same position, or is reported (add it in
+      Manage > Phases). Revit → Ferro phases are not imported yet.
 - [ ] Revit 2024 and older (.NET Framework 4.8)
 - [ ] Roofs, rooms, grids, curved-wall openings, loadable families

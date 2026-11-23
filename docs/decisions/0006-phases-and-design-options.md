@@ -60,3 +60,16 @@ D-32 reserves phase and design-option fields; nothing uses them yet.
 - New categories `Phases` and `DesignOptions` (category enum change; Revit `OST_Phases`, `OST_DesignOptions`).
 - Views (M5-22) carry a phase and a combination.
 - The change format (M5-26) must land before design options. Phases can land first.
+
+## Implementation notes (M5-23, phases)
+
+- New projects get **no** phases (not two): "Existing" and "New
+  Construction" are created the first time the simple mode is used, so
+  unphased projects stay free of phase data (owner / lead decision for
+  M5-23). Elements without `phase_created` are existing in every phase.
+- `PhaseStatus` has a sixth value, `past`: demolished in an earlier phase,
+  hidden (Revit behaves the same).
+- Commands: `create_phase`, `set_phase`, `delete_phase` (with `merge_into`),
+  `set_element_phase`, `set_renovation_status`; query `get_phase_quantities`.
+  Details in Foundation §3.10.
+

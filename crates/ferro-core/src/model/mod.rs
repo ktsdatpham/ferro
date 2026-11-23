@@ -15,6 +15,8 @@ mod ids;
 pub mod material;
 mod parameter;
 mod parameter_definition;
+pub mod phase;
+pub mod phase_quantities;
 pub mod project_settings;
 pub mod structure_quantities;
 
@@ -27,3 +29,5 @@ pub use parameter_definition::{
     builtin_definition, builtin_definitions, IfcPropertyMapping, ParameterBinding,
     ParameterDataType, ParameterDefinition, ParameterGroup,
 };
+pub use phase::{Phase, PhaseStatus};
+pub use phase_quantities::PhaseQuantities;
