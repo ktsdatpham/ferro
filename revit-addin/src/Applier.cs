@@ -57,6 +57,7 @@ namespace Ferro.Revit
                         case "floor": Floor(op); break;
                         case "opening": Opening(op); break;
                         case "direct_shape": DirectShape(op); break;
+                        case "phase": PhaseOp(op); break;
                         default: _report.Problems.Add($"unknown operation {kind}"); break;
                     }
                 }
@@ -88,6 +89,7 @@ namespace Ferro.Revit
 
         private void Tag(Element e, JsonObject op, bool created)
         {
+            Phases(e, op);
             Tags.Set(e, Str(op, "uid"), Str(op, "signature"));
             _byUid[Str(op, "uid")] = e;
             if (created) _report.Created++; else _report.Updated++;
@@ -187,6 +189,54 @@ namespace Ferro.Revit
             if (Math.Abs(lvl.Elevation - elev) > 1e-9) lvl.Elevation = elev;
             if (lvl.Name != name) lvl.Name = UniqueName<Level>(name, lvl);
             Tag(lvl, op, created);
+        }
+
+        // ------------------------------------------------------------ phases
+
+        private Phase? PhaseNamed(string name)
+        {
+            foreach (Phase p in _doc.Phases)
+                if (p.Name == name) return p;
+            return null;
+        }
+
+        /// <summary>The Revit API cannot create phases: find the phase by name,
+        /// else rename the phase at the same position, else report.</summary>
+        private void PhaseOp(JsonObject op)
+        {
+            var name = Str(op, "name");
+            if (PhaseNamed(name) != null) return;
+            var order = (int)Num(op, "order");
+            if (order >= 0 && order < _doc.Phases.Size)
+            {
+                var p = _doc.Phases[order];
+                p.Name = name;
+                _report.Updated++;
+                return;
+            }
+            _report.Problems.Add($"phase {name}: add it in Manage > Phases (Revit cannot create phases from an add-in)");
+        }
+
+        /// <summary>PHASE_CREATED / PHASE_DEMOLISHED from phase names; only
+        /// when the operation carries phases (unphased elements are left alone).</summary>
+        private void Phases(Element e, JsonObject op)
+        {
+            var created = OptStr(op, "phase_created");
+            var demolished = OptStr(op, "phase_demolished");
+            if (created == null && demolished == null) return;
+            if (created != null)
+            {
+                var p = PhaseNamed(created);
+                if (p != null) SetParam(e, BuiltInParameter.PHASE_CREATED, p.Id);
+                else _report.Problems.Add($"{Name(op)}: no phase {created}");
+            }
+            if (demolished == null) SetParam(e, BuiltInParameter.PHASE_DEMOLISHED, ElementId.InvalidElementId);
+            else
+            {
+                var p = PhaseNamed(demolished);
+                if (p != null) SetParam(e, BuiltInParameter.PHASE_DEMOLISHED, p.Id);
+                else _report.Problems.Add($"{Name(op)}: no phase {demolished}");
+            }
         }
 
         private CompoundStructure Structure(JsonObject op)

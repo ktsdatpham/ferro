@@ -123,6 +123,13 @@ pub enum RevitOp {
         /// `WallLocationLine` value: 0 centerline, 1 core centerline,
         /// 2 finish exterior, 3 finish interior.
         location_line: i32,
+        /// Phase names for `PHASE_CREATED` / `PHASE_DEMOLISHED` (looked up
+        /// by name in Revit). Omitted when the element has no phases, so
+        /// unphased elements keep their signature.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        phase_created: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        phase_demolished: Option<String>,
     },
     /// `Floor.Create(loops, type, level)`, then `FLOOR_HEIGHTABOVELEVEL_PARAM`.
     /// First loop is the outline (counter-clockwise), then holes (clockwise),
@@ -135,6 +142,13 @@ pub enum RevitOp {
         level_uid: String,
         loops: Vec<Vec<[f64; 3]>>,
         offset: f64,
+        /// Phase names for `PHASE_CREATED` / `PHASE_DEMOLISHED` (looked up
+        /// by name in Revit). Omitted when the element has no phases, so
+        /// unphased elements keep their signature.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        phase_created: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        phase_demolished: Option<String>,
     },
     /// A door or window family instance hosted by a wall, placed at `point`
     /// (on the wall's location line, at the wall base). Size via the type's
@@ -153,6 +167,22 @@ pub enum RevitOp {
         width: f64,
         height: f64,
         sill: f64,
+        /// Phase names for `PHASE_CREATED` / `PHASE_DEMOLISHED` (looked up
+        /// by name in Revit). Omitted when the element has no phases, so
+        /// unphased elements keep their signature.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        phase_created: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        phase_demolished: Option<String>,
+    },
+    /// A phase (ADR 0006). The Revit API cannot create phases: the add-in
+    /// finds the phase by `name`, else renames the phase at position
+    /// `order` (0 = first), else reports a problem. Phases are not tagged.
+    Phase {
+        uid: String,
+        signature: String,
+        name: String,
+        order: u32,
     },
     /// Free-form geometry as a `DirectShape` mesh.
     DirectShape {
@@ -163,6 +193,13 @@ pub enum RevitOp {
         category: String,
         vertices: Vec<[f64; 3]>,
         triangles: Vec<[u32; 3]>,
+        /// Phase names for `PHASE_CREATED` / `PHASE_DEMOLISHED` (looked up
+        /// by name in Revit). Omitted when the element has no phases, so
+        /// unphased elements keep their signature.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        phase_created: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        phase_demolished: Option<String>,
     },
 }
 
@@ -177,7 +214,8 @@ impl RevitOp {
             | RevitOp::Wall { uid, .. }
             | RevitOp::Floor { uid, .. }
             | RevitOp::Opening { uid, .. }
-            | RevitOp::DirectShape { uid, .. } => uid,
+            | RevitOp::DirectShape { uid, .. }
+            | RevitOp::Phase { uid, .. } => uid,
         }
     }
 
@@ -191,7 +229,8 @@ impl RevitOp {
             | RevitOp::Wall { signature, .. }
             | RevitOp::Floor { signature, .. }
             | RevitOp::Opening { signature, .. }
-            | RevitOp::DirectShape { signature, .. } => Some(signature),
+            | RevitOp::DirectShape { signature, .. }
+            | RevitOp::Phase { signature, .. } => Some(signature),
         }
     }
 
@@ -217,7 +256,8 @@ impl RevitOp {
             | RevitOp::Wall { signature, .. }
             | RevitOp::Floor { signature, .. }
             | RevitOp::Opening { signature, .. }
-            | RevitOp::DirectShape { signature, .. } => signature,
+            | RevitOp::DirectShape { signature, .. }
+            | RevitOp::Phase { signature, .. } => signature,
         }
     }
 }
@@ -292,7 +332,7 @@ fn signed_area(pts: &[Point2]) -> f64 {
 }
 
 /// Operations that bring a Revit model holding `state` up to date with
-/// `doc`. Order: deletes, materials, levels, types, walls, floors, openings,
+/// `doc`. Order: deletes, materials, levels and phases, types, walls, floors, openings,
 /// direct shapes. Elements whose signature is unchanged are skipped.
 pub fn plan(doc: &Document, state: &RevitState) -> Vec<RevitOp> {
     let uid_of = |id: ferro_core::ElementId| doc.get(id).map(|e| e.uid.to_string());
@@ -309,6 +349,11 @@ pub fn plan(doc: &Document, state: &RevitState) -> Vec<RevitOp> {
             .unwrap_or_else(|| DEFAULT_LEVEL_UID.to_string())
     };
     let level_z = |e: &Element| generate::level_elevation(doc, e.level_id);
+    let phase_name = |id: Option<ferro_core::ElementId>| {
+        id.and_then(|i| doc.get(i))
+            .filter(|p| p.as_phase().is_some())
+            .map(|p| p.label())
+    };
 
     let mut groups: [Vec<RevitOp>; 7] = Default::default();
     if needs_default_level {
@@ -411,6 +456,8 @@ pub fn plan(doc: &Document, state: &RevitState) -> Vec<RevitOp> {
                         top_level_uid,
                         top_offset: r(ft(top_offset)),
                         location_line: location_line(w.location_line),
+                        phase_created: phase_name(e.phase_created),
+                        phase_demolished: phase_name(e.phase_demolished),
                     },
                 )
             }
@@ -438,6 +485,8 @@ pub fn plan(doc: &Document, state: &RevitState) -> Vec<RevitOp> {
                         level_uid: level_uid(e),
                         loops,
                         offset: r(ft(f.offset.mm())),
+                        phase_created: phase_name(e.phase_created),
+                        phase_demolished: phase_name(e.phase_demolished),
                     },
                 )
             }
@@ -474,9 +523,24 @@ pub fn plan(doc: &Document, state: &RevitState) -> Vec<RevitOp> {
                         width: r(ft(o.width.mm())),
                         height: r(ft(o.height.mm())),
                         sill: r(ft(lay.z0 - host_level + o.sill.mm())),
+                        phase_created: phase_name(e.phase_created),
+                        phase_demolished: phase_name(e.phase_demolished),
                     },
                 )
             }
+            // Phases go first, with the levels (elements refer to them).
+            ElementBody::Phase(p) => (
+                1,
+                RevitOp::Phase {
+                    uid,
+                    signature: String::new(),
+                    name: e.label(),
+                    order: doc
+                        .phase_index(e.id)
+                        .map(|i| i as u32)
+                        .unwrap_or(p.order),
+                },
+            ),
             ElementBody::Form(f) => {
                 let Ok(m) = body_mesh(&f.body) else { continue };
                 if m.indices.is_empty() {
@@ -491,6 +555,8 @@ pub fn plan(doc: &Document, state: &RevitState) -> Vec<RevitOp> {
                         category: e.category.revit_builtin().into(),
                         vertices: m.positions.iter().map(|p| p3(p.x, p.y, p.z)).collect(),
                         triangles: m.indices.clone(),
+                        phase_created: phase_name(e.phase_created),
+                        phase_demolished: phase_name(e.phase_demolished),
                     },
                 )
             }
@@ -592,6 +658,57 @@ mod tests {
     use serde_json::json;
 
     #[test]
+    fn phases_and_element_phase_names_are_planned() {
+        let mut s = house();
+        // Unphased elements carry no phase fields (signatures unchanged).
+        let before = plan(s.doc(), &RevitState::default());
+        assert!(!serde_json::to_string(&before).unwrap().contains("phase"));
+        let wall = s
+            .doc()
+            .elements()
+            .find(|e| e.as_wall().is_some())
+            .map(|e| e.id)
+            .unwrap();
+        s.execute(
+            AnyCommand::from_tool(
+                "set_renovation_status",
+                &json!({"elements": [wall], "status": "demolish"}),
+            )
+            .unwrap(),
+            &ExecContext::user(),
+        )
+        .unwrap();
+        let ops = plan(s.doc(), &RevitState::default());
+        let phases: Vec<(String, u32)> = ops
+            .iter()
+            .filter_map(|o| match o {
+                RevitOp::Phase { name, order, .. } => Some((name.clone(), *order)),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(
+            phases,
+            [("Existing".to_string(), 0), ("New Construction".to_string(), 1)]
+        );
+        let uid = s.doc().get(wall).unwrap().uid.to_string();
+        let op = ops.iter().find(|o| o.uid() == uid).unwrap();
+        let RevitOp::Wall {
+            phase_created,
+            phase_demolished,
+            ..
+        } = op
+        else {
+            panic!("{op:?}")
+        };
+        assert_eq!(phase_created.as_deref(), Some("Existing"));
+        assert_eq!(phase_demolished.as_deref(), Some("New Construction"));
+        // Phases come before walls.
+        let first_wall = ops.iter().position(|o| matches!(o, RevitOp::Wall { .. }));
+        let last_phase = ops.iter().rposition(|o| matches!(o, RevitOp::Phase { .. }));
+        assert!(last_phase < first_wall);
+    }
+
+    #[test]
     fn full_plan_is_ordered_and_in_feet() {
         let s = house();
         let ops = plan(s.doc(), &RevitState::default());
@@ -606,6 +723,7 @@ mod tests {
                 RevitOp::Floor { .. } => "floor",
                 RevitOp::Opening { .. } => "opening",
                 RevitOp::DirectShape { .. } => "direct_shape",
+                RevitOp::Phase { .. } => "phase",
                 RevitOp::Delete { .. } => "delete",
             })
             .collect();
