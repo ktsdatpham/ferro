@@ -31,6 +31,7 @@ use std::time::{Duration, Instant};
 
 mod design_options;
 mod phases;
+mod python;
 mod views;
 
 /// How much an AI agent may do on its own (D-26 autonomy slider).
@@ -184,6 +185,10 @@ pub struct FerroApp {
     ref_dir: Option<ferro_core::UnitVec3>,
     autonomy: Autonomy,
     proposal: Option<Proposal>,
+    /// The `run_python` script running now, if any (ADR 0005 §5).
+    python: Option<python::ScriptRun>,
+    /// Interpreter and SDK for `run_python` (`FERRO_PYTHON`, `FERRO_PYTHON_SDK`).
+    python_config: ferro_mcp::python::PythonConfig,
     chat: Chat,
     /// View phase and phase display (M5-23; copy of the active view's).
     phasing: phases::PhaseState,
@@ -259,6 +264,8 @@ impl FerroApp {
             ref_dir: None,
             autonomy: Autonomy::Propose,
             proposal: None,
+            python: None,
+            python_config: ferro_mcp::python::PythonConfig::from_env(),
             chat: Chat {
                 open: false,
                 input: String::new(),
@@ -307,6 +314,9 @@ impl FerroApp {
     }
 
     fn run(&mut self, cmd: AnyCommand) -> bool {
+        if self.script_running() {
+            return false;
+        }
         // Editing while a proposal is open accepts it first.
         if self.proposal.is_some() {
             self.accept_proposal();
@@ -387,6 +397,9 @@ impl FerroApp {
 
     fn undo(&mut self) {
         self.tool.cancel();
+        if self.script_running() {
+            return;
+        }
         if self.proposal.is_some() {
             self.reject_proposal();
             return;
@@ -404,6 +417,9 @@ impl FerroApp {
 
     fn redo(&mut self) {
         self.tool.cancel();
+        if self.script_running() {
+            return;
+        }
         if self.proposal.is_some() {
             return;
         }
@@ -622,7 +638,7 @@ impl FerroApp {
     }
 
     fn new_document(&mut self) {
-        if !self.confirm_discard() {
+        if self.script_running() || !self.confirm_discard() {
             return;
         }
         let doc = Document::new("Untitled");
@@ -651,6 +667,9 @@ impl FerroApp {
     }
 
     fn open_path(&mut self, p: PathBuf) {
+        if self.script_running() {
+            return;
+        }
         let is_json = p.to_string_lossy().ends_with(".json");
         let loaded = if is_json {
             std::fs::read_to_string(&p)
@@ -2705,6 +2724,9 @@ impl FerroApp {
     // ------------------------------------------------------------ agents
 
     fn accept_proposal(&mut self) {
+        if self.script_running() {
+            return;
+        }
         if let Some(p) = self.proposal.take() {
             self.session.end_group();
             self.say(
@@ -2716,6 +2738,9 @@ impl FerroApp {
     }
 
     fn reject_proposal(&mut self) {
+        if self.script_running() {
+            return;
+        }
         if let Some(p) = self.proposal.take() {
             self.session.cancel_group();
             self.selection
@@ -2730,7 +2755,17 @@ impl FerroApp {
         self.link.set_project(&name);
         for p in self.link.drain() {
             let tool = p.req.tool.clone();
-            let resp = self.agent_call(p.req);
+            let resp = if self.is_script_token(&p.req.token) {
+                self.script_call(p.req)
+            } else if let Some(busy) = self.refuse_while_script(&tool) {
+                busy
+            } else if tool == ferro_mcp::python::TOOL {
+                // Answered when the script ends (`poll_python`).
+                self.start_python(p.req, p.reply);
+                continue;
+            } else {
+                self.agent_call(p.req)
+            };
             // Tool name and outcome code only (no arguments: model data).
             let code = resp.body["failures"][0]["code"].as_str().unwrap_or("");
             crate::report::record(if resp.ok {
@@ -2742,7 +2777,8 @@ impl FerroApp {
         }
     }
 
-    fn agent_call(&mut self, req: LinkRequest) -> LinkResponse {
+    /// Who sent a Ferro Link request, and the context its changes carry.
+    fn agent_ctx(req: &LinkRequest) -> (AgentInfo, ExecContext) {
         let info = req.agent.clone().unwrap_or(AgentInfo {
             name: "agent".into(),
             version: String::new(),
@@ -2752,6 +2788,11 @@ impl FerroApp {
             prompt: req.prompt.clone(),
             timestamp_ms: now_ms(),
         };
+        (info, ctx)
+    }
+
+    fn agent_call(&mut self, req: LinkRequest) -> LinkResponse {
+        let (info, ctx) = Self::agent_ctx(&req);
         let answer = |r: Result<Value, Value>| match r {
             Ok(body) => LinkResponse { ok: true, body },
             Err(body) => LinkResponse { ok: false, body },
@@ -3142,6 +3183,7 @@ impl eframe::App for FerroApp {
         let ctx = ui.ctx().clone();
         self.refresh_view();
         self.process_agent_calls();
+        self.poll_python(&ctx);
         self.sync_view();
         self.poll_chat();
         self.shortcuts(&ctx);

@@ -111,7 +111,9 @@ user as a proposal they accept or reject; keep each request focused and explain 
 const MAX_STEPS: usize = 24;
 
 fn tool_defs(provider: Provider) -> Vec<Value> {
-    ferro_tools::list()
+    let mut tools = ferro_tools::list();
+    tools.push(ferro_mcp::python::tool());
+    tools
         .into_iter()
         .map(|t| match provider {
             Provider::Anthropic => json!({
