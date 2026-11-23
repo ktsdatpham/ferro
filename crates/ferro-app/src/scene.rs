@@ -6,11 +6,13 @@ use crate::render::Vertex;
 use ferro_core::algo::{body_mesh, Mesh};
 use ferro_core::model::{Category, Document, ElementId};
 use ferro_core::topo::FaceId;
-use ferro_core::{BoundingBox3, Point3};
+use ferro_core::{BoundingBox3, Point3, UnitVec3};
 use std::collections::{HashMap, HashSet};
 
 pub const EDGE: [f32; 4] = [0.08, 0.09, 0.11, 1.0];
 pub const SELECT: [f32; 4] = [0.18, 0.45, 0.95, 1.0];
+/// Section cut lines.
+pub const CUT: [f32; 4] = [0.0, 0.0, 0.0, 1.0];
 
 /// Display colour: the material of the element's type (core layer), else a
 /// category colour.
@@ -57,8 +59,16 @@ fn face_color(c: Category) -> [f32; 4] {
 }
 
 /// What the vertex lists were built for: origin bits, selection, X-ray,
-/// wireframe, hidden elements.
-type SceneKey = (u64, Vec<ElementId>, bool, bool, Vec<ElementId>);
+/// wireframe, hidden line, hidden elements, section plane bits.
+type SceneKey = (
+    u64,
+    Vec<ElementId>,
+    bool,
+    bool,
+    bool,
+    Vec<ElementId>,
+    Vec<u64>,
+);
 
 struct Cached {
     doc: Document,
@@ -78,6 +88,12 @@ pub struct SceneCache {
     pub wireframe: bool,
     /// Elements not drawn (hidden, or on a hidden Tag). View state only.
     pub hidden: HashSet<ElementId>,
+    /// White faces (Hidden line style).
+    pub hidden_line: bool,
+    /// Section plane (point, normal of the side cut away). View state only.
+    pub section: Option<(Point3, UnitVec3)>,
+    /// Where the section plane cuts faces (drawn over everything else).
+    pub cut: Vec<Vertex>,
 }
 
 impl SceneCache {
@@ -93,11 +109,21 @@ impl SceneCache {
             sel.clone(),
             self.xray,
             self.wireframe,
+            self.hidden_line,
             {
                 let mut h: Vec<ElementId> = self.hidden.iter().copied().collect();
                 h.sort();
                 h
             },
+            self.section
+                .map(|(p, n)| {
+                    let n = n.as_vec();
+                    vec![p.x, p.y, p.z, n.x, n.y, n.z]
+                        .into_iter()
+                        .map(f64::to_bits)
+                        .collect()
+                })
+                .unwrap_or_default(),
         );
         if same_doc && self.key.as_ref() == Some(&key) {
             return;
@@ -124,6 +150,7 @@ impl SceneCache {
 
         self.tris.clear();
         self.lines.clear();
+        self.cut.clear();
         let rel = |p: Point3| {
             let v = p - origin;
             [v.x as f32, v.y as f32, v.z as f32]
@@ -145,6 +172,11 @@ impl SceneCache {
             } else {
                 element_color(doc, e)
             };
+            let color = if self.hidden_line {
+                [1.0, 1.0, 1.0, 1.0]
+            } else {
+                color
+            };
             let color = if self.xray {
                 [color[0], color[1], color[2], 0.3]
             } else {
@@ -162,6 +194,12 @@ impl SceneCache {
                     }
                 }
             }
+            if let (Some((p, n)), Some(m)) = (self.section, self.meshes.get(&e.id)) {
+                for (a, b) in section_segments(m, p, n) {
+                    self.cut.push(line_vertex(rel(a), CUT));
+                    self.cut.push(line_vertex(rel(b), CUT));
+                }
+            }
             let edge = if selected { SELECT } else { EDGE };
             // Hide edges inside smooth groups (facets of one curved surface).
             for (a, b) in visible_edges(g) {
@@ -174,6 +212,41 @@ impl SceneCache {
     pub fn mesh(&self, id: ElementId) -> Option<&Mesh> {
         self.meshes.get(&id)
     }
+}
+
+/// Segments where the plane through `p` with normal `n` crosses the mesh's
+/// triangles (the section cut). Triangles lying in the plane give none.
+pub fn section_segments(m: &Mesh, p: Point3, n: UnitVec3) -> Vec<(Point3, Point3)> {
+    let n = n.as_vec();
+    let side = |q: Point3| {
+        let d = n.dot(q - p);
+        if d.abs() <= ferro_core::math::tol::VERTEX_TOL {
+            0.0
+        } else {
+            d
+        }
+    };
+    let mut out = Vec::new();
+    for t in &m.indices {
+        let v = t.map(|i| m.positions[i as usize]);
+        let d = v.map(side);
+        let mut pts: Vec<Point3> = Vec::with_capacity(2);
+        for i in 0..3 {
+            let (a, b, da, db) = (v[i], v[(i + 1) % 3], d[i], d[(i + 1) % 3]);
+            if da == 0.0 {
+                pts.push(a);
+            } else if da * db < 0.0 {
+                pts.push(a + (b - a) * (da / (da - db)));
+            }
+        }
+        pts.dedup_by(|x, y| x.is_almost_equal(*y));
+        if let [a, b] = pts[..] {
+            // An edge lying in the plane belongs to two triangles: the cut
+            // shows it once each, which is harmless when drawn.
+            out.push((a, b));
+        }
+    }
+    out
 }
 
 /// Bit pattern of an unordered segment (exact endpoint match).
@@ -337,4 +410,59 @@ pub fn doc_bounds(doc: &Document) -> Option<BoundingBox3> {
     doc.elements()
         .filter_map(|e| e.bounding_box())
         .reduce(|a, b| a.union(b))
+}
+
+#[cfg(test)]
+mod section_tests {
+    use super::*;
+    use ferro_core::Vec3;
+
+    /// One triangle with corners (0,0,0), (1000,0,0), (0,1000,0).
+    fn tri() -> Mesh {
+        Mesh {
+            positions: vec![
+                Point3::new(0.0, 0.0, 0.0),
+                Point3::new(1000.0, 0.0, 0.0),
+                Point3::new(0.0, 1000.0, 0.0),
+            ],
+            normals: vec![Vec3::Z; 3],
+            indices: vec![[0, 1, 2]],
+            triangle_faces: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn plane_across_a_triangle_gives_one_segment() {
+        let s = section_segments(&tri(), Point3::new(500.0, 0.0, 0.0), UnitVec3::X);
+        let [(a, b)] = s[..] else { panic!("{s:?}") };
+        let ends = [a, b];
+        assert!(ends
+            .iter()
+            .any(|p| p.is_almost_equal(Point3::new(500.0, 0.0, 0.0))));
+        assert!(ends
+            .iter()
+            .any(|p| p.is_almost_equal(Point3::new(500.0, 500.0, 0.0))));
+    }
+
+    #[test]
+    fn plane_missing_or_containing_the_triangle_gives_nothing() {
+        assert!(section_segments(&tri(), Point3::new(2000.0, 0.0, 0.0), UnitVec3::X).is_empty());
+        assert!(section_segments(&tri(), Point3::new(0.0, 0.0, 0.0), UnitVec3::Z).is_empty());
+        assert!(
+            section_segments(&Mesh::default(), Point3::new(0.0, 0.0, 0.0), UnitVec3::X).is_empty()
+        );
+    }
+
+    #[test]
+    fn plane_through_a_corner_within_tolerance() {
+        // Through vertex (1000,0,0) only: a single point, no segment.
+        let p = Point3::new(1000.0 + 0.005, 0.0, 0.0);
+        assert!(section_segments(&tri(), p, UnitVec3::X).is_empty());
+        // Through the vertex (0,0,0) and across the opposite edge.
+        let n = Vec3::new(1.0, -1.0, 0.0).normalize().unwrap();
+        let s = section_segments(&tri(), Point3::new(0.0, 0.0, 0.0), n);
+        assert_eq!(s.len(), 1);
+        let (a, b) = s[0];
+        assert!((a.distance_to(b) - 1000.0 / 2f64.sqrt()).abs() < 1e-6);
+    }
 }

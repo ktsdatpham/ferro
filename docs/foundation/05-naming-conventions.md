@@ -20,6 +20,8 @@ for the same concept.
 | `Level` | Named elevation | Storey, Floor (as a datum), Story |
 | `Grid` | Named plan datum | Axis line |
 | `ReferencePlane` | Named alignment plane | Guide, Construction plane |
+| `ReferenceLine` / `ReferencePoint` | Alignment line / point (SketchUp guides) | Guide, Construction line, Construction point |
+| `Dimension` | Model distance annotation | Measure, Dim (as a type) |
 | `WorkPlane` | Active sketch plane | Sketch plane, Drawing plane |
 | `Form` | Free-form editable element | Mass, Group, Blob, Mesh element |
 | `Profile` | Outer loop + holes | Shape, Outline, Polygon (for this) |
