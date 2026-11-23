@@ -1042,7 +1042,6 @@ fn scaling_never_creates_edges_below_short_curve_tolerance() {
 /// centre (same orientation, every edge reversed): it is too large, not an
 /// imprint that misses the face.
 #[test]
-#[ignore = "bug: offset past the middle of a face fails with ferro.algo.unsupported, not offset_too_large"]
 fn offset_past_the_middle_is_too_large() {
     let mut f = Fx::new();
     let top = f.top(f.bx);
