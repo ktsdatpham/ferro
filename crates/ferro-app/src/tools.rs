@@ -98,33 +98,6 @@ impl ToolKind {
             ToolKind::Window => "Window",
         }
     }
-    /// Keyboard shortcut (SketchUp defaults; BIM tools on free keys).
-    pub fn shortcut(self) -> &'static str {
-        match self {
-            ToolKind::Select => "Space",
-            ToolKind::Line => "L",
-            ToolKind::Rectangle => "R",
-            ToolKind::Circle => "C",
-            ToolKind::Arc => "A",
-            ToolKind::Tape => "T",
-            ToolKind::Section => "J",
-            ToolKind::Polygon => "G",
-            ToolKind::PushPull => "P",
-            ToolKind::Offset => "F",
-            ToolKind::Move => "M",
-            ToolKind::Rotate => "Q",
-            ToolKind::Scale => "S",
-            ToolKind::Eraser => "E",
-            ToolKind::Paint => "B",
-            ToolKind::Wall => "W",
-            ToolKind::Floor => "U",
-            ToolKind::Door => "D",
-            ToolKind::Window => "N",
-        }
-    }
-    pub fn icon(self) -> &'static str {
-        self.shortcut()
-    }
 }
 
 /// What the tool sees each frame.

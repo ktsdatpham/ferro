@@ -52,6 +52,28 @@ Orbit camera (Z up). Rendering is camera-relative (D-05): GPU positions are `f32
 - fn `FrameCamera::new`
 - fn `FrameCamera::ray` — Picking ray through a screen position (egui points).
 
+### `ferro_app::keymap`
+
+Keyboard shortcuts as data (ADR 0004 §7, M5-11).
+
+- const `SEQUENCE_WINDOW_S` — Seconds within which a second letter makes a two-letter code.
+- enum `Target` — What a shortcut does.
+- fn `Target::tool` — The tool this target activates, if it is a tool.
+- fn `Target::from_tool` — The target that activates a tool.
+- fn `Target::label` — Label for menus and the command palette.
+- enum `KeyScheme` — Built-in shortcut sets.
+- fn `KeyScheme::label`
+- struct `KeymapFile` — User file `~/.ferro/keymap.json`.
+- struct `Keymap` — The active bindings: keys (one letter or a named key) and two-letter codes.
+- fn `Keymap::scheme` — The bindings of a preset.
+- fn `Keymap::from_file` — A preset with the user's overrides applied. Invalid keys are
+- fn `Keymap::get` — Target bound to a key or code.
+- fn `Keymap::keys_for` — Keys and codes for a target, single keys first (for labels).
+- fn `Keymap::label_for` — Shortest label for a target's shortcut, e.g. "L" or "WA".
+- struct `KeyResolver` — Turns key presses into targets, handling two-letter codes.
+- fn `KeyResolver::letter` — A letter (A–Z, any case) pressed at time `t` (seconds). Returns the
+- fn `KeyResolver::named` — A non-letter key (Space, Delete, Shift+letter) breaks a sequence.
+
 ### `ferro_app::link`
 
 Ferro Link server (D-65): agents (ferro-mcp, the in-app chat) send tool calls; they are executed on the UI thread against the open model so the user sees every change and can accept or reject it.
@@ -103,8 +125,6 @@ Drawing tools (D-72): app-side state machines. Each tool previews by evaluating 
 - fn `ToolKind::is_chain` — Tools that draw a chain of clicked points.
 - fn `ToolKind::is_bim`
 - fn `ToolKind::label`
-- fn `ToolKind::shortcut` — Keyboard shortcut (SketchUp defaults; BIM tools on free keys).
-- fn `ToolKind::icon`
 - struct `ToolCtx` — What the tool sees each frame.
 - enum `SubPick` — Part of a Form picked while editing it (SketchUp group editing).
 - fn `pick_sub` — The vertex, edge or face of `element` under the snap.

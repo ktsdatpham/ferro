@@ -7,6 +7,7 @@
 mod ai;
 mod app;
 mod camera;
+mod keymap;
 mod link;
 mod render;
 mod scene;

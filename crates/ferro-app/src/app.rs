@@ -3,6 +3,7 @@
 
 use crate::ai::{self, AiSettings, ChatEvent, Provider};
 use crate::camera::{FrameCamera, OrbitCamera};
+use crate::keymap::{KeyResolver, KeyScheme, Keymap, KeymapFile, Target};
 use crate::link::{self, LinkServer};
 use crate::render::{FrameData, Renderer, Vertex};
 use crate::scene::{self, line_vertex, SceneCache};
@@ -160,6 +161,11 @@ pub struct FerroApp {
     axis_lock: Option<ferro_snap::Axis>,
     /// Axis locked while Shift is held over an axis inference.
     shift_lock: Option<(SnapKind, ferro_core::Vec3)>,
+    /// Keyboard shortcuts (preset + `~/.ferro/keymap.json`).
+    keymap: Keymap,
+    keys: KeyResolver,
+    /// Command palette query, when open (Ctrl+K).
+    palette: Option<String>,
     /// Direction of the last edge hovered: reference for parallel /
     /// perpendicular inference (SketchUp: hover an edge to teach it).
     ref_dir: Option<ferro_core::UnitVec3>,
@@ -221,6 +227,9 @@ impl FerroApp {
             sub_sel: Vec::new(),
             axis_lock: None,
             shift_lock: None,
+            keymap: Keymap::scheme(KeyScheme::Ferro),
+            keys: KeyResolver::default(),
+            palette: None,
             ref_dir: None,
             autonomy: Autonomy::Propose,
             proposal: None,
@@ -239,6 +248,7 @@ impl FerroApp {
         if let Some(p) = open {
             app.open_path(p);
         }
+        app.load_keymap();
         app
     }
 
@@ -800,6 +810,9 @@ impl FerroApp {
         if cmd && pressed(Key::N) {
             self.new_document();
         }
+        if cmd && pressed(Key::K) {
+            self.palette = Some(String::new());
+        }
         // egui turns Ctrl+C / Ctrl+V into Copy / Paste events.
         let copy_ev = ctx.input(|i| i.events.iter().any(|e| matches!(e, egui::Event::Copy)));
         let paste_ev = ctx.input(|i| i.events.iter().any(|e| matches!(e, egui::Event::Paste(_))));
@@ -902,46 +915,149 @@ impl FerroApp {
                 self.delete_selection();
             }
         }
-        if pressed(Key::Delete) {
-            self.delete_selection();
+        // Shortcuts from the keymap: single keys and two-letter codes.
+        let (now, presses): (f64, Vec<(Key, bool)>) = ctx.input(|i| {
+            (
+                i.time,
+                i.events
+                    .iter()
+                    .filter_map(|e| match e {
+                        egui::Event::Key {
+                            key,
+                            pressed: true,
+                            repeat: false,
+                            modifiers,
+                            ..
+                        } if !modifiers.command && !modifiers.alt => Some((*key, modifiers.shift)),
+                        _ => None,
+                    })
+                    .collect(),
+            )
+        });
+        for (key, shift) in presses {
+            let name = key.name();
+            let target = match key {
+                Key::Space => self.keys.named(&self.keymap, "SPACE"),
+                Key::Delete => self.keys.named(&self.keymap, "DELETE"),
+                _ if name.len() == 1 && name.chars().all(|c| c.is_ascii_alphabetic()) => {
+                    if shift {
+                        self.keys.named(&self.keymap, &format!("SHIFT+{name}"))
+                    } else {
+                        let c = name.chars().next().unwrap_or(' ');
+                        self.keys.letter(&self.keymap, c, now)
+                    }
+                }
+                _ => None,
+            };
+            if let Some(t) = target {
+                // Tools switch only when none is in the middle of a pick.
+                if t.tool().is_none() || !self.tool.is_active() {
+                    self.run_target(t);
+                }
+            }
         }
-        if !self.tool.is_active() {
-            for (k, t) in [
-                (Key::Space, ToolKind::Select),
-                (Key::L, ToolKind::Line),
-                (Key::R, ToolKind::Rectangle),
-                (Key::C, ToolKind::Circle),
-                (Key::A, ToolKind::Arc),
-                (Key::T, ToolKind::Tape),
-                (Key::J, ToolKind::Section),
-                (Key::G, ToolKind::Polygon),
-                (Key::P, ToolKind::PushPull),
-                (Key::F, ToolKind::Offset),
-                (Key::M, ToolKind::Move),
-                (Key::Q, ToolKind::Rotate),
-                (Key::S, ToolKind::Scale),
-                (Key::E, ToolKind::Eraser),
-                (Key::B, ToolKind::Paint),
-                (Key::W, ToolKind::Wall),
-                (Key::U, ToolKind::Floor),
-                (Key::D, ToolKind::Door),
-                (Key::N, ToolKind::Window),
-            ] {
-                if pressed(k) {
-                    self.set_tool(t);
+    }
+
+    /// Do what a shortcut or the command palette asks.
+    fn run_target(&mut self, t: Target) {
+        match (t.tool(), t) {
+            (Some(k), _) => self.set_tool(k),
+            (None, Target::Hide) => self.hide_selection(),
+            (None, Target::UnhideAll) => self.hidden.clear(),
+            (None, Target::ZoomExtents) => self
+                .camera
+                .zoom_extents(scene::doc_bounds(self.session.doc())),
+            (None, _) => self.delete_selection(),
+        }
+    }
+
+    fn load_keymap(&mut self) {
+        let Some(path) = ferro_tools::link::ferro_dir().map(|d| d.join("keymap.json")) else {
+            return;
+        };
+        let Ok(text) = std::fs::read_to_string(&path) else {
+            return;
+        };
+        match serde_json::from_str::<KeymapFile>(&text) {
+            Ok(f) => {
+                let (k, bad) = Keymap::from_file(&f);
+                self.keymap = k;
+                if !bad.is_empty() {
+                    self.say(
+                        format!("keymap.json: ignored keys {}", bad.join(", ")),
+                        true,
+                    );
                 }
             }
-            if pressed(Key::H) {
-                if ctx.input(|i| i.modifiers.shift) {
-                    self.hidden.clear();
-                } else {
-                    self.hide_selection();
+            Err(e) => self.say(format!("keymap.json: {e}"), true),
+        }
+    }
+
+    fn set_scheme(&mut self, p: KeyScheme) {
+        self.keymap = Keymap::scheme(p);
+        if let Some(dir) = ferro_tools::link::ferro_dir() {
+            let f = KeymapFile {
+                scheme: p,
+                bindings: Default::default(),
+            };
+            if let Ok(text) = serde_json::to_string_pretty(&f) {
+                let _ = std::fs::create_dir_all(&dir);
+                let _ = std::fs::write(dir.join("keymap.json"), text);
+            }
+        }
+    }
+
+    /// Ctrl+K: type a tool name or shortcut, Enter runs the first match.
+    fn palette_ui(&mut self, ctx: &egui::Context) {
+        let Some(mut q) = self.palette.take() else {
+            return;
+        };
+        let mut open = true;
+        let mut run = None;
+        egui::Window::new("Command palette")
+            .collapsible(false)
+            .resizable(false)
+            .anchor(egui::Align2::CENTER_TOP, Vec2::new(0.0, 80.0))
+            .show(ctx, |ui| {
+                let r = ui.add(
+                    egui::TextEdit::singleline(&mut q)
+                        .hint_text("tool name or shortcut, e.g. wall or WA")
+                        .desired_width(320.0),
+                );
+                r.request_focus();
+                let needle = q.trim().to_lowercase();
+                let hits: Vec<Target> = Target::ALL
+                    .into_iter()
+                    .filter(|t| {
+                        needle.is_empty()
+                            || t.label().to_lowercase().contains(&needle)
+                            || self
+                                .keymap
+                                .keys_for(*t)
+                                .iter()
+                                .any(|k| k.to_lowercase() == needle)
+                    })
+                    .collect();
+                for t in &hits {
+                    let label = format!("{:<16} {}", t.label(), self.keymap.label_for(*t));
+                    if ui
+                        .selectable_label(false, RichText::new(label).monospace())
+                        .clicked()
+                    {
+                        run = Some(*t);
+                    }
                 }
-            }
-            if pressed(Key::Z) {
-                self.camera
-                    .zoom_extents(scene::doc_bounds(self.session.doc()));
-            }
+                if ui.input(|i| i.key_pressed(Key::Enter)) {
+                    run = hits.first().copied();
+                }
+                if ui.input(|i| i.key_pressed(Key::Escape)) {
+                    open = false;
+                }
+            });
+        match run {
+            Some(t) => self.run_target(t),
+            None if open => self.palette = Some(q),
+            None => {}
         }
     }
 
@@ -1024,6 +1140,19 @@ impl FerroApp {
                 {
                     self.hidden.clear();
                 }
+                ui.separator();
+                if ui.button("Command palette…   Ctrl+K").clicked() {
+                    self.palette = Some(String::new());
+                    ui.close();
+                }
+                ui.menu_button("Keyboard shortcuts", |ui| {
+                    for p in KeyScheme::ALL {
+                        if ui.radio(self.keymap.scheme == p, p.label()).clicked() {
+                            self.set_scheme(p);
+                        }
+                    }
+                    ui.label(RichText::new("Custom keys: ~/.ferro/keymap.json").weak());
+                });
                 if ui.button("Select all").clicked() {
                     self.selection = self
                         .session
@@ -1125,13 +1254,14 @@ impl FerroApp {
                 ui.label(RichText::new("BIM").strong());
             }
             let selected = self.tool.kind == k;
+            let key = self.keymap.label_for(Target::from_tool(k));
             let b = egui::Button::new(RichText::new(k.label()).size(15.0))
-                .right_text(RichText::new(k.icon()).weak().size(11.0))
+                .right_text(RichText::new(&key).weak().size(11.0))
                 .selected(selected)
                 .min_size(Vec2::new(124.0, 30.0));
             if ui
                 .add(b)
-                .on_hover_text(format!("{} ({})", k.label(), k.shortcut()))
+                .on_hover_text(format!("{} ({key})", k.label()))
                 .clicked()
             {
                 self.set_tool(k);
@@ -2681,6 +2811,7 @@ impl eframe::App for FerroApp {
         self.process_agent_calls();
         self.poll_chat();
         self.shortcuts(&ctx);
+        self.palette_ui(&ctx);
         let title = format!(
             "Ferro — {}{}",
             self.path

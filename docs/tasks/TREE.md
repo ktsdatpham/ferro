@@ -61,7 +61,8 @@ Legend: `[ ]` open · `[~]` in progress · `[x]` done · `✓` verified ·
   - [ ] M5-9.1 Surface / curve types incl. Cone, Sphere, Torus, NURBS in data, file and writers
   - [ ] M5-9.2 Kernel spike: truck / monstertruck vs OCCT, report with recommendation
 - [ ] **M5-10 `ferro-scene`** (ADR 0004 §6)
-- [ ] **M5-11 Commands and keymaps** (SketchUp / Revit / Ferro presets, command palette)
+- [x] **M5-11 Commands and keymaps** (SketchUp / Revit / Ferro presets, command palette) @lead
+  - accept: `cargo test -p ferro-app keymap` passes; in the app (Ferro preset) `S` `B` picks Floor, `W` `A` Wall, `L` Line, Ctrl+K opens the palette and Enter runs the first match; Edit > Keyboard shortcuts switches preset and writes `~/.ferro/keymap.json`
 - [ ] **M5-12 Tooling for many contributors** (ADR 0003)
   - [x] M5-12.1 `scripts/ferro-check`: fmt, clippy, tests, glossary lint, layer lint, new-dependency check, task-tree check @lead
     - accept: `python3 scripts/lint.py` prints `lint: ok`; injecting `use crate::model` into `geom/` or a `pub struct WallManager` makes it fail
