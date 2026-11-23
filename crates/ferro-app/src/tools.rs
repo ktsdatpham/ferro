@@ -167,12 +167,9 @@ pub enum ToolEvent {
     Select(SelectOp),
 }
 
-/// A section plane: a point on it and the normal of the side cut away.
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct SectionPlane {
-    pub point: Point3,
-    pub normal: UnitVec3,
-}
+/// A section plane: a point on it and the normal of the side cut away
+/// (the same type views store, M5-22).
+pub use ferro_core::model::SectionPlane;
 
 /// Parameter along the line `start + t·dir` of the point closest to `ray`.
 /// `None` when the ray runs along the line.

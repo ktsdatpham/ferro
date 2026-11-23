@@ -1,19 +1,22 @@
-//! Phases in the app (ADR 0006, M5-23): the view's phase (app state until
-//! views become elements, M5-22), the simple renovation buttons, phase
-//! pickers in Properties and the per-status graphics handed to the scene.
+//! Phases in the app (ADR 0006, M5-23): the active view's phase and phase
+//! filter (stored in the view element, M5-22 / M5-23.8), the simple
+//! renovation buttons, phase pickers in Properties and the per-status
+//! graphics handed to the scene.
 //!
 //! Rules:
 //! * a document without phases shows everything as usual;
 //! * with phases, the view shows one phase (the last by default): future
-//!   and already demolished elements are hidden, existing ones greyed,
-//!   demolished / temporary ones translucent red with dashed edges;
+//!   and already demolished elements are hidden; the view's phase filter
+//!   (Revit *Phase Filter*) decides which other statuses are shown and
+//!   which get status graphics (existing grey, demolished / temporary
+//!   translucent red with dashed edges);
 //! * elements created while phasing is used get the view's phase (Revit
 //!   behaviour), in the same undo step as the command that made them.
 
 use super::FerroApp;
 use eframe::egui::{self, RichText, Vec2};
 use ferro_core::model::phase::{is_phased_category, phase_status};
-use ferro_core::model::PhaseStatus;
+use ferro_core::model::{PhaseFilter, PhaseGraphics, PhaseStatus};
 use ferro_core::ops::phase_commands::{
     CreatePhase, RenovationStatus, SetElementPhase, SetRenovationStatus,
 };
@@ -28,18 +31,21 @@ pub struct PhaseDisplay {
     pub looks: HashMap<ElementId, PhaseStatus>,
 }
 
-/// Phase view state of the app (not saved).
+/// Phase view state of the app: a working copy of the active view's
+/// phase and phase filter (`views` keeps it in sync with the view).
 #[derive(Default)]
 pub struct PhaseState {
     /// Phase picked for the view; `None` = the last phase.
-    pick: Option<ElementId>,
-    /// Display computed for (document, view phase).
-    cache: Option<(Document, Option<ElementId>, PhaseDisplay)>,
+    pub(super) pick: Option<ElementId>,
+    /// The view's phase filter.
+    pub(super) filter: PhaseFilter,
+    /// Display computed for (document, view phase, filter).
+    cache: Option<(Document, Option<ElementId>, PhaseFilter, PhaseDisplay)>,
 }
 
-/// Phase display of `doc` in view phase `view`: pure, used by the app and
-/// its tests.
-pub fn phase_display(doc: &Document, view: Option<ElementId>) -> PhaseDisplay {
+/// Phase display of `doc` in view phase `view` under `filter`: pure, used
+/// by the app and its tests.
+pub fn phase_display(doc: &Document, view: Option<ElementId>, filter: PhaseFilter) -> PhaseDisplay {
     let mut out = PhaseDisplay::default();
     let Some(view) = view else {
         return out;
@@ -51,14 +57,15 @@ pub fn phase_display(doc: &Document, view: Option<ElementId>) -> PhaseDisplay {
     };
     for e in doc.elements().filter(|e| is_phased_category(e)) {
         let st = phase_status(pos(e.phase_created), pos(e.phase_demolished), v);
-        match st {
-            PhaseStatus::Future | PhaseStatus::Past => {
+        match filter.graphics(st) {
+            PhaseGraphics::Hidden => {
                 out.hidden.insert(e.id);
             }
-            PhaseStatus::New => {}
-            _ => {
+            // New elements have no status look of their own.
+            PhaseGraphics::Overridden if st != PhaseStatus::New => {
                 out.looks.insert(e.id, st);
             }
+            _ => {}
         }
     }
     out
@@ -79,14 +86,15 @@ impl FerroApp {
     /// recomputed only when either changes.
     pub(super) fn phase_display(&mut self) -> PhaseDisplay {
         let view = self.view_phase();
+        let filter = self.phasing.filter;
         let doc = self.session.doc();
-        if let Some((d, v, shown)) = &self.phasing.cache {
-            if *v == view && crate::scene::same_doc(d, doc) {
+        if let Some((d, v, f, shown)) = &self.phasing.cache {
+            if *v == view && *f == filter && crate::scene::same_doc(d, doc) {
                 return shown.clone();
             }
         }
-        let shown = phase_display(doc, view);
-        self.phasing.cache = Some((doc.clone(), view, shown.clone()));
+        let shown = phase_display(doc, view, filter);
+        self.phasing.cache = Some((doc.clone(), view, filter, shown.clone()));
         shown
     }
 
@@ -199,7 +207,21 @@ impl FerroApp {
                     });
             });
             if pick != current {
-                self.phasing.pick = pick;
+                self.set_view_phase(pick);
+            }
+            let mut filter = self.phasing.filter;
+            ui.horizontal(|ui| {
+                ui.label("Phase filter");
+                egui::ComboBox::from_id_salt("phase_filter")
+                    .selected_text(filter.label())
+                    .show_ui(ui, |ui| {
+                        for f in PhaseFilter::ALL {
+                            ui.selectable_value(&mut filter, f, f.label());
+                        }
+                    });
+            });
+            if filter != self.phasing.filter {
+                self.set_view_phase_filter(filter);
             }
             ui.label(
                 RichText::new("Existing: grey · Demolished: red, dashed · Future: hidden")
@@ -323,7 +345,10 @@ mod tests {
             boxes.push(ElementId(o["element"].as_u64().unwrap()));
         }
         // No phases: nothing changes.
-        assert!(phase_display(&Document::new("x"), None) == PhaseDisplay::default());
+        assert!(
+            phase_display(&Document::new("x"), None, PhaseFilter::ShowAll)
+                == PhaseDisplay::default()
+        );
         for (b, st) in boxes.iter().zip(["existing", "demolish", "new"]) {
             run(
                 "set_renovation_status",
@@ -332,14 +357,53 @@ mod tests {
         }
         let doc = s.doc();
         let ph: Vec<ElementId> = doc.phases().iter().map(|p| p.id).collect();
-        let last = phase_display(doc, Some(ph[1]));
+        let last = phase_display(doc, Some(ph[1]), PhaseFilter::ShowAll);
         assert_eq!(last.looks.get(&boxes[0]), Some(&PhaseStatus::Existing));
         assert_eq!(last.looks.get(&boxes[1]), Some(&PhaseStatus::Demolished));
         assert_eq!(last.looks.get(&boxes[2]), None, "new is drawn normally");
         assert_eq!(last.looks.get(&boxes[3]), Some(&PhaseStatus::Existing));
         assert!(last.hidden.is_empty());
-        let first = phase_display(doc, Some(ph[0]));
+        let first = phase_display(doc, Some(ph[0]), PhaseFilter::ShowAll);
         assert!(first.hidden.contains(&boxes[2]), "new box is future");
         assert_eq!(first.hidden.len(), 1);
+    }
+
+    #[test]
+    fn phase_filters_hide_and_override_per_status() {
+        let mut s = Session::new(Document::new("T"), Box::new(SequentialIds::new(1)));
+        let mut boxes = Vec::new();
+        for (x, st) in [(0, "existing"), (2000, "demolish"), (4000, "new")] {
+            let o = s
+                .execute(
+                    AnyCommand::from_tool(
+                        "create_box",
+                        &json!({"origin": {"x": x, "y": 0, "z": 0}, "width": 1000, "depth": 1000, "height": 1000}),
+                    )
+                    .unwrap(),
+                    &ExecContext::user(),
+                )
+                .unwrap();
+            let b = ElementId(o.output["element"].as_u64().unwrap());
+            s.execute(
+                AnyCommand::from_tool(
+                    "set_renovation_status",
+                    &json!({"elements": [b], "status": st}),
+                )
+                .unwrap(),
+                &ExecContext::user(),
+            )
+            .unwrap();
+            boxes.push(b);
+        }
+        let doc = s.doc();
+        let last = doc.phases().last().map(|p| p.id);
+        let complete = phase_display(doc, last, PhaseFilter::ShowComplete);
+        assert!(complete.hidden.contains(&boxes[1]), "demolished not shown");
+        assert!(complete.looks.is_empty(), "drawn normally");
+        let demo = phase_display(doc, last, PhaseFilter::ShowPreviousAndDemo);
+        assert!(demo.hidden.contains(&boxes[2]), "new not shown");
+        assert_eq!(demo.looks.get(&boxes[1]), Some(&PhaseStatus::Demolished));
+        let plain = phase_display(doc, last, PhaseFilter::NoOverrides);
+        assert!(plain.hidden.is_empty() && plain.looks.is_empty());
     }
 }
