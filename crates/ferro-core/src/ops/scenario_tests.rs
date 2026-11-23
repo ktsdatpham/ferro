@@ -1244,6 +1244,10 @@ fn bad_tool_arguments_are_clean_errors() {
         ),
         ("set_project_name", json!({})),
         ("set_project_name", json!(["name"])),
+        // `name` is required (null clears); a missing one used to clear the
+        // name silently (M5-15.12).
+        ("set_name", json!({"element": 1})),
+        ("set_name", json!({"element": 1, "name": 5})),
         ("create_box", json!(null)),
         ("create_box", json!("box")),
     ];

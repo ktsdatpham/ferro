@@ -161,7 +161,13 @@ Legend: `[ ]` open · `[~]` in progress · `[x]` done · `✓` verified ·
     - fix: exact `geom::predicates::{polygon_is_simple, segments_intersect, polygons_touch, points_are_collinear}` (D-53); `create_polygon`, `Profile::from_loops` (floors, wall profiles) and closed `imprint_face` curves fail with `ferro.geom.self_intersecting_profile` (the code named in 04-operations §4.5); holes outside / touching the outline / touching each other → `ferro.geom.invalid_profile`
     - accept: `cargo test -p ferro-core self_intersecting imprinting_a_bow_tie_is_refused collinear_outlines profile predicates` passes (bow-tie face, vertical bow-tie, figure eight, notch 1 mm short vs touching, bow-tie / outside / touching / overlapping floor holes)
   - [ ] M5-15.11 Spec mismatch: D-60 orders snaps "points > edges / faces > directions > grid", `ferro-snap` uses points > edges > directions > faces > ground. Decide and align spec or code
+    - note (@agent-kernelfix, for the lead; behaviour unchanged): recommend keeping the code and amending the D-60 wording to "points > edges > directions > faces > grid / ground". That is SketchUp's behaviour: a point or edge inference beats an axis lock, but an axis / parallel / perpendicular inference beats "On Face" — drawing along the red axis across a face stays on the axis. Faces cover most of the screen, so with faces above directions a direction inference could almost never win while hovering geometry. The spec's "edges / faces" grouping reads as a typo for this order; a one-line spec fix plus the existing `ferro-snap` scenario tests (priority cases) close it
   - [ ] M5-15.12 Low: `set_name` without `name` clears the name (schema says required; serde treats a missing `Option` as `null`); a journal loaded from a file with id gaps still names the old ids
+    - [x] M5-15.12.1 `set_name` requires `name` (`null` still clears): `#[serde(deserialize_with = "Option::deserialize")]`, so a missing `name` is bad arguments @agent-kernelfix · branch `m5/kernel-fixes`
+      - accept: `cargo test -p ferro-core bad_tool_arguments_are_clean_errors` passes with `{"element": 1}` and `{"element": 1, "name": 5}` rejected by `AnyCommand::from_tool`; the `"name": null` undo case still passes
+    - [x] M5-15.12.2 A collinear outline gives `ferro.geom.degenerate` from both `create_polygon` and `create_floor` (was `ferro.topo.degenerate_loop` for floors) @agent-kernelfix · branch `m5/kernel-fixes`
+      - accept: `cargo test -p ferro-core collinear_outlines_fail_with_the_same_code every_command_rejects_degenerate` passes
+    - [ ] M5-15.12.3 A journal loaded from a file with id gaps still names the old ids (not kernel work; open)
 
 ## M6 SketchUp parity, rest (on Foundation 2)
 

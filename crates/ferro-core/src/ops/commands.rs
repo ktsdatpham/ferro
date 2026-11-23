@@ -488,10 +488,13 @@ impl Command for DeleteElements {
 
 // ------------------------------------------------------------------ data
 
-/// Rename an element (`null` clears the name).
+/// Rename an element (`null` clears the name). `name` is required: a
+/// missing `name` is rejected as bad arguments, not read as `null`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SetName {
     pub element: ElementId,
+    /// `deserialize_with` makes the field required while still taking `null`.
+    #[serde(deserialize_with = "Option::deserialize")]
     pub name: Option<String>,
 }
 
