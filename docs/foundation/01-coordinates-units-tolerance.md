@@ -30,7 +30,13 @@ Rules:
    import / export, display formatting). The kernel never sees feet or degrees.
 3. User / agent input strings are parsed by one function: `Length::parse`
    (`"3000"`, `"3m"`, `"300cm"`, `"10'"`, `"10' 6\""`). A bare number means mm.
+   Exception, at the UI edge only: in the app (value box, settings fields) a
+   bare number is in the project's display unit for that quantity (as in
+   Revit and SketchUp), so with lengths in `m`, `4` means 4 m. MCP arguments
+   and files keep mm.
 4. Display formatting is a *project setting* (`ProjectUnits`), never hard-coded.
+   The app formats every length / area / volume / angle through one helper
+   (`ferro-app` `units`) that reads `ProjectUnits`.
 
 ## 1.3 Origins and north (D-04)
 

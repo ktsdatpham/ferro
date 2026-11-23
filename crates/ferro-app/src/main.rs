@@ -13,7 +13,9 @@ mod material_editor;
 mod render;
 mod report;
 mod scene;
+mod settings_window;
 mod tools;
+mod units;
 
 use eframe::egui;
 

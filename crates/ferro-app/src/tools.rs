@@ -332,26 +332,6 @@ fn on_plane(ctx: &ToolCtx, plane: &DrawPlane) -> Option<Point3> {
     ctx.snap.map(|s| plane.project(s.point))
 }
 
-/// Parse "4000", "4m", "4000,3000", "4m;3m".
-pub fn parse_lengths(text: &str) -> Result<Vec<f64>, String> {
-    let parts: Vec<&str> = text
-        .split([',', ';'])
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
-        .collect();
-    if parts.is_empty() {
-        return Err("type a value, e.g. 3000 or 3m".into());
-    }
-    parts
-        .iter()
-        .map(|p| {
-            Length::parse(p)
-                .map(|l| l.mm())
-                .ok_or_else(|| format!("cannot read {p:?}"))
-        })
-        .collect()
-}
-
 /// The face of Form `element` whose plane holds every point of `pts`, with
 /// the segment's midpoint inside it (how SketchUp decides which face a line
 /// started on an edge belongs to).
@@ -902,14 +882,18 @@ impl ToolState {
 
     /// Live measurement shown in the value box.
     pub fn measurement(&self, ctx: &ToolCtx) -> String {
-        let m = |x: f64| format!("{:.0}", x);
+        let units = &ctx.doc.project().settings.units;
+        let m = |x: f64| crate::units::length(units, x);
         match self.kind {
             ToolKind::Rectangle => (|| {
                 let (f, plane) = (self.rect_first?, self.plane?);
                 let p = on_plane(ctx, &plane)?;
                 let (a0, b0) = plane.local(f);
                 let (a1, b1) = plane.local(p);
-                Some(format!("{}, {}", m((a1 - a0).abs()), m((b1 - b0).abs())))
+                Some(crate::units::lengths(
+                    units,
+                    &[(a1 - a0).abs(), (b1 - b0).abs()],
+                ))
             })()
             .unwrap_or_default(),
             ToolKind::Tape => (|| {
@@ -946,7 +930,7 @@ impl ToolState {
                 .unwrap_or_default(),
             ToolKind::Rotate => self
                 .rotate_angle(ctx)
-                .map(|a| format!("{:.1}°", a.to_degrees()))
+                .map(|a| crate::units::angle(units, a))
                 .unwrap_or_default(),
             ToolKind::Scale => self
                 .scale_factor(ctx)
@@ -1085,12 +1069,14 @@ impl ToolState {
                 Some(a) => {
                     self.tape = None;
                     let d = s.point - a;
+                    let u = &ctx.doc.project().settings.units;
+                    let l = |v: f64| crate::units::length(u, v);
                     ToolEvent::Message(format!(
-                        "Distance {:.0} mm  (Δx {:.0}, Δy {:.0}, Δz {:.0})",
-                        d.length(),
-                        d.x,
-                        d.y,
-                        d.z
+                        "Distance {}  (Δx {}, Δy {}, Δz {})",
+                        l(d.length()),
+                        l(d.x),
+                        l(d.y),
+                        l(d.z)
                     ))
                 }
             },
@@ -1452,11 +1438,8 @@ impl ToolState {
         }
         match self.kind {
             ToolKind::Rotate => {
-                let deg: f64 = text
-                    .trim()
-                    .trim_end_matches('°')
-                    .parse()
-                    .map_err(|_| "type an angle in degrees")?;
+                let rad = crate::units::parse_angle(&ctx.doc.project().settings.units, text)
+                    .ok_or("type an angle, e.g. 90 or 90°")?;
                 let c = self.pivot.ok_or("click the centre first")?;
                 self.pivot = None;
                 self.reference = None;
@@ -1464,7 +1447,7 @@ impl ToolState {
                     RotateElements {
                         elements: self.move_elems.clone(),
                         center: c,
-                        angle: Angle::from_deg(deg),
+                        angle: Angle::from_rad(rad),
                     }
                     .into(),
                 ));
@@ -1489,7 +1472,7 @@ impl ToolState {
             }
             _ => {}
         }
-        let vals = parse_lengths(text)?;
+        let vals = crate::units::parse_lengths(&ctx.doc.project().settings.units, text)?;
         match self.kind {
             ToolKind::Rectangle => {
                 let first = self.rect_first.ok_or("click the first corner first")?;
@@ -1667,10 +1650,12 @@ mod tests {
 
     #[test]
     fn value_box_parsing() {
-        assert_eq!(parse_lengths("4000,3000").unwrap(), vec![4000.0, 3000.0]);
-        assert_eq!(parse_lengths("4m; 3m").unwrap(), vec![4000.0, 3000.0]);
-        assert!(parse_lengths("abc").is_err());
-        assert!(parse_lengths("  ").is_err());
+        use crate::units::parse_lengths;
+        let u = ferro_core::model::project_settings::ProjectUnits::default();
+        assert_eq!(parse_lengths(&u, "4000,3000"), Ok(vec![4000.0, 3000.0]));
+        assert_eq!(parse_lengths(&u, "4m; 3m"), Ok(vec![4000.0, 3000.0]));
+        assert!(parse_lengths(&u, "abc").is_err());
+        assert!(parse_lengths(&u, "  ").is_err());
     }
 
     #[test]

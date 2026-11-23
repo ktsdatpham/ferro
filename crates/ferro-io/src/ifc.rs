@@ -85,6 +85,30 @@ fn f(x: f64) -> String {
     }
 }
 
+/// An `IfcCompoundPlaneAngleMeasure` for an angle in decimal degrees:
+/// `(degrees,minutes,seconds,millionths-of-a-second)`. IFC4 requires every
+/// component to have the angle's sign, so -33.87° is `(-33,-52,-12,0)`.
+/// Non-finite input gives `$`.
+fn compound_angle(deg: f64) -> String {
+    if !deg.is_finite() {
+        return "$".into();
+    }
+    // Whole millionths of an arc second, rounded once so 16.05 is exact.
+    let total = (deg.abs() * 3600.0 * 1e6).round() as i64;
+    let sign = if deg < 0.0 && total != 0 { -1 } else { 1 };
+    let d = total / 3_600_000_000;
+    let m = total / 60_000_000 % 60;
+    let sec = total / 1_000_000 % 60;
+    let micro = total % 1_000_000;
+    format!(
+        "({},{},{},{})",
+        sign * d,
+        sign * m,
+        sign * sec,
+        sign * micro
+    )
+}
+
 fn opt(text: Option<&str>) -> String {
     text.map(s).unwrap_or_else(|| "$".into())
 }
@@ -373,8 +397,24 @@ pub fn export_ifc(doc: &Document) -> Result<String, IoError> {
         s(&project_name)
     ));
     let site_pl = w.placement(None, 0.0);
+    // RefLatitude / RefLongitude / RefElevation from the project's site
+    // location (M5-24.3); `$` when the project has none. LongName = place.
+    let (long_name, lat, lon, elev) = match &doc.project().settings.location {
+        Some(l) => (
+            if l.place.trim().is_empty() {
+                "$".to_string()
+            } else {
+                s(l.place.trim())
+            },
+            compound_angle(l.latitude.deg()),
+            compound_angle(l.longitude.deg()),
+            // IfcLengthMeasure in the project length unit (mm, see above).
+            f(l.elevation.mm()),
+        ),
+        None => ("$".into(), "$".into(), "$".into(), "$".into()),
+    };
     let site = w.add(format!(
-        "IFCSITE({},$,'Site',$,$,#{site_pl},$,$,.ELEMENT.,$,$,$,$,$)",
+        "IFCSITE({},$,'Site',$,$,#{site_pl},$,{long_name},.ELEMENT.,{lat},{lon},{elev},$,$)",
         s(&derived("site"))
     ));
     let bld_pl = w.placement(Some(site_pl), 0.0);
@@ -862,6 +902,57 @@ mod tests {
         assert_eq!(ifc_guid(u128::MAX).len(), 22);
         assert_eq!(derived("site"), derived("site"));
         assert_ne!(derived("site"), derived("building"));
+    }
+
+    #[test]
+    fn compound_angles_carry_the_sign_on_every_part() {
+        assert_eq!(compound_angle(16.05), "(16,3,0,0)");
+        assert_eq!(compound_angle(108.2), "(108,12,0,0)");
+        assert_eq!(compound_angle(-33.87), "(-33,-52,-12,0)");
+        assert_eq!(compound_angle(-0.5), "(0,-30,0,0)");
+        assert_eq!(compound_angle(0.0), "(0,0,0,0)");
+        assert_eq!(compound_angle(-0.0), "(0,0,0,0)");
+        // Sub-microsecond noise rounds away; one millionth survives.
+        assert_eq!(compound_angle(10.0 + 1e-12), "(10,0,0,0)");
+        assert_eq!(compound_angle(1.0 / 3600e6), "(0,0,0,1)");
+        assert_eq!(compound_angle(f64::NAN), "$");
+    }
+
+    #[test]
+    fn site_location_fills_ifcsite() {
+        let mut s = house();
+        let site_line = |ifc: &str| {
+            ifc.lines()
+                .find(|l| l.contains("=IFCSITE("))
+                .unwrap_or("")
+                .to_string()
+        };
+        let none = export_ifc(s.doc()).unwrap();
+        assert!(site_line(&none).ends_with(",$,$,.ELEMENT.,$,$,$,$,$);"));
+        for (lat, lon, want) in [
+            (
+                16.05,
+                108.2,
+                "'Ha Noi',.ELEMENT.,(16,3,0,0),(108,12,0,0),5000.,$,$);",
+            ),
+            (
+                -33.87,
+                151.21,
+                "'Ha Noi',.ELEMENT.,(-33,-52,-12,0),(151,12,36,0),5000.,$,$);",
+            ),
+        ] {
+            let cmd = AnyCommand::from_tool(
+                "set_site_location",
+                // Core commands take radians and mm (degrees are an MCP edge).
+                &json!({"latitude": f64::to_radians(lat), "longitude": f64::to_radians(lon),
+                    "elevation": 5000.0, "place": "Ha Noi"}),
+            )
+            .unwrap();
+            s.execute(cmd, &ExecContext::user()).unwrap();
+            let ifc = export_ifc(s.doc()).unwrap();
+            assert!(site_line(&ifc).ends_with(want), "{}", site_line(&ifc));
+            assert_eq!(ifc, export_ifc(s.doc()).unwrap(), "deterministic");
+        }
     }
 
     #[test]

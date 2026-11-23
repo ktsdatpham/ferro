@@ -16,6 +16,10 @@ use std::collections::HashMap;
 /// Uid of the level created in Revit for elements that have no level.
 pub const DEFAULT_LEVEL_UID: &str = "ferro:level:0";
 
+/// Uid the add-in tags Revit's `SiteLocation` with (one per project). It is
+/// never deleted: clearing the location in Ferro leaves Revit's as it was.
+pub const SITE_LOCATION_UID: &str = "ferro:site_location";
+
 /// What the Revit model already holds: one record per element tagged with a
 /// Ferro uid (the add-in scans the model to build this).
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -154,6 +158,26 @@ pub enum RevitOp {
         height: f64,
         sill: f64,
     },
+    /// The project's place on Earth: set `Document.SiteLocation`
+    /// (`Latitude`, `Longitude`, `TimeZone`, `PlaceName`). Only planned when
+    /// the Ferro project has a location (M5-24.3); `uid` is
+    /// [`SITE_LOCATION_UID`].
+    SiteLocation {
+        uid: String,
+        signature: String,
+        /// `PlaceName`; empty keeps Revit's.
+        place: String,
+        /// Radians, north positive (as Revit stores it).
+        latitude: f64,
+        /// Radians, east positive.
+        longitude: f64,
+        /// Elevation of the project origin above sea level, feet. Revit's
+        /// `SiteLocation.Elevation` is read-only, so the add-in reports it
+        /// but does not move the survey point.
+        elevation: f64,
+        /// `TimeZone`: hours from UTC (Vietnam 7, India 5.5).
+        time_zone: f64,
+    },
     /// Free-form geometry as a `DirectShape` mesh.
     DirectShape {
         uid: String,
@@ -177,6 +201,7 @@ impl RevitOp {
             | RevitOp::Wall { uid, .. }
             | RevitOp::Floor { uid, .. }
             | RevitOp::Opening { uid, .. }
+            | RevitOp::SiteLocation { uid, .. }
             | RevitOp::DirectShape { uid, .. } => uid,
         }
     }
@@ -191,6 +216,7 @@ impl RevitOp {
             | RevitOp::Wall { signature, .. }
             | RevitOp::Floor { signature, .. }
             | RevitOp::Opening { signature, .. }
+            | RevitOp::SiteLocation { signature, .. }
             | RevitOp::DirectShape { signature, .. } => Some(signature),
         }
     }
@@ -217,6 +243,7 @@ impl RevitOp {
             | RevitOp::Wall { signature, .. }
             | RevitOp::Floor { signature, .. }
             | RevitOp::Opening { signature, .. }
+            | RevitOp::SiteLocation { signature, .. }
             | RevitOp::DirectShape { signature, .. } => signature,
         }
     }
@@ -291,9 +318,27 @@ fn signed_area(pts: &[Point2]) -> f64 {
     a * 0.5
 }
 
+/// The `site_location` operation for the project's location, if it has one.
+/// Angles stay in radians, elevation goes to feet, the UTC offset to hours.
+fn site_location_op(doc: &Document) -> Option<RevitOp> {
+    let l = doc.project().settings.location.as_ref()?;
+    // Rounded so signatures ignore float noise (1e-12 rad ≈ 6 µm on Earth).
+    let rad = |a: f64| (a * 1e12).round() / 1e12;
+    Some(RevitOp::SiteLocation {
+        uid: SITE_LOCATION_UID.into(),
+        signature: String::new(),
+        place: l.place.trim().to_string(),
+        latitude: rad(l.latitude.rad()),
+        longitude: rad(l.longitude.rad()),
+        elevation: r(ft(l.elevation.mm())),
+        time_zone: l.utc_offset_minutes as f64 / 60.0,
+    })
+}
+
 /// Operations that bring a Revit model holding `state` up to date with
-/// `doc`. Order: deletes, materials, levels, types, walls, floors, openings,
-/// direct shapes. Elements whose signature is unchanged are skipped.
+/// `doc`. Order: deletes, site location, materials, levels, types, walls,
+/// floors, openings, direct shapes. Elements whose signature is unchanged
+/// are skipped.
 pub fn plan(doc: &Document, state: &RevitState) -> Vec<RevitOp> {
     let uid_of = |id: ferro_core::ElementId| doc.get(id).map(|e| e.uid.to_string());
     let needs_default_level = doc.elements().any(|e| {
@@ -311,6 +356,7 @@ pub fn plan(doc: &Document, state: &RevitState) -> Vec<RevitOp> {
     let level_z = |e: &Element| generate::level_elevation(doc, e.level_id);
 
     let mut groups: [Vec<RevitOp>; 7] = Default::default();
+    groups[0].extend(site_location_op(doc));
     if needs_default_level {
         groups[1].push(RevitOp::Level {
             uid: DEFAULT_LEVEL_UID.into(),
@@ -519,7 +565,7 @@ pub fn plan(doc: &Document, state: &RevitState) -> Vec<RevitOp> {
         }
     }
     for rec in &state.elements {
-        if !present.contains(&rec.ferro_uid) {
+        if !present.contains(&rec.ferro_uid) && rec.ferro_uid != SITE_LOCATION_UID {
             out.push(RevitOp::Delete {
                 ferro_uid: rec.ferro_uid.clone(),
                 unique_id: rec.unique_id.clone(),
@@ -606,6 +652,7 @@ mod tests {
                 RevitOp::Floor { .. } => "floor",
                 RevitOp::Opening { .. } => "opening",
                 RevitOp::DirectShape { .. } => "direct_shape",
+                RevitOp::SiteLocation { .. } => "site_location",
                 RevitOp::Delete { .. } => "delete",
             })
             .collect();
@@ -774,6 +821,73 @@ mod tests {
             unreachable!()
         };
         assert_eq!(level_uid, DEFAULT_LEVEL_UID);
+    }
+
+    #[test]
+    fn site_location_op_follows_the_project_location() {
+        let mut s = house();
+        let none = plan(s.doc(), &RevitState::default());
+        assert!(!none
+            .iter()
+            .any(|o| matches!(o, RevitOp::SiteLocation { .. })));
+        let set = |s: &mut Session, lat: f64| {
+            let args = json!({"latitude": f64::to_radians(lat), "longitude": f64::to_radians(108.2),
+                "elevation": 3048.0, "utc_offset_minutes": 420, "place": "Da Nang"});
+            s.execute(
+                AnyCommand::from_tool("set_site_location", &args).unwrap(),
+                &ExecContext::user(),
+            )
+            .unwrap();
+        };
+        set(&mut s, 16.05);
+        let ops = plan(s.doc(), &RevitState::default());
+        let first = ops.first().cloned();
+        let Some(RevitOp::SiteLocation {
+            uid,
+            signature,
+            place,
+            latitude,
+            longitude,
+            elevation,
+            time_zone,
+        }) = first
+        else {
+            panic!("site location is planned first: {ops:?}");
+        };
+        assert_eq!(uid, SITE_LOCATION_UID);
+        assert_eq!(place, "Da Nang");
+        assert!((latitude - 16.05f64.to_radians()).abs() < 1e-9);
+        assert!((longitude - 108.2f64.to_radians()).abs() < 1e-9);
+        assert!((elevation - 10.0).abs() < 1e-9, "3048 mm = 10 ft");
+        assert!((time_zone - 7.0).abs() < 1e-12);
+        let json = serde_json::to_value(&ops[0]).unwrap();
+        assert_eq!(json["op"], "site_location");
+
+        // Unchanged → skipped; a new latitude changes the signature.
+        let state = RevitState {
+            elements: vec![RevitRecord {
+                ferro_uid: SITE_LOCATION_UID.into(),
+                unique_id: "site".into(),
+                signature: signature.clone(),
+            }],
+        };
+        assert!(!plan(s.doc(), &state)
+            .iter()
+            .any(|o| o.uid() == SITE_LOCATION_UID));
+        set(&mut s, -33.87);
+        let moved = plan(s.doc(), &state);
+        let again = moved.iter().find(|o| o.uid() == SITE_LOCATION_UID);
+        assert!(again.is_some_and(|o| o.signature() != signature));
+
+        // Clearing the location never deletes Revit's SiteLocation.
+        s.execute(
+            AnyCommand::from_tool("set_site_location", &json!({"clear": true})).unwrap(),
+            &ExecContext::user(),
+        )
+        .unwrap();
+        assert!(!plan(s.doc(), &state)
+            .iter()
+            .any(|o| o.uid() == SITE_LOCATION_UID));
     }
 
     #[test]
