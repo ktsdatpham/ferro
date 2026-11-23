@@ -437,7 +437,6 @@ fn bim_elements_are_snappable() {
 /// same pixel. With the cursor just outside the outline (no face under it,
 /// so nothing occludes) the corner nearer the camera must win.
 #[test]
-#[ignore = "bug: plan-view ties between a top and a bottom corner pick the bottom one"]
 fn in_plan_view_the_nearer_of_two_coincident_corners_wins() {
     let sc = SnapScene::from_document(&doc_with(&[[0.0, 0.0, 0.0, 1000.0, 1000.0, 3000.0]]), &[]);
     for (x, y) in [(-20.0, -20.0), (1020.0, 30.0), (40.0, 1030.0)] {

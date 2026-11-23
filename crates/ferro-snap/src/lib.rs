@@ -231,6 +231,10 @@ impl Default for SnapSettings {
     }
 }
 
+/// Candidates of one kind closer than this (pixels) count as the same spot
+/// on screen; the one nearer the camera is preferred.
+const SAME_PIXEL: f32 = 0.5;
+
 fn screen_dist(proj: &dyn Projector, p: Point3, cursor: [f32; 2]) -> Option<f32> {
     let s = proj.project(p)?;
     Some(((s[0] - cursor[0]).powi(2) + (s[1] - cursor[1]).powi(2)).sqrt())
@@ -295,10 +299,22 @@ pub fn snap(
     let tol = settings.tolerance_px;
 
     // 1. Points.
-    let mut best: Option<(u8, f32, SnapResult)> = None;
+    // Same kind at (almost) the same pixel, e.g. a top corner and the
+    // bottom corner below it in plan view: the one nearer the camera wins.
+    let mut best: Option<(u8, f32, f64, SnapResult)> = None;
     let mut consider = |rank: u8, dist: f32, r: SnapResult| {
-        if best.is_none_or(|(br, bd, _)| (rank, dist) < (br, bd)) {
-            best = Some((rank, dist, r));
+        let depth = ray.param_of(r.point);
+        let better = best.as_ref().is_none_or(|(br, bd, bdepth, _)| {
+            if rank != *br {
+                rank < *br
+            } else if (dist - bd).abs() > SAME_PIXEL {
+                dist < *bd
+            } else {
+                depth < *bdepth
+            }
+        });
+        if better {
+            best = Some((rank, dist, depth, r));
         }
     };
     for p in &scene.points {
@@ -391,7 +407,7 @@ pub fn snap(
             }
         }
     }
-    if let Some((_, _, mut r)) = best {
+    if let Some((_, _, _, mut r)) = best {
         // A point or edge of the element under the cursor also reports the
         // face being hovered, so tools know which face the user means.
         if let Some((_, i)) = hit {
