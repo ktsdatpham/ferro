@@ -1,0 +1,5044 @@
+{
+  "app_version": "0.2.0",
+  "elements": [
+    {
+      "body": {
+        "elevation": 0.0,
+        "is_building_storey": true,
+        "kind": "level"
+      },
+      "category": "levels",
+      "design_option": null,
+      "host_id": null,
+      "level_id": null,
+      "name": "Tầng 1",
+      "params": {},
+      "phase_created": null,
+      "phase_demolished": null,
+      "type_id": null,
+      "uid": "00000000-0001-7001-8000-000000000000"
+    },
+    {
+      "body": {
+        "elevation": 3300.0,
+        "is_building_storey": true,
+        "kind": "level"
+      },
+      "category": "levels",
+      "design_option": null,
+      "host_id": null,
+      "level_id": null,
+      "name": "Tầng 2",
+      "params": {},
+      "phase_created": null,
+      "phase_demolished": null,
+      "type_id": null,
+      "uid": "00000000-0001-7002-8000-000000000000"
+    },
+    {
+      "body": {
+        "color": [
+          0.7098039388656616,
+          0.32549020648002625,
+          0.23529411852359772
+        ],
+        "kind": "material",
+        "roughness": 0.800000011920929
+      },
+      "category": "materials",
+      "design_option": null,
+      "host_id": null,
+      "level_id": null,
+      "name": "Gạch",
+      "params": {},
+      "phase_created": null,
+      "phase_demolished": null,
+      "type_id": null,
+      "uid": "00000000-0001-7003-8000-000000000000"
+    },
+    {
+      "body": {
+        "kind": "wall_type",
+        "structure": {
+          "layers": [
+            {
+              "function": "finish",
+              "material": null,
+              "thickness": 10.0
+            },
+            {
+              "function": "structure",
+              "material": "00000000-0001-7003-8000-000000000000",
+              "thickness": 200.0
+            },
+            {
+              "function": "finish",
+              "material": null,
+              "thickness": 10.0
+            }
+          ]
+        }
+      },
+      "category": "walls",
+      "design_option": null,
+      "host_id": null,
+      "level_id": null,
+      "name": "Tường 220",
+      "params": {},
+      "phase_created": null,
+      "phase_demolished": null,
+      "type_id": null,
+      "uid": "00000000-0001-7004-8000-000000000000"
+    },
+    {
+      "body": {
+        "base_offset": 0.0,
+        "curve": {
+          "end": {
+            "x": 0.0,
+            "y": 6000.0,
+            "z": 0.0
+          },
+          "start": {
+            "x": 0.0,
+            "y": 0.0,
+            "z": 0.0
+          },
+          "type": "line"
+        },
+        "geometry": {
+          "edges": {
+            "100": [
+              42,
+              59
+            ],
+            "101": [
+              29,
+              47
+            ],
+            "102": [
+              58,
+              36
+            ],
+            "103": [
+              30,
+              71
+            ],
+            "104": [
+              31,
+              83
+            ],
+            "105": [
+              32,
+              75
+            ],
+            "106": [
+              33,
+              53
+            ],
+            "107": [
+              34,
+              64
+            ],
+            "108": [
+              35,
+              39
+            ],
+            "85": [
+              45,
+              25
+            ],
+            "86": [
+              26,
+              60
+            ],
+            "87": [
+              57,
+              48
+            ],
+            "88": [
+              69,
+              24
+            ],
+            "89": [
+              46,
+              72
+            ],
+            "90": [
+              81,
+              23
+            ],
+            "91": [
+              70,
+              84
+            ],
+            "92": [
+              77,
+              22
+            ],
+            "93": [
+              82,
+              76
+            ],
+            "94": [
+              51,
+              21
+            ],
+            "95": [
+              78,
+              54
+            ],
+            "96": [
+              66,
+              20
+            ],
+            "97": [
+              52,
+              65
+            ],
+            "98": [
+              41,
+              19
+            ],
+            "99": [
+              63,
+              40
+            ]
+          },
+          "faces": {
+            "17": {
+              "holes": [],
+              "outer": 18,
+              "smooth_group": null,
+              "surface": {
+                "origin": {
+                  "x": -110.0,
+                  "y": -110.0,
+                  "z": 3300.0
+                },
+                "type": "plane",
+                "x_axis": {
+                  "x": 0.0,
+                  "y": 1.0,
+                  "z": 0.0
+                },
+                "y_axis": {
+                  "x": 0.0,
+                  "y": 0.0,
+                  "z": -1.0
+                }
+              }
+            },
+            "27": {
+              "holes": [],
+              "outer": 28,
+              "smooth_group": null,
+              "surface": {
+                "origin": {
+                  "x": 110.0,
+                  "y": 110.0,
+                  "z": 0.0
+                },
+                "type": "plane",
+                "x_axis": {
+                  "x": 0.0,
+                  "y": 1.0,
+                  "z": 0.0
+                },
+                "y_axis": {
+                  "x": 0.0,
+                  "y": 0.0,
+                  "z": 1.0
+                }
+              }
+            },
+            "37": {
+              "holes": [],
+              "outer": 38,
+              "smooth_group": null,
+              "surface": {
+                "origin": {
+                  "x": 110.0,
+                  "y": 110.0,
+                  "z": 3300.0
+                },
+                "type": "plane",
+                "x_axis": {
+                  "x": 1.0,
+                  "y": 0.0,
+                  "z": 0.0
+                },
+                "y_axis": {
+                  "x": 0.0,
+                  "y": 1.0,
+                  "z": 0.0
+                }
+              }
+            },
+            "43": {
+              "holes": [],
+              "outer": 44,
+              "smooth_group": null,
+              "surface": {
+                "origin": {
+                  "x": -110.0,
+                  "y": -110.0,
+                  "z": 0.0
+                },
+                "type": "plane",
+                "x_axis": {
+                  "x": 1.0,
+                  "y": 0.0,
+                  "z": 0.0
+                },
+                "y_axis": {
+                  "x": 0.0,
+                  "y": -1.0,
+                  "z": 0.0
+                }
+              }
+            },
+            "49": {
+              "holes": [],
+              "outer": 50,
+              "smooth_group": null,
+              "surface": {
+                "origin": {
+                  "x": -110.0,
+                  "y": 2450.0,
+                  "z": 0.0
+                },
+                "type": "plane",
+                "x_axis": {
+                  "x": 1.0,
+                  "y": 0.0,
+                  "z": 0.0
+                },
+                "y_axis": {
+                  "x": 0.0,
+                  "y": -1.0,
+                  "z": 0.0
+                }
+              }
+            },
+            "55": {
+              "holes": [],
+              "outer": 56,
+              "smooth_group": null,
+              "surface": {
+                "origin": {
+                  "x": -110.0,
+                  "y": -110.0,
+                  "z": 0.0
+                },
+                "type": "plane",
+                "x_axis": {
+                  "x": 0.7071067811865474,
+                  "y": 0.7071067811865477,
+                  "z": 0.0
+                },
+                "y_axis": {
+                  "x": -0.0,
+                  "y": 0.0,
+                  "z": 1.0
+                }
+              }
+            },
+            "61": {
+              "holes": [],
+              "outer": 62,
+              "smooth_group": null,
+              "surface": {
+                "origin": {
+                  "x": -110.0,
+                  "y": 6110.0,
+                  "z": 3300.0
+                },
+                "type": "plane",
+                "x_axis": {
+                  "x": 0.7071067811865474,
+                  "y": -0.7071067811865477,
+                  "z": 0.0
+                },
+                "y_axis": {
+                  "x": 0.0,
+                  "y": 0.0,
+                  "z": -1.0
+                }
+              }
+            },
+            "67": {
+              "holes": [],
+              "outer": 68,
+              "smooth_group": null,
+              "surface": {
+                "origin": {
+                  "x": -110.0,
+                  "y": 1550.0,
+                  "z": 0.0
+                },
+                "type": "plane",
+                "x_axis": {
+                  "x": 1.0,
+                  "y": 0.0,
+                  "z": 0.0
+                },
+                "y_axis": {
+                  "x": 0.0,
+                  "y": 0.0,
+                  "z": -1.0
+                }
+              }
+            },
+            "73": {
+              "holes": [],
+              "outer": 74,
+              "smooth_group": null,
+              "surface": {
+                "origin": {
+                  "x": 110.0,
+                  "y": 2450.0,
+                  "z": 0.0
+                },
+                "type": "plane",
+                "x_axis": {
+                  "x": 1.0,
+                  "y": 0.0,
+                  "z": 0.0
+                },
+                "y_axis": {
+                  "x": -0.0,
+                  "y": 0.0,
+                  "z": 1.0
+                }
+              }
+            },
+            "79": {
+              "holes": [],
+              "outer": 80,
+              "smooth_group": null,
+              "surface": {
+                "origin": {
+                  "x": -110.0,
+                  "y": 1550.0,
+                  "z": 2100.0
+                },
+                "type": "plane",
+                "x_axis": {
+                  "x": 1.0,
+                  "y": 0.0,
+                  "z": 0.0
+                },
+                "y_axis": {
+                  "x": 0.0,
+                  "y": -1.0,
+                  "z": 0.0
+                }
+              }
+            }
+          },
+          "half_edges": {
+            "19": {
+              "edge": 98,
+              "loop_id": 18,
+              "next": 20,
+              "origin": 8,
+              "prev": 26,
+              "twin": 41
+            },
+            "20": {
+              "edge": 96,
+              "loop_id": 18,
+              "next": 21,
+              "origin": 7,
+              "prev": 19,
+              "twin": 66
+            },
+            "21": {
+              "edge": 94,
+              "loop_id": 18,
+              "next": 22,
+              "origin": 6,
+              "prev": 20,
+              "twin": 51
+            },
+            "22": {
+              "edge": 92,
+              "loop_id": 18,
+              "next": 23,
+              "origin": 5,
+              "prev": 21,
+              "twin": 77
+            },
+            "23": {
+              "edge": 90,
+              "loop_id": 18,
+              "next": 24,
+              "origin": 4,
+              "prev": 22,
+              "twin": 81
+            },
+            "24": {
+              "edge": 88,
+              "loop_id": 18,
+              "next": 25,
+              "origin": 3,
+              "prev": 23,
+              "twin": 69
+            },
+            "25": {
+              "edge": 85,
+              "loop_id": 18,
+              "next": 26,
+              "origin": 2,
+              "prev": 24,
+              "twin": 45
+            },
+            "26": {
+              "edge": 86,
+              "loop_id": 18,
+              "next": 19,
+              "origin": 1,
+              "prev": 25,
+              "twin": 60
+            },
+            "29": {
+              "edge": 101,
+              "loop_id": 28,
+              "next": 30,
+              "origin": 9,
+              "prev": 36,
+              "twin": 47
+            },
+            "30": {
+              "edge": 103,
+              "loop_id": 28,
+              "next": 31,
+              "origin": 10,
+              "prev": 29,
+              "twin": 71
+            },
+            "31": {
+              "edge": 104,
+              "loop_id": 28,
+              "next": 32,
+              "origin": 11,
+              "prev": 30,
+              "twin": 83
+            },
+            "32": {
+              "edge": 105,
+              "loop_id": 28,
+              "next": 33,
+              "origin": 12,
+              "prev": 31,
+              "twin": 75
+            },
+            "33": {
+              "edge": 106,
+              "loop_id": 28,
+              "next": 34,
+              "origin": 13,
+              "prev": 32,
+              "twin": 53
+            },
+            "34": {
+              "edge": 107,
+              "loop_id": 28,
+              "next": 35,
+              "origin": 14,
+              "prev": 33,
+              "twin": 64
+            },
+            "35": {
+              "edge": 108,
+              "loop_id": 28,
+              "next": 36,
+              "origin": 15,
+              "prev": 34,
+              "twin": 39
+            },
+            "36": {
+              "edge": 102,
+              "loop_id": 28,
+              "next": 29,
+              "origin": 16,
+              "prev": 35,
+              "twin": 58
+            },
+            "39": {
+              "edge": 108,
+              "loop_id": 38,
+              "next": 40,
+              "origin": 16,
+              "prev": 42,
+              "twin": 35
+            },
+            "40": {
+              "edge": 99,
+              "loop_id": 38,
+              "next": 41,
+              "origin": 15,
+              "prev": 39,
+              "twin": 63
+            },
+            "41": {
+              "edge": 98,
+              "loop_id": 38,
+              "next": 42,
+              "origin": 7,
+              "prev": 40,
+              "twin": 19
+            },
+            "42": {
+              "edge": 100,
+              "loop_id": 38,
+              "next": 39,
+              "origin": 8,
+              "prev": 41,
+              "twin": 59
+            },
+            "45": {
+              "edge": 85,
+              "loop_id": 44,
+              "next": 46,
+              "origin": 1,
+              "prev": 48,
+              "twin": 25
+            },
+            "46": {
+              "edge": 89,
+              "loop_id": 44,
+              "next": 47,
+              "origin": 2,
+              "prev": 45,
+              "twin": 72
+            },
+            "47": {
+              "edge": 101,
+              "loop_id": 44,
+              "next": 48,
+              "origin": 10,
+              "prev": 46,
+              "twin": 29
+            },
+            "48": {
+              "edge": 87,
+              "loop_id": 44,
+              "next": 45,
+              "origin": 9,
+              "prev": 47,
+              "twin": 57
+            },
+            "51": {
+              "edge": 94,
+              "loop_id": 50,
+              "next": 52,
+              "origin": 5,
+              "prev": 54,
+              "twin": 21
+            },
+            "52": {
+              "edge": 97,
+              "loop_id": 50,
+              "next": 53,
+              "origin": 6,
+              "prev": 51,
+              "twin": 65
+            },
+            "53": {
+              "edge": 106,
+              "loop_id": 50,
+              "next": 54,
+              "origin": 14,
+              "prev": 52,
+              "twin": 33
+            },
+            "54": {
+              "edge": 95,
+              "loop_id": 50,
+              "next": 51,
+              "origin": 13,
+              "prev": 53,
+              "twin": 78
+            },
+            "57": {
+              "edge": 87,
+              "loop_id": 56,
+              "next": 58,
+              "origin": 1,
+              "prev": 60,
+              "twin": 48
+            },
+            "58": {
+              "edge": 102,
+              "loop_id": 56,
+              "next": 59,
+              "origin": 9,
+              "prev": 57,
+              "twin": 36
+            },
+            "59": {
+              "edge": 100,
+              "loop_id": 56,
+              "next": 60,
+              "origin": 16,
+              "prev": 58,
+              "twin": 42
+            },
+            "60": {
+              "edge": 86,
+              "loop_id": 56,
+              "next": 57,
+              "origin": 8,
+              "prev": 59,
+              "twin": 26
+            },
+            "63": {
+              "edge": 99,
+              "loop_id": 62,
+              "next": 64,
+              "origin": 7,
+              "prev": 66,
+              "twin": 40
+            },
+            "64": {
+              "edge": 107,
+              "loop_id": 62,
+              "next": 65,
+              "origin": 15,
+              "prev": 63,
+              "twin": 34
+            },
+            "65": {
+              "edge": 97,
+              "loop_id": 62,
+              "next": 66,
+              "origin": 14,
+              "prev": 64,
+              "twin": 52
+            },
+            "66": {
+              "edge": 96,
+              "loop_id": 62,
+              "next": 63,
+              "origin": 6,
+              "prev": 65,
+              "twin": 20
+            },
+            "69": {
+              "edge": 88,
+              "loop_id": 68,
+              "next": 70,
+              "origin": 2,
+              "prev": 72,
+              "twin": 24
+            },
+            "70": {
+              "edge": 91,
+              "loop_id": 68,
+              "next": 71,
+              "origin": 3,
+              "prev": 69,
+              "twin": 84
+            },
+            "71": {
+              "edge": 103,
+              "loop_id": 68,
+              "next": 72,
+              "origin": 11,
+              "prev": 70,
+              "twin": 30
+            },
+            "72": {
+              "edge": 89,
+              "loop_id": 68,
+              "next": 69,
+              "origin": 10,
+              "prev": 71,
+              "twin": 46
+            },
+            "75": {
+              "edge": 105,
+              "loop_id": 74,
+              "next": 76,
+              "origin": 13,
+              "prev": 78,
+              "twin": 32
+            },
+            "76": {
+              "edge": 93,
+              "loop_id": 74,
+              "next": 77,
+              "origin": 12,
+              "prev": 75,
+              "twin": 82
+            },
+            "77": {
+              "edge": 92,
+              "loop_id": 74,
+              "next": 78,
+              "origin": 4,
+              "prev": 76,
+              "twin": 22
+            },
+            "78": {
+              "edge": 95,
+              "loop_id": 74,
+              "next": 75,
+              "origin": 5,
+              "prev": 77,
+              "twin": 54
+            },
+            "81": {
+              "edge": 90,
+              "loop_id": 80,
+              "next": 82,
+              "origin": 3,
+              "prev": 84,
+              "twin": 23
+            },
+            "82": {
+              "edge": 93,
+              "loop_id": 80,
+              "next": 83,
+              "origin": 4,
+              "prev": 81,
+              "twin": 76
+            },
+            "83": {
+              "edge": 104,
+              "loop_id": 80,
+              "next": 84,
+              "origin": 12,
+              "prev": 82,
+              "twin": 31
+            },
+            "84": {
+              "edge": 91,
+              "loop_id": 80,
+              "next": 81,
+              "origin": 11,
+              "prev": 83,
+              "twin": 70
+            }
+          },
+          "loops": {
+            "18": {
+              "face": 17,
+              "first": 19
+            },
+            "28": {
+              "face": 27,
+              "first": 29
+            },
+            "38": {
+              "face": 37,
+              "first": 39
+            },
+            "44": {
+              "face": 43,
+              "first": 45
+            },
+            "50": {
+              "face": 49,
+              "first": 51
+            },
+            "56": {
+              "face": 55,
+              "first": 57
+            },
+            "62": {
+              "face": 61,
+              "first": 63
+            },
+            "68": {
+              "face": 67,
+              "first": 69
+            },
+            "74": {
+              "face": 73,
+              "first": 75
+            },
+            "80": {
+              "face": 79,
+              "first": 81
+            }
+          },
+          "next_id": 109,
+          "vertices": {
+            "1": {
+              "point": {
+                "x": -110.0,
+                "y": -110.0,
+                "z": 0.0
+              }
+            },
+            "10": {
+              "point": {
+                "x": 110.0,
+                "y": 1550.0,
+                "z": 0.0
+              }
+            },
+            "11": {
+              "point": {
+                "x": 110.0,
+                "y": 1550.0,
+                "z": 2100.0
+              }
+            },
+            "12": {
+              "point": {
+                "x": 110.0,
+                "y": 2450.0,
+                "z": 2100.0
+              }
+            },
+            "13": {
+              "point": {
+                "x": 110.0,
+                "y": 2450.0,
+                "z": 0.0
+              }
+            },
+            "14": {
+              "point": {
+                "x": 110.0,
+                "y": 5890.0,
+                "z": 0.0
+              }
+            },
+            "15": {
+              "point": {
+                "x": 110.0,
+                "y": 5890.0,
+                "z": 3300.0
+              }
+            },
+            "16": {
+              "point": {
+                "x": 110.0,
+                "y": 110.0,
+                "z": 3300.0
+              }
+            },
+            "2": {
+              "point": {
+                "x": -110.0,
+                "y": 1550.0,
+                "z": 0.0
+              }
+            },
+            "3": {
+              "point": {
+                "x": -110.0,
+                "y": 1550.0,
+                "z": 2100.0
+              }
+            },
+            "4": {
+              "point": {
+                "x": -110.0,
+                "y": 2450.0,
+                "z": 2100.0
+              }
+            },
+            "5": {
+              "point": {
+                "x": -110.0,
+                "y": 2450.0,
+                "z": 0.0
+              }
+            },
+            "6": {
+              "point": {
+                "x": -110.0,
+                "y": 6110.0,
+                "z": 0.0
+              }
+            },
+            "7": {
+              "point": {
+                "x": -110.0,
+                "y": 6110.0,
+                "z": 3300.0
+              }
+            },
+            "8": {
+              "point": {
+                "x": -110.0,
+                "y": -110.0,
+                "z": 3300.0
+              }
+            },
+            "9": {
+              "point": {
+                "x": 110.0,
+                "y": 110.0,
+                "z": 0.0
+              }
+            }
+          }
+        },
+        "kind": "wall",
+        "location_line": "wall_centerline",
+        "top": {
+          "kind": "level",
+          "level": "00000000-0001-7002-8000-000000000000",
+          "offset": 0.0
+        }
+      },
+      "category": "walls",
+      "design_option": null,
+      "host_id": null,
+      "level_id": "00000000-0001-7001-8000-000000000000",
+      "name": null,
+      "params": {
+        "ferro.dimensions.height": {
+          "type": "length",
+          "value": 3300.0
+        },
+        "ferro.dimensions.length": {
+          "type": "length",
+          "value": 6000.0
+        },
+        "ferro.dimensions.thickness": {
+          "type": "length",
+          "value": 220.0
+        },
+        "ferro.dimensions.volume": {
+          "type": "volume",
+          "value": 3940200000.0
+        }
+      },
+      "phase_created": null,
+      "phase_demolished": null,
+      "type_id": "00000000-0001-7004-8000-000000000000",
+      "uid": "00000000-0001-7005-8000-000000000000"
+    },
+    {
+      "body": {
+        "base_offset": 0.0,
+        "curve": {
+          "end": {
+            "x": 8000.0,
+            "y": 6000.0,
+            "z": 0.0
+          },
+          "start": {
+            "x": 0.0,
+            "y": 6000.0,
+            "z": 0.0
+          },
+          "type": "line"
+        },
+        "geometry": {
+          "edges": {
+            "100": [
+              26,
+              77
+            ],
+            "101": [
+              78,
+              72
+            ],
+            "102": [
+              66,
+              80
+            ],
+            "103": [
+              30,
+              49
+            ],
+            "104": [
+              54,
+              33
+            ],
+            "105": [
+              31,
+              60
+            ],
+            "106": [
+              32,
+              41
+            ],
+            "107": [
+              83,
+              37
+            ],
+            "108": [
+              38,
+              67
+            ],
+            "109": [
+              71,
+              36
+            ],
+            "110": [
+              79,
+              35
+            ],
+            "87": [
+              47,
+              21
+            ],
+            "88": [
+              22,
+              56
+            ],
+            "89": [
+              53,
+              50
+            ],
+            "90": [
+              62,
+              20
+            ],
+            "91": [
+              48,
+              61
+            ],
+            "92": [
+              43,
+              19
+            ],
+            "93": [
+              59,
+              42
+            ],
+            "94": [
+              44,
+              55
+            ],
+            "95": [
+              24,
+              85
+            ],
+            "96": [
+              65,
+              27
+            ],
+            "97": [
+              86,
+              68
+            ],
+            "98": [
+              25,
+              73
+            ],
+            "99": [
+              74,
+              84
+            ]
+          },
+          "faces": {
+            "17": {
+              "holes": [
+                23
+              ],
+              "outer": 18,
+              "smooth_group": null,
+              "surface": {
+                "origin": {
+                  "x": -110.0,
+                  "y": 6110.0,
+                  "z": 3300.0
+                },
+                "type": "plane",
+                "x_axis": {
+                  "x": 1.0,
+                  "y": 0.0,
+                  "z": 0.0
+                },
+                "y_axis": {
+                  "x": 0.0,
+                  "y": 0.0,
+                  "z": -1.0
+                }
+              }
+            },
+            "28": {
+              "holes": [
+                34
+              ],
+              "outer": 29,
+              "smooth_group": null,
+              "surface": {
+                "origin": {
+                  "x": 110.0,
+                  "y": 5890.0,
+                  "z": 0.0
+                },
+                "type": "plane",
+                "x_axis": {
+                  "x": 1.0,
+                  "y": 0.0,
+                  "z": 0.0
+                },
+                "y_axis": {
+                  "x": -0.0,
+                  "y": 0.0,
+                  "z": 1.0
+                }
+              }
+            },
+            "39": {
+              "holes": [],
+              "outer": 40,
+              "smooth_group": null,
+              "surface": {
+                "origin": {
+                  "x": 110.0,
+                  "y": 5890.0,
+                  "z": 3300.0
+                },
+                "type": "plane",
+                "x_axis": {
+                  "x": 1.0,
+                  "y": 0.0,
+                  "z": 0.0
+                },
+                "y_axis": {
+                  "x": 0.0,
+                  "y": 1.0,
+                  "z": 0.0
+                }
+              }
+            },
+            "45": {
+              "holes": [],
+              "outer": 46,
+              "smooth_group": null,
+              "surface": {
+                "origin": {
+                  "x": -110.0,
+                  "y": 6110.0,
+                  "z": 0.0
+                },
+                "type": "plane",
+                "x_axis": {
+                  "x": 1.0,
+                  "y": 0.0,
+                  "z": 0.0
+                },
+                "y_axis": {
+                  "x": 0.0,
+                  "y": -1.0,
+                  "z": 0.0
+                }
+              }
+            },
+            "51": {
+              "holes": [],
+              "outer": 52,
+              "smooth_group": null,
+              "surface": {
+                "origin": {
+                  "x": -110.0,
+                  "y": 6110.0,
+                  "z": 0.0
+                },
+                "type": "plane",
+                "x_axis": {
+                  "x": 0.7071067811865474,
+                  "y": -0.7071067811865477,
+                  "z": 0.0
+                },
+                "y_axis": {
+                  "x": 0.0,
+                  "y": 0.0,
+                  "z": 1.0
+                }
+              }
+            },
+            "57": {
+              "holes": [],
+              "outer": 58,
+              "smooth_group": null,
+              "surface": {
+                "origin": {
+                  "x": 8110.0,
+                  "y": 6110.0,
+                  "z": 3300.0
+                },
+                "type": "plane",
+                "x_axis": {
+                  "x": 0.7071067811865474,
+                  "y": 0.7071067811865477,
+                  "z": 0.0
+                },
+                "y_axis": {
+                  "x": -0.0,
+                  "y": 0.0,
+                  "z": 1.0
+                }
+              }
+            },
+            "63": {
+              "holes": [],
+              "outer": 64,
+              "smooth_group": null,
+              "surface": {
+                "origin": {
+                  "x": 3400.0,
+                  "y": 6110.0,
+                  "z": 900.0
+                },
+                "type": "plane",
+                "x_axis": {
+                  "x": 0.0,
+                  "y": 1.0,
+                  "z": 0.0
+                },
+                "y_axis": {
+                  "x": 0.0,
+                  "y": 0.0,
+                  "z": 1.0
+                }
+              }
+            },
+            "69": {
+              "holes": [],
+              "outer": 70,
+              "smooth_group": null,
+              "surface": {
+                "origin": {
+                  "x": 4600.0,
+                  "y": 5890.0,
+                  "z": 900.0
+                },
+                "type": "plane",
+                "x_axis": {
+                  "x": 0.0,
+                  "y": 1.0,
+                  "z": 0.0
+                },
+                "y_axis": {
+                  "x": 0.0,
+                  "y": 0.0,
+                  "z": -1.0
+                }
+              }
+            },
+            "75": {
+              "holes": [],
+              "outer": 76,
+              "smooth_group": null,
+              "surface": {
+                "origin": {
+                  "x": 3400.0,
+                  "y": 6110.0,
+                  "z": 2100.0
+                },
+                "type": "plane",
+                "x_axis": {
+                  "x": 1.0,
+                  "y": 0.0,
+                  "z": 0.0
+                },
+                "y_axis": {
+                  "x": 0.0,
+                  "y": -1.0,
+                  "z": 0.0
+                }
+              }
+            },
+            "81": {
+              "holes": [],
+              "outer": 82,
+              "smooth_group": null,
+              "surface": {
+                "origin": {
+                  "x": 3400.0,
+                  "y": 5890.0,
+                  "z": 900.0
+                },
+                "type": "plane",
+                "x_axis": {
+                  "x": 1.0,
+                  "y": 0.0,
+                  "z": 0.0
+                },
+                "y_axis": {
+                  "x": 0.0,
+                  "y": 1.0,
+                  "z": 0.0
+                }
+              }
+            }
+          },
+          "half_edges": {
+            "19": {
+              "edge": 92,
+              "loop_id": 18,
+              "next": 20,
+              "origin": 4,
+              "prev": 22,
+              "twin": 43
+            },
+            "20": {
+              "edge": 90,
+              "loop_id": 18,
+              "next": 21,
+              "origin": 3,
+              "prev": 19,
+              "twin": 62
+            },
+            "21": {
+              "edge": 87,
+              "loop_id": 18,
+              "next": 22,
+              "origin": 2,
+              "prev": 20,
+              "twin": 47
+            },
+            "22": {
+              "edge": 88,
+              "loop_id": 18,
+              "next": 19,
+              "origin": 1,
+              "prev": 21,
+              "twin": 56
+            },
+            "24": {
+              "edge": 95,
+              "loop_id": 23,
+              "next": 25,
+              "origin": 5,
+              "prev": 27,
+              "twin": 85
+            },
+            "25": {
+              "edge": 98,
+              "loop_id": 23,
+              "next": 26,
+              "origin": 6,
+              "prev": 24,
+              "twin": 73
+            },
+            "26": {
+              "edge": 100,
+              "loop_id": 23,
+              "next": 27,
+              "origin": 7,
+              "prev": 25,
+              "twin": 77
+            },
+            "27": {
+              "edge": 96,
+              "loop_id": 23,
+              "next": 24,
+              "origin": 8,
+              "prev": 26,
+              "twin": 65
+            },
+            "30": {
+              "edge": 103,
+              "loop_id": 29,
+              "next": 31,
+              "origin": 9,
+              "prev": 33,
+              "twin": 49
+            },
+            "31": {
+              "edge": 105,
+              "loop_id": 29,
+              "next": 32,
+              "origin": 10,
+              "prev": 30,
+              "twin": 60
+            },
+            "32": {
+              "edge": 106,
+              "loop_id": 29,
+              "next": 33,
+              "origin": 11,
+              "prev": 31,
+              "twin": 41
+            },
+            "33": {
+              "edge": 104,
+              "loop_id": 29,
+              "next": 30,
+              "origin": 12,
+              "prev": 32,
+              "twin": 54
+            },
+            "35": {
+              "edge": 110,
+              "loop_id": 34,
+              "next": 36,
+              "origin": 16,
+              "prev": 38,
+              "twin": 79
+            },
+            "36": {
+              "edge": 109,
+              "loop_id": 34,
+              "next": 37,
+              "origin": 15,
+              "prev": 35,
+              "twin": 71
+            },
+            "37": {
+              "edge": 107,
+              "loop_id": 34,
+              "next": 38,
+              "origin": 14,
+              "prev": 36,
+              "twin": 83
+            },
+            "38": {
+              "edge": 108,
+              "loop_id": 34,
+              "next": 35,
+              "origin": 13,
+              "prev": 37,
+              "twin": 67
+            },
+            "41": {
+              "edge": 106,
+              "loop_id": 40,
+              "next": 42,
+              "origin": 12,
+              "prev": 44,
+              "twin": 32
+            },
+            "42": {
+              "edge": 93,
+              "loop_id": 40,
+              "next": 43,
+              "origin": 11,
+              "prev": 41,
+              "twin": 59
+            },
+            "43": {
+              "edge": 92,
+              "loop_id": 40,
+              "next": 44,
+              "origin": 3,
+              "prev": 42,
+              "twin": 19
+            },
+            "44": {
+              "edge": 94,
+              "loop_id": 40,
+              "next": 41,
+              "origin": 4,
+              "prev": 43,
+              "twin": 55
+            },
+            "47": {
+              "edge": 87,
+              "loop_id": 46,
+              "next": 48,
+              "origin": 1,
+              "prev": 50,
+              "twin": 21
+            },
+            "48": {
+              "edge": 91,
+              "loop_id": 46,
+              "next": 49,
+              "origin": 2,
+              "prev": 47,
+              "twin": 61
+            },
+            "49": {
+              "edge": 103,
+              "loop_id": 46,
+              "next": 50,
+              "origin": 10,
+              "prev": 48,
+              "twin": 30
+            },
+            "50": {
+              "edge": 89,
+              "loop_id": 46,
+              "next": 47,
+              "origin": 9,
+              "prev": 49,
+              "twin": 53
+            },
+            "53": {
+              "edge": 89,
+              "loop_id": 52,
+              "next": 54,
+              "origin": 1,
+              "prev": 56,
+              "twin": 50
+            },
+            "54": {
+              "edge": 104,
+              "loop_id": 52,
+              "next": 55,
+              "origin": 9,
+              "prev": 53,
+              "twin": 33
+            },
+            "55": {
+              "edge": 94,
+              "loop_id": 52,
+              "next": 56,
+              "origin": 12,
+              "prev": 54,
+              "twin": 44
+            },
+            "56": {
+              "edge": 88,
+              "loop_id": 52,
+              "next": 53,
+              "origin": 4,
+              "prev": 55,
+              "twin": 22
+            },
+            "59": {
+              "edge": 93,
+              "loop_id": 58,
+              "next": 60,
+              "origin": 3,
+              "prev": 62,
+              "twin": 42
+            },
+            "60": {
+              "edge": 105,
+              "loop_id": 58,
+              "next": 61,
+              "origin": 11,
+              "prev": 59,
+              "twin": 31
+            },
+            "61": {
+              "edge": 91,
+              "loop_id": 58,
+              "next": 62,
+              "origin": 10,
+              "prev": 60,
+              "twin": 48
+            },
+            "62": {
+              "edge": 90,
+              "loop_id": 58,
+              "next": 59,
+              "origin": 2,
+              "prev": 61,
+              "twin": 20
+            },
+            "65": {
+              "edge": 96,
+              "loop_id": 64,
+              "next": 66,
+              "origin": 5,
+              "prev": 68,
+              "twin": 27
+            },
+            "66": {
+              "edge": 102,
+              "loop_id": 64,
+              "next": 67,
+              "origin": 8,
+              "prev": 65,
+              "twin": 80
+            },
+            "67": {
+              "edge": 108,
+              "loop_id": 64,
+              "next": 68,
+              "origin": 16,
+              "prev": 66,
+              "twin": 38
+            },
+            "68": {
+              "edge": 97,
+              "loop_id": 64,
+              "next": 65,
+              "origin": 13,
+              "prev": 67,
+              "twin": 86
+            },
+            "71": {
+              "edge": 109,
+              "loop_id": 70,
+              "next": 72,
+              "origin": 14,
+              "prev": 74,
+              "twin": 36
+            },
+            "72": {
+              "edge": 101,
+              "loop_id": 70,
+              "next": 73,
+              "origin": 15,
+              "prev": 71,
+              "twin": 78
+            },
+            "73": {
+              "edge": 98,
+              "loop_id": 70,
+              "next": 74,
+              "origin": 7,
+              "prev": 72,
+              "twin": 25
+            },
+            "74": {
+              "edge": 99,
+              "loop_id": 70,
+              "next": 71,
+              "origin": 6,
+              "prev": 73,
+              "twin": 84
+            },
+            "77": {
+              "edge": 100,
+              "loop_id": 76,
+              "next": 78,
+              "origin": 8,
+              "prev": 80,
+              "twin": 26
+            },
+            "78": {
+              "edge": 101,
+              "loop_id": 76,
+              "next": 79,
+              "origin": 7,
+              "prev": 77,
+              "twin": 72
+            },
+            "79": {
+              "edge": 110,
+              "loop_id": 76,
+              "next": 80,
+              "origin": 15,
+              "prev": 78,
+              "twin": 35
+            },
+            "80": {
+              "edge": 102,
+              "loop_id": 76,
+              "next": 77,
+              "origin": 16,
+              "prev": 79,
+              "twin": 66
+            },
+            "83": {
+              "edge": 107,
+              "loop_id": 82,
+              "next": 84,
+              "origin": 13,
+              "prev": 86,
+              "twin": 37
+            },
+            "84": {
+              "edge": 99,
+              "loop_id": 82,
+              "next": 85,
+              "origin": 14,
+              "prev": 83,
+              "twin": 74
+            },
+            "85": {
+              "edge": 95,
+              "loop_id": 82,
+              "next": 86,
+              "origin": 6,
+              "prev": 84,
+              "twin": 24
+            },
+            "86": {
+              "edge": 97,
+              "loop_id": 82,
+              "next": 83,
+              "origin": 5,
+              "prev": 85,
+              "twin": 68
+            }
+          },
+          "loops": {
+            "18": {
+              "face": 17,
+              "first": 19
+            },
+            "23": {
+              "face": 17,
+              "first": 24
+            },
+            "29": {
+              "face": 28,
+              "first": 30
+            },
+            "34": {
+              "face": 28,
+              "first": 35
+            },
+            "40": {
+              "face": 39,
+              "first": 41
+            },
+            "46": {
+              "face": 45,
+              "first": 47
+            },
+            "52": {
+              "face": 51,
+              "first": 53
+            },
+            "58": {
+              "face": 57,
+              "first": 59
+            },
+            "64": {
+              "face": 63,
+              "first": 65
+            },
+            "70": {
+              "face": 69,
+              "first": 71
+            },
+            "76": {
+              "face": 75,
+              "first": 77
+            },
+            "82": {
+              "face": 81,
+              "first": 83
+            }
+          },
+          "next_id": 111,
+          "vertices": {
+            "1": {
+              "point": {
+                "x": -110.0,
+                "y": 6110.0,
+                "z": 0.0
+              }
+            },
+            "10": {
+              "point": {
+                "x": 7890.0,
+                "y": 5890.0,
+                "z": 0.0
+              }
+            },
+            "11": {
+              "point": {
+                "x": 7890.0,
+                "y": 5890.0,
+                "z": 3300.0
+              }
+            },
+            "12": {
+              "point": {
+                "x": 110.0,
+                "y": 5890.0,
+                "z": 3300.0
+              }
+            },
+            "13": {
+              "point": {
+                "x": 3400.0,
+                "y": 5890.0,
+                "z": 900.0
+              }
+            },
+            "14": {
+              "point": {
+                "x": 4600.0,
+                "y": 5890.0,
+                "z": 900.0
+              }
+            },
+            "15": {
+              "point": {
+                "x": 4600.0,
+                "y": 5890.0,
+                "z": 2100.0
+              }
+            },
+            "16": {
+              "point": {
+                "x": 3400.0,
+                "y": 5890.0,
+                "z": 2100.0
+              }
+            },
+            "2": {
+              "point": {
+                "x": 8110.0,
+                "y": 6110.0,
+                "z": 0.0
+              }
+            },
+            "3": {
+              "point": {
+                "x": 8110.0,
+                "y": 6110.0,
+                "z": 3300.0
+              }
+            },
+            "4": {
+              "point": {
+                "x": -110.0,
+                "y": 6110.0,
+                "z": 3300.0
+              }
+            },
+            "5": {
+              "point": {
+                "x": 3400.0,
+                "y": 6110.0,
+                "z": 900.0
+              }
+            },
+            "6": {
+              "point": {
+                "x": 4600.0,
+                "y": 6110.0,
+                "z": 900.0
+              }
+            },
+            "7": {
+              "point": {
+                "x": 4600.0,
+                "y": 6110.0,
+                "z": 2100.0
+              }
+            },
+            "8": {
+              "point": {
+                "x": 3400.0,
+                "y": 6110.0,
+                "z": 2100.0
+              }
+            },
+            "9": {
+              "point": {
+                "x": 110.0,
+                "y": 5890.0,
+                "z": 0.0
+              }
+            }
+          }
+        },
+        "kind": "wall",
+        "location_line": "wall_centerline",
+        "top": {
+          "kind": "level",
+          "level": "00000000-0001-7002-8000-000000000000",
+          "offset": 0.0
+        }
+      },
+      "category": "walls",
+      "design_option": null,
+      "host_id": null,
+      "level_id": "00000000-0001-7001-8000-000000000000",
+      "name": null,
+      "params": {
+        "ferro.dimensions.height": {
+          "type": "length",
+          "value": 3300.0
+        },
+        "ferro.dimensions.length": {
+          "type": "length",
+          "value": 8000.0
+        },
+        "ferro.dimensions.thickness": {
+          "type": "length",
+          "value": 220.0
+        },
+        "ferro.dimensions.volume": {
+          "type": "volume",
+          "value": 5491200000.0
+        }
+      },
+      "phase_created": null,
+      "phase_demolished": null,
+      "type_id": "00000000-0001-7004-8000-000000000000",
+      "uid": "00000000-0001-7006-8000-000000000000"
+    },
+    {
+      "body": {
+        "base_offset": 0.0,
+        "curve": {
+          "end": {
+            "x": 8000.0,
+            "y": 0.0,
+            "z": 0.0
+          },
+          "start": {
+            "x": 8000.0,
+            "y": 6000.0,
+            "z": 0.0
+          },
+          "type": "line"
+        },
+        "geometry": {
+          "edges": {
+            "45": [
+              29,
+              13
+            ],
+            "46": [
+              14,
+              38
+            ],
+            "47": [
+              35,
+              32
+            ],
+            "48": [
+              44,
+              12
+            ],
+            "49": [
+              30,
+              43
+            ],
+            "50": [
+              25,
+              11
+            ],
+            "51": [
+              41,
+              24
+            ],
+            "52": [
+              26,
+              37
+            ],
+            "53": [
+              17,
+              31
+            ],
+            "54": [
+              36,
+              20
+            ],
+            "55": [
+              18,
+              42
+            ],
+            "56": [
+              19,
+              23
+            ]
+          },
+          "faces": {
+            "15": {
+              "holes": [],
+              "outer": 16,
+              "smooth_group": null,
+              "surface": {
+                "origin": {
+                  "x": 7890.0,
+                  "y": 5890.0,
+                  "z": 0.0
+                },
+                "type": "plane",
+                "x_axis": {
+                  "x": 0.0,
+                  "y": 1.0,
+                  "z": 0.0
+                },
+                "y_axis": {
+                  "x": 0.0,
+                  "y": 0.0,
+                  "z": -1.0
+                }
+              }
+            },
+            "21": {
+              "holes": [],
+              "outer": 22,
+              "smooth_group": null,
+              "surface": {
+                "origin": {
+                  "x": 7890.0,
+                  "y": 5890.0,
+                  "z": 3300.0
+                },
+                "type": "plane",
+                "x_axis": {
+                  "x": 1.0,
+                  "y": 0.0,
+                  "z": 0.0
+                },
+                "y_axis": {
+                  "x": 0.0,
+                  "y": 1.0,
+                  "z": 0.0
+                }
+              }
+            },
+            "27": {
+              "holes": [],
+              "outer": 28,
+              "smooth_group": null,
+              "surface": {
+                "origin": {
+                  "x": 8110.0,
+                  "y": 6110.0,
+                  "z": 0.0
+                },
+                "type": "plane",
+                "x_axis": {
+                  "x": 1.0,
+                  "y": 0.0,
+                  "z": 0.0
+                },
+                "y_axis": {
+                  "x": 0.0,
+                  "y": -1.0,
+                  "z": 0.0
+                }
+              }
+            },
+            "33": {
+              "holes": [],
+              "outer": 34,
+              "smooth_group": null,
+              "surface": {
+                "origin": {
+                  "x": 8110.0,
+                  "y": 6110.0,
+                  "z": 0.0
+                },
+                "type": "plane",
+                "x_axis": {
+                  "x": 0.7071067811865474,
+                  "y": 0.7071067811865477,
+                  "z": 0.0
+                },
+                "y_axis": {
+                  "x": 0.0,
+                  "y": 0.0,
+                  "z": -1.0
+                }
+              }
+            },
+            "39": {
+              "holes": [],
+              "outer": 40,
+              "smooth_group": null,
+              "surface": {
+                "origin": {
+                  "x": 8110.0,
+                  "y": -110.0,
+                  "z": 3300.0
+                },
+                "type": "plane",
+                "x_axis": {
+                  "x": 0.7071067811865474,
+                  "y": -0.7071067811865477,
+                  "z": 0.0
+                },
+                "y_axis": {
+                  "x": 0.0,
+                  "y": 0.0,
+                  "z": 1.0
+                }
+              }
+            },
+            "9": {
+              "holes": [],
+              "outer": 10,
+              "smooth_group": null,
+              "surface": {
+                "origin": {
+                  "x": 8110.0,
+                  "y": 6110.0,
+                  "z": 3300.0
+                },
+                "type": "plane",
+                "x_axis": {
+                  "x": 0.0,
+                  "y": 1.0,
+                  "z": 0.0
+                },
+                "y_axis": {
+                  "x": 0.0,
+                  "y": 0.0,
+                  "z": 1.0
+                }
+              }
+            }
+          },
+          "half_edges": {
+            "11": {
+              "edge": 50,
+              "loop_id": 10,
+              "next": 12,
+              "origin": 4,
+              "prev": 14,
+              "twin": 25
+            },
+            "12": {
+              "edge": 48,
+              "loop_id": 10,
+              "next": 13,
+              "origin": 3,
+              "prev": 11,
+              "twin": 44
+            },
+            "13": {
+              "edge": 45,
+              "loop_id": 10,
+              "next": 14,
+              "origin": 2,
+              "prev": 12,
+              "twin": 29
+            },
+            "14": {
+              "edge": 46,
+              "loop_id": 10,
+              "next": 11,
+              "origin": 1,
+              "prev": 13,
+              "twin": 38
+            },
+            "17": {
+              "edge": 53,
+              "loop_id": 16,
+              "next": 18,
+              "origin": 5,
+              "prev": 20,
+              "twin": 31
+            },
+            "18": {
+              "edge": 55,
+              "loop_id": 16,
+              "next": 19,
+              "origin": 6,
+              "prev": 17,
+              "twin": 42
+            },
+            "19": {
+              "edge": 56,
+              "loop_id": 16,
+              "next": 20,
+              "origin": 7,
+              "prev": 18,
+              "twin": 23
+            },
+            "20": {
+              "edge": 54,
+              "loop_id": 16,
+              "next": 17,
+              "origin": 8,
+              "prev": 19,
+              "twin": 36
+            },
+            "23": {
+              "edge": 56,
+              "loop_id": 22,
+              "next": 24,
+              "origin": 8,
+              "prev": 26,
+              "twin": 19
+            },
+            "24": {
+              "edge": 51,
+              "loop_id": 22,
+              "next": 25,
+              "origin": 7,
+              "prev": 23,
+              "twin": 41
+            },
+            "25": {
+              "edge": 50,
+              "loop_id": 22,
+              "next": 26,
+              "origin": 3,
+              "prev": 24,
+              "twin": 11
+            },
+            "26": {
+              "edge": 52,
+              "loop_id": 22,
+              "next": 23,
+              "origin": 4,
+              "prev": 25,
+              "twin": 37
+            },
+            "29": {
+              "edge": 45,
+              "loop_id": 28,
+              "next": 30,
+              "origin": 1,
+              "prev": 32,
+              "twin": 13
+            },
+            "30": {
+              "edge": 49,
+              "loop_id": 28,
+              "next": 31,
+              "origin": 2,
+              "prev": 29,
+              "twin": 43
+            },
+            "31": {
+              "edge": 53,
+              "loop_id": 28,
+              "next": 32,
+              "origin": 6,
+              "prev": 30,
+              "twin": 17
+            },
+            "32": {
+              "edge": 47,
+              "loop_id": 28,
+              "next": 29,
+              "origin": 5,
+              "prev": 31,
+              "twin": 35
+            },
+            "35": {
+              "edge": 47,
+              "loop_id": 34,
+              "next": 36,
+              "origin": 1,
+              "prev": 38,
+              "twin": 32
+            },
+            "36": {
+              "edge": 54,
+              "loop_id": 34,
+              "next": 37,
+              "origin": 5,
+              "prev": 35,
+              "twin": 20
+            },
+            "37": {
+              "edge": 52,
+              "loop_id": 34,
+              "next": 38,
+              "origin": 8,
+              "prev": 36,
+              "twin": 26
+            },
+            "38": {
+              "edge": 46,
+              "loop_id": 34,
+              "next": 35,
+              "origin": 4,
+              "prev": 37,
+              "twin": 14
+            },
+            "41": {
+              "edge": 51,
+              "loop_id": 40,
+              "next": 42,
+              "origin": 3,
+              "prev": 44,
+              "twin": 24
+            },
+            "42": {
+              "edge": 55,
+              "loop_id": 40,
+              "next": 43,
+              "origin": 7,
+              "prev": 41,
+              "twin": 18
+            },
+            "43": {
+              "edge": 49,
+              "loop_id": 40,
+              "next": 44,
+              "origin": 6,
+              "prev": 42,
+              "twin": 30
+            },
+            "44": {
+              "edge": 48,
+              "loop_id": 40,
+              "next": 41,
+              "origin": 2,
+              "prev": 43,
+              "twin": 12
+            }
+          },
+          "loops": {
+            "10": {
+              "face": 9,
+              "first": 11
+            },
+            "16": {
+              "face": 15,
+              "first": 17
+            },
+            "22": {
+              "face": 21,
+              "first": 23
+            },
+            "28": {
+              "face": 27,
+              "first": 29
+            },
+            "34": {
+              "face": 33,
+              "first": 35
+            },
+            "40": {
+              "face": 39,
+              "first": 41
+            }
+          },
+          "next_id": 57,
+          "vertices": {
+            "1": {
+              "point": {
+                "x": 8110.0,
+                "y": 6110.0,
+                "z": 0.0
+              }
+            },
+            "2": {
+              "point": {
+                "x": 8110.0,
+                "y": -110.0,
+                "z": 0.0
+              }
+            },
+            "3": {
+              "point": {
+                "x": 8110.0,
+                "y": -110.0,
+                "z": 3300.0
+              }
+            },
+            "4": {
+              "point": {
+                "x": 8110.0,
+                "y": 6110.0,
+                "z": 3300.0
+              }
+            },
+            "5": {
+              "point": {
+                "x": 7890.0,
+                "y": 5890.0,
+                "z": 0.0
+              }
+            },
+            "6": {
+              "point": {
+                "x": 7890.0,
+                "y": 110.0,
+                "z": 0.0
+              }
+            },
+            "7": {
+              "point": {
+                "x": 7890.0,
+                "y": 110.0,
+                "z": 3300.0
+              }
+            },
+            "8": {
+              "point": {
+                "x": 7890.0,
+                "y": 5890.0,
+                "z": 3300.0
+              }
+            }
+          }
+        },
+        "kind": "wall",
+        "location_line": "wall_centerline",
+        "top": {
+          "kind": "level",
+          "level": "00000000-0001-7002-8000-000000000000",
+          "offset": 0.0
+        }
+      },
+      "category": "walls",
+      "design_option": null,
+      "host_id": null,
+      "level_id": "00000000-0001-7001-8000-000000000000",
+      "name": null,
+      "params": {
+        "ferro.dimensions.height": {
+          "type": "length",
+          "value": 3300.0
+        },
+        "ferro.dimensions.length": {
+          "type": "length",
+          "value": 6000.0
+        },
+        "ferro.dimensions.thickness": {
+          "type": "length",
+          "value": 220.0
+        },
+        "ferro.dimensions.volume": {
+          "type": "volume",
+          "value": 4356000000.0
+        }
+      },
+      "phase_created": null,
+      "phase_demolished": null,
+      "type_id": "00000000-0001-7004-8000-000000000000",
+      "uid": "00000000-0001-7007-8000-000000000000"
+    },
+    {
+      "body": {
+        "base_offset": 0.0,
+        "curve": {
+          "end": {
+            "x": 0.0,
+            "y": 0.0,
+            "z": 0.0
+          },
+          "start": {
+            "x": 8000.0,
+            "y": 0.0,
+            "z": 0.0
+          },
+          "type": "line"
+        },
+        "geometry": {
+          "edges": {
+            "45": [
+              29,
+              13
+            ],
+            "46": [
+              14,
+              38
+            ],
+            "47": [
+              35,
+              32
+            ],
+            "48": [
+              44,
+              12
+            ],
+            "49": [
+              30,
+              43
+            ],
+            "50": [
+              25,
+              11
+            ],
+            "51": [
+              41,
+              24
+            ],
+            "52": [
+              26,
+              37
+            ],
+            "53": [
+              17,
+              31
+            ],
+            "54": [
+              36,
+              20
+            ],
+            "55": [
+              18,
+              42
+            ],
+            "56": [
+              19,
+              23
+            ]
+          },
+          "faces": {
+            "15": {
+              "holes": [],
+              "outer": 16,
+              "smooth_group": null,
+              "surface": {
+                "origin": {
+                  "x": 7890.0,
+                  "y": 110.0,
+                  "z": 0.0
+                },
+                "type": "plane",
+                "x_axis": {
+                  "x": 1.0,
+                  "y": 0.0,
+                  "z": 0.0
+                },
+                "y_axis": {
+                  "x": 0.0,
+                  "y": 0.0,
+                  "z": -1.0
+                }
+              }
+            },
+            "21": {
+              "holes": [],
+              "outer": 22,
+              "smooth_group": null,
+              "surface": {
+                "origin": {
+                  "x": 7890.0,
+                  "y": 110.0,
+                  "z": 3300.0
+                },
+                "type": "plane",
+                "x_axis": {
+                  "x": 1.0,
+                  "y": 0.0,
+                  "z": 0.0
+                },
+                "y_axis": {
+                  "x": 0.0,
+                  "y": 1.0,
+                  "z": 0.0
+                }
+              }
+            },
+            "27": {
+              "holes": [],
+              "outer": 28,
+              "smooth_group": null,
+              "surface": {
+                "origin": {
+                  "x": 8110.0,
+                  "y": -110.0,
+                  "z": 0.0
+                },
+                "type": "plane",
+                "x_axis": {
+                  "x": 1.0,
+                  "y": 0.0,
+                  "z": 0.0
+                },
+                "y_axis": {
+                  "x": 0.0,
+                  "y": -1.0,
+                  "z": 0.0
+                }
+              }
+            },
+            "33": {
+              "holes": [],
+              "outer": 34,
+              "smooth_group": null,
+              "surface": {
+                "origin": {
+                  "x": 8110.0,
+                  "y": -110.0,
+                  "z": 0.0
+                },
+                "type": "plane",
+                "x_axis": {
+                  "x": 0.7071067811865474,
+                  "y": -0.7071067811865477,
+                  "z": 0.0
+                },
+                "y_axis": {
+                  "x": 0.0,
+                  "y": 0.0,
+                  "z": -1.0
+                }
+              }
+            },
+            "39": {
+              "holes": [],
+              "outer": 40,
+              "smooth_group": null,
+              "surface": {
+                "origin": {
+                  "x": -110.0,
+                  "y": -110.0,
+                  "z": 3300.0
+                },
+                "type": "plane",
+                "x_axis": {
+                  "x": 0.7071067811865474,
+                  "y": 0.7071067811865477,
+                  "z": 0.0
+                },
+                "y_axis": {
+                  "x": 0.0,
+                  "y": 0.0,
+                  "z": -1.0
+                }
+              }
+            },
+            "9": {
+              "holes": [],
+              "outer": 10,
+              "smooth_group": null,
+              "surface": {
+                "origin": {
+                  "x": 8110.0,
+                  "y": -110.0,
+                  "z": 3300.0
+                },
+                "type": "plane",
+                "x_axis": {
+                  "x": 1.0,
+                  "y": 0.0,
+                  "z": 0.0
+                },
+                "y_axis": {
+                  "x": -0.0,
+                  "y": 0.0,
+                  "z": 1.0
+                }
+              }
+            }
+          },
+          "half_edges": {
+            "11": {
+              "edge": 50,
+              "loop_id": 10,
+              "next": 12,
+              "origin": 4,
+              "prev": 14,
+              "twin": 25
+            },
+            "12": {
+              "edge": 48,
+              "loop_id": 10,
+              "next": 13,
+              "origin": 3,
+              "prev": 11,
+              "twin": 44
+            },
+            "13": {
+              "edge": 45,
+              "loop_id": 10,
+              "next": 14,
+              "origin": 2,
+              "prev": 12,
+              "twin": 29
+            },
+            "14": {
+              "edge": 46,
+              "loop_id": 10,
+              "next": 11,
+              "origin": 1,
+              "prev": 13,
+              "twin": 38
+            },
+            "17": {
+              "edge": 53,
+              "loop_id": 16,
+              "next": 18,
+              "origin": 5,
+              "prev": 20,
+              "twin": 31
+            },
+            "18": {
+              "edge": 55,
+              "loop_id": 16,
+              "next": 19,
+              "origin": 6,
+              "prev": 17,
+              "twin": 42
+            },
+            "19": {
+              "edge": 56,
+              "loop_id": 16,
+              "next": 20,
+              "origin": 7,
+              "prev": 18,
+              "twin": 23
+            },
+            "20": {
+              "edge": 54,
+              "loop_id": 16,
+              "next": 17,
+              "origin": 8,
+              "prev": 19,
+              "twin": 36
+            },
+            "23": {
+              "edge": 56,
+              "loop_id": 22,
+              "next": 24,
+              "origin": 8,
+              "prev": 26,
+              "twin": 19
+            },
+            "24": {
+              "edge": 51,
+              "loop_id": 22,
+              "next": 25,
+              "origin": 7,
+              "prev": 23,
+              "twin": 41
+            },
+            "25": {
+              "edge": 50,
+              "loop_id": 22,
+              "next": 26,
+              "origin": 3,
+              "prev": 24,
+              "twin": 11
+            },
+            "26": {
+              "edge": 52,
+              "loop_id": 22,
+              "next": 23,
+              "origin": 4,
+              "prev": 25,
+              "twin": 37
+            },
+            "29": {
+              "edge": 45,
+              "loop_id": 28,
+              "next": 30,
+              "origin": 1,
+              "prev": 32,
+              "twin": 13
+            },
+            "30": {
+              "edge": 49,
+              "loop_id": 28,
+              "next": 31,
+              "origin": 2,
+              "prev": 29,
+              "twin": 43
+            },
+            "31": {
+              "edge": 53,
+              "loop_id": 28,
+              "next": 32,
+              "origin": 6,
+              "prev": 30,
+              "twin": 17
+            },
+            "32": {
+              "edge": 47,
+              "loop_id": 28,
+              "next": 29,
+              "origin": 5,
+              "prev": 31,
+              "twin": 35
+            },
+            "35": {
+              "edge": 47,
+              "loop_id": 34,
+              "next": 36,
+              "origin": 1,
+              "prev": 38,
+              "twin": 32
+            },
+            "36": {
+              "edge": 54,
+              "loop_id": 34,
+              "next": 37,
+              "origin": 5,
+              "prev": 35,
+              "twin": 20
+            },
+            "37": {
+              "edge": 52,
+              "loop_id": 34,
+              "next": 38,
+              "origin": 8,
+              "prev": 36,
+              "twin": 26
+            },
+            "38": {
+              "edge": 46,
+              "loop_id": 34,
+              "next": 35,
+              "origin": 4,
+              "prev": 37,
+              "twin": 14
+            },
+            "41": {
+              "edge": 51,
+              "loop_id": 40,
+              "next": 42,
+              "origin": 3,
+              "prev": 44,
+              "twin": 24
+            },
+            "42": {
+              "edge": 55,
+              "loop_id": 40,
+              "next": 43,
+              "origin": 7,
+              "prev": 41,
+              "twin": 18
+            },
+            "43": {
+              "edge": 49,
+              "loop_id": 40,
+              "next": 44,
+              "origin": 6,
+              "prev": 42,
+              "twin": 30
+            },
+            "44": {
+              "edge": 48,
+              "loop_id": 40,
+              "next": 41,
+              "origin": 2,
+              "prev": 43,
+              "twin": 12
+            }
+          },
+          "loops": {
+            "10": {
+              "face": 9,
+              "first": 11
+            },
+            "16": {
+              "face": 15,
+              "first": 17
+            },
+            "22": {
+              "face": 21,
+              "first": 23
+            },
+            "28": {
+              "face": 27,
+              "first": 29
+            },
+            "34": {
+              "face": 33,
+              "first": 35
+            },
+            "40": {
+              "face": 39,
+              "first": 41
+            }
+          },
+          "next_id": 57,
+          "vertices": {
+            "1": {
+              "point": {
+                "x": 8110.0,
+                "y": -110.0,
+                "z": 0.0
+              }
+            },
+            "2": {
+              "point": {
+                "x": -110.0,
+                "y": -110.0,
+                "z": 0.0
+              }
+            },
+            "3": {
+              "point": {
+                "x": -110.0,
+                "y": -110.0,
+                "z": 3300.0
+              }
+            },
+            "4": {
+              "point": {
+                "x": 8110.0,
+                "y": -110.0,
+                "z": 3300.0
+              }
+            },
+            "5": {
+              "point": {
+                "x": 7890.0,
+                "y": 110.0,
+                "z": 0.0
+              }
+            },
+            "6": {
+              "point": {
+                "x": 110.0,
+                "y": 110.0,
+                "z": 0.0
+              }
+            },
+            "7": {
+              "point": {
+                "x": 110.0,
+                "y": 110.0,
+                "z": 3300.0
+              }
+            },
+            "8": {
+              "point": {
+                "x": 7890.0,
+                "y": 110.0,
+                "z": 3300.0
+              }
+            }
+          }
+        },
+        "kind": "wall",
+        "location_line": "wall_centerline",
+        "top": {
+          "kind": "level",
+          "level": "00000000-0001-7002-8000-000000000000",
+          "offset": 0.0
+        }
+      },
+      "category": "walls",
+      "design_option": null,
+      "host_id": null,
+      "level_id": "00000000-0001-7001-8000-000000000000",
+      "name": null,
+      "params": {
+        "ferro.dimensions.height": {
+          "type": "length",
+          "value": 3300.0
+        },
+        "ferro.dimensions.length": {
+          "type": "length",
+          "value": 8000.0
+        },
+        "ferro.dimensions.thickness": {
+          "type": "length",
+          "value": 220.0
+        },
+        "ferro.dimensions.volume": {
+          "type": "volume",
+          "value": 5808000000.0
+        }
+      },
+      "phase_created": null,
+      "phase_demolished": null,
+      "type_id": "00000000-0001-7004-8000-000000000000",
+      "uid": "00000000-0001-7008-8000-000000000000"
+    },
+    {
+      "body": {
+        "geometry": {
+          "edges": {
+            "45": [
+              23,
+              13
+            ],
+            "46": [
+              14,
+              37
+            ],
+            "47": [
+              38,
+              26
+            ],
+            "48": [
+              41,
+              12
+            ],
+            "49": [
+              24,
+              44
+            ],
+            "50": [
+              31,
+              11
+            ],
+            "51": [
+              42,
+              30
+            ],
+            "52": [
+              32,
+              36
+            ],
+            "53": [
+              17,
+              25
+            ],
+            "54": [
+              35,
+              20
+            ],
+            "55": [
+              18,
+              43
+            ],
+            "56": [
+              19,
+              29
+            ]
+          },
+          "faces": {
+            "15": {
+              "holes": [],
+              "outer": 16,
+              "smooth_group": null,
+              "surface": {
+                "origin": {
+                  "x": 20.0,
+                  "y": 1560.0,
+                  "z": 2090.0
+                },
+                "type": "plane",
+                "x_axis": {
+                  "x": 1.0,
+                  "y": 0.0,
+                  "z": 0.0
+                },
+                "y_axis": {
+                  "x": 0.0,
+                  "y": 1.0,
+                  "z": 0.0
+                }
+              }
+            },
+            "21": {
+              "holes": [],
+              "outer": 22,
+              "smooth_group": null,
+              "surface": {
+                "origin": {
+                  "x": 20.0,
+                  "y": 1560.0,
+                  "z": 0.0
+                },
+                "type": "plane",
+                "x_axis": {
+                  "x": 0.0,
+                  "y": 1.0,
+                  "z": 0.0
+                },
+                "y_axis": {
+                  "x": 0.0,
+                  "y": 0.0,
+                  "z": 1.0
+                }
+              }
+            },
+            "27": {
+              "holes": [],
+              "outer": 28,
+              "smooth_group": null,
+              "surface": {
+                "origin": {
+                  "x": -20.0,
+                  "y": 1560.0,
+                  "z": 2090.0
+                },
+                "type": "plane",
+                "x_axis": {
+                  "x": 0.0,
+                  "y": 1.0,
+                  "z": 0.0
+                },
+                "y_axis": {
+                  "x": 0.0,
+                  "y": 0.0,
+                  "z": -1.0
+                }
+              }
+            },
+            "33": {
+              "holes": [],
+              "outer": 34,
+              "smooth_group": null,
+              "surface": {
+                "origin": {
+                  "x": 20.0,
+                  "y": 1560.0,
+                  "z": 2090.0
+                },
+                "type": "plane",
+                "x_axis": {
+                  "x": 1.0,
+                  "y": 0.0,
+                  "z": 0.0
+                },
+                "y_axis": {
+                  "x": -0.0,
+                  "y": 0.0,
+                  "z": 1.0
+                }
+              }
+            },
+            "39": {
+              "holes": [],
+              "outer": 40,
+              "smooth_group": null,
+              "surface": {
+                "origin": {
+                  "x": 20.0,
+                  "y": 2440.0,
+                  "z": 0.0
+                },
+                "type": "plane",
+                "x_axis": {
+                  "x": 1.0,
+                  "y": 0.0,
+                  "z": 0.0
+                },
+                "y_axis": {
+                  "x": 0.0,
+                  "y": 0.0,
+                  "z": -1.0
+                }
+              }
+            },
+            "9": {
+              "holes": [],
+              "outer": 10,
+              "smooth_group": null,
+              "surface": {
+                "origin": {
+                  "x": -20.0,
+                  "y": 1560.0,
+                  "z": 0.0
+                },
+                "type": "plane",
+                "x_axis": {
+                  "x": 1.0,
+                  "y": 0.0,
+                  "z": 0.0
+                },
+                "y_axis": {
+                  "x": 0.0,
+                  "y": -1.0,
+                  "z": 0.0
+                }
+              }
+            }
+          },
+          "half_edges": {
+            "11": {
+              "edge": 50,
+              "loop_id": 10,
+              "next": 12,
+              "origin": 4,
+              "prev": 14,
+              "twin": 31
+            },
+            "12": {
+              "edge": 48,
+              "loop_id": 10,
+              "next": 13,
+              "origin": 3,
+              "prev": 11,
+              "twin": 41
+            },
+            "13": {
+              "edge": 45,
+              "loop_id": 10,
+              "next": 14,
+              "origin": 2,
+              "prev": 12,
+              "twin": 23
+            },
+            "14": {
+              "edge": 46,
+              "loop_id": 10,
+              "next": 11,
+              "origin": 1,
+              "prev": 13,
+              "twin": 37
+            },
+            "17": {
+              "edge": 53,
+              "loop_id": 16,
+              "next": 18,
+              "origin": 5,
+              "prev": 20,
+              "twin": 25
+            },
+            "18": {
+              "edge": 55,
+              "loop_id": 16,
+              "next": 19,
+              "origin": 6,
+              "prev": 17,
+              "twin": 43
+            },
+            "19": {
+              "edge": 56,
+              "loop_id": 16,
+              "next": 20,
+              "origin": 7,
+              "prev": 18,
+              "twin": 29
+            },
+            "20": {
+              "edge": 54,
+              "loop_id": 16,
+              "next": 17,
+              "origin": 8,
+              "prev": 19,
+              "twin": 35
+            },
+            "23": {
+              "edge": 45,
+              "loop_id": 22,
+              "next": 24,
+              "origin": 1,
+              "prev": 26,
+              "twin": 13
+            },
+            "24": {
+              "edge": 49,
+              "loop_id": 22,
+              "next": 25,
+              "origin": 2,
+              "prev": 23,
+              "twin": 44
+            },
+            "25": {
+              "edge": 53,
+              "loop_id": 22,
+              "next": 26,
+              "origin": 6,
+              "prev": 24,
+              "twin": 17
+            },
+            "26": {
+              "edge": 47,
+              "loop_id": 22,
+              "next": 23,
+              "origin": 5,
+              "prev": 25,
+              "twin": 38
+            },
+            "29": {
+              "edge": 56,
+              "loop_id": 28,
+              "next": 30,
+              "origin": 8,
+              "prev": 32,
+              "twin": 19
+            },
+            "30": {
+              "edge": 51,
+              "loop_id": 28,
+              "next": 31,
+              "origin": 7,
+              "prev": 29,
+              "twin": 42
+            },
+            "31": {
+              "edge": 50,
+              "loop_id": 28,
+              "next": 32,
+              "origin": 3,
+              "prev": 30,
+              "twin": 11
+            },
+            "32": {
+              "edge": 52,
+              "loop_id": 28,
+              "next": 29,
+              "origin": 4,
+              "prev": 31,
+              "twin": 36
+            },
+            "35": {
+              "edge": 54,
+              "loop_id": 34,
+              "next": 36,
+              "origin": 5,
+              "prev": 38,
+              "twin": 20
+            },
+            "36": {
+              "edge": 52,
+              "loop_id": 34,
+              "next": 37,
+              "origin": 8,
+              "prev": 35,
+              "twin": 32
+            },
+            "37": {
+              "edge": 46,
+              "loop_id": 34,
+              "next": 38,
+              "origin": 4,
+              "prev": 36,
+              "twin": 14
+            },
+            "38": {
+              "edge": 47,
+              "loop_id": 34,
+              "next": 35,
+              "origin": 1,
+              "prev": 37,
+              "twin": 26
+            },
+            "41": {
+              "edge": 48,
+              "loop_id": 40,
+              "next": 42,
+              "origin": 2,
+              "prev": 44,
+              "twin": 12
+            },
+            "42": {
+              "edge": 51,
+              "loop_id": 40,
+              "next": 43,
+              "origin": 3,
+              "prev": 41,
+              "twin": 30
+            },
+            "43": {
+              "edge": 55,
+              "loop_id": 40,
+              "next": 44,
+              "origin": 7,
+              "prev": 42,
+              "twin": 18
+            },
+            "44": {
+              "edge": 49,
+              "loop_id": 40,
+              "next": 41,
+              "origin": 6,
+              "prev": 43,
+              "twin": 24
+            }
+          },
+          "loops": {
+            "10": {
+              "face": 9,
+              "first": 11
+            },
+            "16": {
+              "face": 15,
+              "first": 17
+            },
+            "22": {
+              "face": 21,
+              "first": 23
+            },
+            "28": {
+              "face": 27,
+              "first": 29
+            },
+            "34": {
+              "face": 33,
+              "first": 35
+            },
+            "40": {
+              "face": 39,
+              "first": 41
+            }
+          },
+          "next_id": 57,
+          "vertices": {
+            "1": {
+              "point": {
+                "x": 20.0,
+                "y": 1560.0,
+                "z": 0.0
+              }
+            },
+            "2": {
+              "point": {
+                "x": 20.0,
+                "y": 2440.0,
+                "z": 0.0
+              }
+            },
+            "3": {
+              "point": {
+                "x": -20.0,
+                "y": 2440.0,
+                "z": 0.0
+              }
+            },
+            "4": {
+              "point": {
+                "x": -20.0,
+                "y": 1560.0,
+                "z": 0.0
+              }
+            },
+            "5": {
+              "point": {
+                "x": 20.0,
+                "y": 1560.0,
+                "z": 2090.0
+              }
+            },
+            "6": {
+              "point": {
+                "x": 20.0,
+                "y": 2440.0,
+                "z": 2090.0
+              }
+            },
+            "7": {
+              "point": {
+                "x": -20.0,
+                "y": 2440.0,
+                "z": 2090.0
+              }
+            },
+            "8": {
+              "point": {
+                "x": -20.0,
+                "y": 1560.0,
+                "z": 2090.0
+              }
+            }
+          }
+        },
+        "height": 2100.0,
+        "kind": "opening",
+        "opening_kind": "door",
+        "position": 2000.0,
+        "sill": 0.0,
+        "width": 900.0
+      },
+      "category": "doors",
+      "design_option": null,
+      "host_id": "00000000-0001-7005-8000-000000000000",
+      "level_id": "00000000-0001-7001-8000-000000000000",
+      "name": null,
+      "params": {},
+      "phase_created": null,
+      "phase_demolished": null,
+      "type_id": null,
+      "uid": "00000000-0001-7009-8000-000000000000"
+    },
+    {
+      "body": {
+        "geometry": {
+          "edges": {
+            "45": [
+              23,
+              13
+            ],
+            "46": [
+              14,
+              37
+            ],
+            "47": [
+              38,
+              26
+            ],
+            "48": [
+              41,
+              12
+            ],
+            "49": [
+              24,
+              44
+            ],
+            "50": [
+              31,
+              11
+            ],
+            "51": [
+              42,
+              30
+            ],
+            "52": [
+              32,
+              36
+            ],
+            "53": [
+              17,
+              25
+            ],
+            "54": [
+              35,
+              20
+            ],
+            "55": [
+              18,
+              43
+            ],
+            "56": [
+              19,
+              29
+            ]
+          },
+          "faces": {
+            "15": {
+              "holes": [],
+              "outer": 16,
+              "smooth_group": null,
+              "surface": {
+                "origin": {
+                  "x": 3450.0,
+                  "y": 5990.0,
+                  "z": 2050.0
+                },
+                "type": "plane",
+                "x_axis": {
+                  "x": 1.0,
+                  "y": 0.0,
+                  "z": 0.0
+                },
+                "y_axis": {
+                  "x": 0.0,
+                  "y": 1.0,
+                  "z": 0.0
+                }
+              }
+            },
+            "21": {
+              "holes": [],
+              "outer": 22,
+              "smooth_group": null,
+              "surface": {
+                "origin": {
+                  "x": 3450.0,
+                  "y": 5990.0,
+                  "z": 950.0
+                },
+                "type": "plane",
+                "x_axis": {
+                  "x": 1.0,
+                  "y": 0.0,
+                  "z": 0.0
+                },
+                "y_axis": {
+                  "x": -0.0,
+                  "y": 0.0,
+                  "z": 1.0
+                }
+              }
+            },
+            "27": {
+              "holes": [],
+              "outer": 28,
+              "smooth_group": null,
+              "surface": {
+                "origin": {
+                  "x": 3450.0,
+                  "y": 6010.0,
+                  "z": 2050.0
+                },
+                "type": "plane",
+                "x_axis": {
+                  "x": 1.0,
+                  "y": 0.0,
+                  "z": 0.0
+                },
+                "y_axis": {
+                  "x": 0.0,
+                  "y": 0.0,
+                  "z": -1.0
+                }
+              }
+            },
+            "33": {
+              "holes": [],
+              "outer": 34,
+              "smooth_group": null,
+              "surface": {
+                "origin": {
+                  "x": 3450.0,
+                  "y": 5990.0,
+                  "z": 2050.0
+                },
+                "type": "plane",
+                "x_axis": {
+                  "x": 0.0,
+                  "y": 1.0,
+                  "z": 0.0
+                },
+                "y_axis": {
+                  "x": 0.0,
+                  "y": 0.0,
+                  "z": -1.0
+                }
+              }
+            },
+            "39": {
+              "holes": [],
+              "outer": 40,
+              "smooth_group": null,
+              "surface": {
+                "origin": {
+                  "x": 4550.0,
+                  "y": 5990.0,
+                  "z": 950.0
+                },
+                "type": "plane",
+                "x_axis": {
+                  "x": 0.0,
+                  "y": 1.0,
+                  "z": 0.0
+                },
+                "y_axis": {
+                  "x": 0.0,
+                  "y": 0.0,
+                  "z": 1.0
+                }
+              }
+            },
+            "9": {
+              "holes": [],
+              "outer": 10,
+              "smooth_group": null,
+              "surface": {
+                "origin": {
+                  "x": 3450.0,
+                  "y": 6010.0,
+                  "z": 950.0
+                },
+                "type": "plane",
+                "x_axis": {
+                  "x": 1.0,
+                  "y": 0.0,
+                  "z": 0.0
+                },
+                "y_axis": {
+                  "x": 0.0,
+                  "y": -1.0,
+                  "z": 0.0
+                }
+              }
+            }
+          },
+          "half_edges": {
+            "11": {
+              "edge": 50,
+              "loop_id": 10,
+              "next": 12,
+              "origin": 4,
+              "prev": 14,
+              "twin": 31
+            },
+            "12": {
+              "edge": 48,
+              "loop_id": 10,
+              "next": 13,
+              "origin": 3,
+              "prev": 11,
+              "twin": 41
+            },
+            "13": {
+              "edge": 45,
+              "loop_id": 10,
+              "next": 14,
+              "origin": 2,
+              "prev": 12,
+              "twin": 23
+            },
+            "14": {
+              "edge": 46,
+              "loop_id": 10,
+              "next": 11,
+              "origin": 1,
+              "prev": 13,
+              "twin": 37
+            },
+            "17": {
+              "edge": 53,
+              "loop_id": 16,
+              "next": 18,
+              "origin": 5,
+              "prev": 20,
+              "twin": 25
+            },
+            "18": {
+              "edge": 55,
+              "loop_id": 16,
+              "next": 19,
+              "origin": 6,
+              "prev": 17,
+              "twin": 43
+            },
+            "19": {
+              "edge": 56,
+              "loop_id": 16,
+              "next": 20,
+              "origin": 7,
+              "prev": 18,
+              "twin": 29
+            },
+            "20": {
+              "edge": 54,
+              "loop_id": 16,
+              "next": 17,
+              "origin": 8,
+              "prev": 19,
+              "twin": 35
+            },
+            "23": {
+              "edge": 45,
+              "loop_id": 22,
+              "next": 24,
+              "origin": 1,
+              "prev": 26,
+              "twin": 13
+            },
+            "24": {
+              "edge": 49,
+              "loop_id": 22,
+              "next": 25,
+              "origin": 2,
+              "prev": 23,
+              "twin": 44
+            },
+            "25": {
+              "edge": 53,
+              "loop_id": 22,
+              "next": 26,
+              "origin": 6,
+              "prev": 24,
+              "twin": 17
+            },
+            "26": {
+              "edge": 47,
+              "loop_id": 22,
+              "next": 23,
+              "origin": 5,
+              "prev": 25,
+              "twin": 38
+            },
+            "29": {
+              "edge": 56,
+              "loop_id": 28,
+              "next": 30,
+              "origin": 8,
+              "prev": 32,
+              "twin": 19
+            },
+            "30": {
+              "edge": 51,
+              "loop_id": 28,
+              "next": 31,
+              "origin": 7,
+              "prev": 29,
+              "twin": 42
+            },
+            "31": {
+              "edge": 50,
+              "loop_id": 28,
+              "next": 32,
+              "origin": 3,
+              "prev": 30,
+              "twin": 11
+            },
+            "32": {
+              "edge": 52,
+              "loop_id": 28,
+              "next": 29,
+              "origin": 4,
+              "prev": 31,
+              "twin": 36
+            },
+            "35": {
+              "edge": 54,
+              "loop_id": 34,
+              "next": 36,
+              "origin": 5,
+              "prev": 38,
+              "twin": 20
+            },
+            "36": {
+              "edge": 52,
+              "loop_id": 34,
+              "next": 37,
+              "origin": 8,
+              "prev": 35,
+              "twin": 32
+            },
+            "37": {
+              "edge": 46,
+              "loop_id": 34,
+              "next": 38,
+              "origin": 4,
+              "prev": 36,
+              "twin": 14
+            },
+            "38": {
+              "edge": 47,
+              "loop_id": 34,
+              "next": 35,
+              "origin": 1,
+              "prev": 37,
+              "twin": 26
+            },
+            "41": {
+              "edge": 48,
+              "loop_id": 40,
+              "next": 42,
+              "origin": 2,
+              "prev": 44,
+              "twin": 12
+            },
+            "42": {
+              "edge": 51,
+              "loop_id": 40,
+              "next": 43,
+              "origin": 3,
+              "prev": 41,
+              "twin": 30
+            },
+            "43": {
+              "edge": 55,
+              "loop_id": 40,
+              "next": 44,
+              "origin": 7,
+              "prev": 42,
+              "twin": 18
+            },
+            "44": {
+              "edge": 49,
+              "loop_id": 40,
+              "next": 41,
+              "origin": 6,
+              "prev": 43,
+              "twin": 24
+            }
+          },
+          "loops": {
+            "10": {
+              "face": 9,
+              "first": 11
+            },
+            "16": {
+              "face": 15,
+              "first": 17
+            },
+            "22": {
+              "face": 21,
+              "first": 23
+            },
+            "28": {
+              "face": 27,
+              "first": 29
+            },
+            "34": {
+              "face": 33,
+              "first": 35
+            },
+            "40": {
+              "face": 39,
+              "first": 41
+            }
+          },
+          "next_id": 57,
+          "vertices": {
+            "1": {
+              "point": {
+                "x": 3450.0,
+                "y": 5990.0,
+                "z": 950.0
+              }
+            },
+            "2": {
+              "point": {
+                "x": 4550.0,
+                "y": 5990.0,
+                "z": 950.0
+              }
+            },
+            "3": {
+              "point": {
+                "x": 4550.0,
+                "y": 6010.0,
+                "z": 950.0
+              }
+            },
+            "4": {
+              "point": {
+                "x": 3450.0,
+                "y": 6010.0,
+                "z": 950.0
+              }
+            },
+            "5": {
+              "point": {
+                "x": 3450.0,
+                "y": 5990.0,
+                "z": 2050.0
+              }
+            },
+            "6": {
+              "point": {
+                "x": 4550.0,
+                "y": 5990.0,
+                "z": 2050.0
+              }
+            },
+            "7": {
+              "point": {
+                "x": 4550.0,
+                "y": 6010.0,
+                "z": 2050.0
+              }
+            },
+            "8": {
+              "point": {
+                "x": 3450.0,
+                "y": 6010.0,
+                "z": 2050.0
+              }
+            }
+          }
+        },
+        "height": 1200.0,
+        "kind": "opening",
+        "opening_kind": "window",
+        "position": 4000.0,
+        "sill": 900.0,
+        "width": 1200.0
+      },
+      "category": "windows",
+      "design_option": null,
+      "host_id": "00000000-0001-7006-8000-000000000000",
+      "level_id": "00000000-0001-7001-8000-000000000000",
+      "name": null,
+      "params": {},
+      "phase_created": null,
+      "phase_demolished": null,
+      "type_id": null,
+      "uid": "00000000-0001-700a-8000-000000000000"
+    },
+    {
+      "body": {
+        "kind": "floor_type",
+        "structure": {
+          "layers": [
+            {
+              "function": "structure",
+              "material": null,
+              "thickness": 200.0
+            }
+          ]
+        }
+      },
+      "category": "floors",
+      "design_option": null,
+      "host_id": null,
+      "level_id": null,
+      "name": "Generic - 200mm",
+      "params": {},
+      "phase_created": null,
+      "phase_demolished": null,
+      "type_id": null,
+      "uid": "00000000-0001-700b-8000-000000000000"
+    },
+    {
+      "body": {
+        "geometry": {
+          "edges": {
+            "45": [
+              23,
+              13
+            ],
+            "46": [
+              14,
+              41
+            ],
+            "47": [
+              42,
+              26
+            ],
+            "48": [
+              29,
+              12
+            ],
+            "49": [
+              24,
+              32
+            ],
+            "50": [
+              35,
+              11
+            ],
+            "51": [
+              30,
+              38
+            ],
+            "52": [
+              36,
+              44
+            ],
+            "53": [
+              17,
+              25
+            ],
+            "54": [
+              43,
+              20
+            ],
+            "55": [
+              18,
+              31
+            ],
+            "56": [
+              19,
+              37
+            ]
+          },
+          "faces": {
+            "15": {
+              "holes": [],
+              "outer": 16,
+              "smooth_group": null,
+              "surface": {
+                "origin": {
+                  "x": 0.0,
+                  "y": 0.0,
+                  "z": 3100.0
+                },
+                "type": "plane",
+                "x_axis": {
+                  "x": 1.0,
+                  "y": 0.0,
+                  "z": 0.0
+                },
+                "y_axis": {
+                  "x": 0.0,
+                  "y": -1.0,
+                  "z": 0.0
+                }
+              }
+            },
+            "21": {
+              "holes": [],
+              "outer": 22,
+              "smooth_group": null,
+              "surface": {
+                "origin": {
+                  "x": 0.0,
+                  "y": 0.0,
+                  "z": 3300.0
+                },
+                "type": "plane",
+                "x_axis": {
+                  "x": 0.0,
+                  "y": 1.0,
+                  "z": 0.0
+                },
+                "y_axis": {
+                  "x": 0.0,
+                  "y": 0.0,
+                  "z": -1.0
+                }
+              }
+            },
+            "27": {
+              "holes": [],
+              "outer": 28,
+              "smooth_group": null,
+              "surface": {
+                "origin": {
+                  "x": 0.0,
+                  "y": 6000.0,
+                  "z": 3300.0
+                },
+                "type": "plane",
+                "x_axis": {
+                  "x": 1.0,
+                  "y": 0.0,
+                  "z": 0.0
+                },
+                "y_axis": {
+                  "x": 0.0,
+                  "y": 0.0,
+                  "z": -1.0
+                }
+              }
+            },
+            "33": {
+              "holes": [],
+              "outer": 34,
+              "smooth_group": null,
+              "surface": {
+                "origin": {
+                  "x": 8000.0,
+                  "y": 6000.0,
+                  "z": 3300.0
+                },
+                "type": "plane",
+                "x_axis": {
+                  "x": 0.0,
+                  "y": 1.0,
+                  "z": 0.0
+                },
+                "y_axis": {
+                  "x": 0.0,
+                  "y": 0.0,
+                  "z": 1.0
+                }
+              }
+            },
+            "39": {
+              "holes": [],
+              "outer": 40,
+              "smooth_group": null,
+              "surface": {
+                "origin": {
+                  "x": 8000.0,
+                  "y": 0.0,
+                  "z": 3300.0
+                },
+                "type": "plane",
+                "x_axis": {
+                  "x": 1.0,
+                  "y": 0.0,
+                  "z": 0.0
+                },
+                "y_axis": {
+                  "x": -0.0,
+                  "y": 0.0,
+                  "z": 1.0
+                }
+              }
+            },
+            "9": {
+              "holes": [],
+              "outer": 10,
+              "smooth_group": null,
+              "surface": {
+                "origin": {
+                  "x": 8000.0,
+                  "y": 0.0,
+                  "z": 3300.0
+                },
+                "type": "plane",
+                "x_axis": {
+                  "x": 1.0,
+                  "y": 0.0,
+                  "z": 0.0
+                },
+                "y_axis": {
+                  "x": 0.0,
+                  "y": 1.0,
+                  "z": 0.0
+                }
+              }
+            }
+          },
+          "half_edges": {
+            "11": {
+              "edge": 50,
+              "loop_id": 10,
+              "next": 12,
+              "origin": 4,
+              "prev": 14,
+              "twin": 35
+            },
+            "12": {
+              "edge": 48,
+              "loop_id": 10,
+              "next": 13,
+              "origin": 3,
+              "prev": 11,
+              "twin": 29
+            },
+            "13": {
+              "edge": 45,
+              "loop_id": 10,
+              "next": 14,
+              "origin": 2,
+              "prev": 12,
+              "twin": 23
+            },
+            "14": {
+              "edge": 46,
+              "loop_id": 10,
+              "next": 11,
+              "origin": 1,
+              "prev": 13,
+              "twin": 41
+            },
+            "17": {
+              "edge": 53,
+              "loop_id": 16,
+              "next": 18,
+              "origin": 5,
+              "prev": 20,
+              "twin": 25
+            },
+            "18": {
+              "edge": 55,
+              "loop_id": 16,
+              "next": 19,
+              "origin": 6,
+              "prev": 17,
+              "twin": 31
+            },
+            "19": {
+              "edge": 56,
+              "loop_id": 16,
+              "next": 20,
+              "origin": 7,
+              "prev": 18,
+              "twin": 37
+            },
+            "20": {
+              "edge": 54,
+              "loop_id": 16,
+              "next": 17,
+              "origin": 8,
+              "prev": 19,
+              "twin": 43
+            },
+            "23": {
+              "edge": 45,
+              "loop_id": 22,
+              "next": 24,
+              "origin": 1,
+              "prev": 26,
+              "twin": 13
+            },
+            "24": {
+              "edge": 49,
+              "loop_id": 22,
+              "next": 25,
+              "origin": 2,
+              "prev": 23,
+              "twin": 32
+            },
+            "25": {
+              "edge": 53,
+              "loop_id": 22,
+              "next": 26,
+              "origin": 6,
+              "prev": 24,
+              "twin": 17
+            },
+            "26": {
+              "edge": 47,
+              "loop_id": 22,
+              "next": 23,
+              "origin": 5,
+              "prev": 25,
+              "twin": 42
+            },
+            "29": {
+              "edge": 48,
+              "loop_id": 28,
+              "next": 30,
+              "origin": 2,
+              "prev": 32,
+              "twin": 12
+            },
+            "30": {
+              "edge": 51,
+              "loop_id": 28,
+              "next": 31,
+              "origin": 3,
+              "prev": 29,
+              "twin": 38
+            },
+            "31": {
+              "edge": 55,
+              "loop_id": 28,
+              "next": 32,
+              "origin": 7,
+              "prev": 30,
+              "twin": 18
+            },
+            "32": {
+              "edge": 49,
+              "loop_id": 28,
+              "next": 29,
+              "origin": 6,
+              "prev": 31,
+              "twin": 24
+            },
+            "35": {
+              "edge": 50,
+              "loop_id": 34,
+              "next": 36,
+              "origin": 3,
+              "prev": 38,
+              "twin": 11
+            },
+            "36": {
+              "edge": 52,
+              "loop_id": 34,
+              "next": 37,
+              "origin": 4,
+              "prev": 35,
+              "twin": 44
+            },
+            "37": {
+              "edge": 56,
+              "loop_id": 34,
+              "next": 38,
+              "origin": 8,
+              "prev": 36,
+              "twin": 19
+            },
+            "38": {
+              "edge": 51,
+              "loop_id": 34,
+              "next": 35,
+              "origin": 7,
+              "prev": 37,
+              "twin": 30
+            },
+            "41": {
+              "edge": 46,
+              "loop_id": 40,
+              "next": 42,
+              "origin": 4,
+              "prev": 44,
+              "twin": 14
+            },
+            "42": {
+              "edge": 47,
+              "loop_id": 40,
+              "next": 43,
+              "origin": 1,
+              "prev": 41,
+              "twin": 26
+            },
+            "43": {
+              "edge": 54,
+              "loop_id": 40,
+              "next": 44,
+              "origin": 5,
+              "prev": 42,
+              "twin": 20
+            },
+            "44": {
+              "edge": 52,
+              "loop_id": 40,
+              "next": 41,
+              "origin": 8,
+              "prev": 43,
+              "twin": 36
+            }
+          },
+          "loops": {
+            "10": {
+              "face": 9,
+              "first": 11
+            },
+            "16": {
+              "face": 15,
+              "first": 17
+            },
+            "22": {
+              "face": 21,
+              "first": 23
+            },
+            "28": {
+              "face": 27,
+              "first": 29
+            },
+            "34": {
+              "face": 33,
+              "first": 35
+            },
+            "40": {
+              "face": 39,
+              "first": 41
+            }
+          },
+          "next_id": 57,
+          "vertices": {
+            "1": {
+              "point": {
+                "x": 0.0,
+                "y": 0.0,
+                "z": 3300.0
+              }
+            },
+            "2": {
+              "point": {
+                "x": 0.0,
+                "y": 6000.0,
+                "z": 3300.0
+              }
+            },
+            "3": {
+              "point": {
+                "x": 8000.0,
+                "y": 6000.0,
+                "z": 3300.0
+              }
+            },
+            "4": {
+              "point": {
+                "x": 8000.0,
+                "y": 0.0,
+                "z": 3300.0
+              }
+            },
+            "5": {
+              "point": {
+                "x": 0.0,
+                "y": 0.0,
+                "z": 3100.0
+              }
+            },
+            "6": {
+              "point": {
+                "x": 0.0,
+                "y": 6000.0,
+                "z": 3100.0
+              }
+            },
+            "7": {
+              "point": {
+                "x": 8000.0,
+                "y": 6000.0,
+                "z": 3100.0
+              }
+            },
+            "8": {
+              "point": {
+                "x": 8000.0,
+                "y": 0.0,
+                "z": 3100.0
+              }
+            }
+          }
+        },
+        "holes": [],
+        "kind": "floor",
+        "offset": 0.0,
+        "outer": [
+          {
+            "x": 0.0,
+            "y": 0.0
+          },
+          {
+            "x": 8000.0,
+            "y": 0.0
+          },
+          {
+            "x": 8000.0,
+            "y": 6000.0
+          },
+          {
+            "x": 0.0,
+            "y": 6000.0
+          }
+        ]
+      },
+      "category": "floors",
+      "design_option": null,
+      "host_id": null,
+      "level_id": "00000000-0001-7002-8000-000000000000",
+      "name": null,
+      "params": {
+        "ferro.dimensions.area": {
+          "type": "area",
+          "value": 48000000.0
+        },
+        "ferro.dimensions.thickness": {
+          "type": "length",
+          "value": 200.0
+        },
+        "ferro.dimensions.volume": {
+          "type": "volume",
+          "value": 9600000000.0
+        }
+      },
+      "phase_created": null,
+      "phase_demolished": null,
+      "type_id": "00000000-0001-700b-8000-000000000000",
+      "uid": "00000000-0001-700c-8000-000000000000"
+    },
+    {
+      "body": {
+        "body": {
+          "edges": {
+            "11": [
+              7,
+              27
+            ],
+            "12": [
+              8,
+              26
+            ],
+            "13": [
+              9,
+              25
+            ],
+            "14": [
+              28,
+              10
+            ],
+            "49": [
+              46,
+              33
+            ],
+            "50": [
+              31,
+              38
+            ],
+            "51": [
+              36,
+              43
+            ],
+            "52": [
+              41,
+              48
+            ],
+            "53": [
+              19,
+              32
+            ],
+            "54": [
+              47,
+              22
+            ],
+            "55": [
+              20,
+              37
+            ],
+            "56": [
+              21,
+              42
+            ]
+          },
+          "faces": {
+            "23": {
+              "holes": [],
+              "outer": 24,
+              "smooth_group": null,
+              "surface": {
+                "origin": {
+                  "x": 10000.0,
+                  "y": 1000.0,
+                  "z": 0.0
+                },
+                "type": "plane",
+                "x_axis": {
+                  "x": 1.0,
+                  "y": 0.0,
+                  "z": 0.0
+                },
+                "y_axis": {
+                  "x": 0.0,
+                  "y": -1.0,
+                  "z": 0.0
+                }
+              }
+            },
+            "29": {
+              "holes": [],
+              "outer": 30,
+              "smooth_group": null,
+              "surface": {
+                "origin": {
+                  "x": 10000.0,
+                  "y": 0.0,
+                  "z": 0.0
+                },
+                "type": "plane",
+                "x_axis": {
+                  "x": 1.0,
+                  "y": 0.0,
+                  "z": 0.0
+                },
+                "y_axis": {
+                  "x": -0.0,
+                  "y": 0.0,
+                  "z": 1.0
+                }
+              }
+            },
+            "34": {
+              "holes": [],
+              "outer": 35,
+              "smooth_group": null,
+              "surface": {
+                "origin": {
+                  "x": 11000.0,
+                  "y": 0.0,
+                  "z": 0.0
+                },
+                "type": "plane",
+                "x_axis": {
+                  "x": 0.0,
+                  "y": 1.0,
+                  "z": 0.0
+                },
+                "y_axis": {
+                  "x": 0.0,
+                  "y": 0.0,
+                  "z": 1.0
+                }
+              }
+            },
+            "39": {
+              "holes": [],
+              "outer": 40,
+              "smooth_group": null,
+              "surface": {
+                "origin": {
+                  "x": 11000.0,
+                  "y": 1000.0,
+                  "z": 0.0
+                },
+                "type": "plane",
+                "x_axis": {
+                  "x": 1.0,
+                  "y": 0.0,
+                  "z": 0.0
+                },
+                "y_axis": {
+                  "x": 0.0,
+                  "y": 0.0,
+                  "z": -1.0
+                }
+              }
+            },
+            "44": {
+              "holes": [],
+              "outer": 45,
+              "smooth_group": null,
+              "surface": {
+                "origin": {
+                  "x": 10000.0,
+                  "y": 1000.0,
+                  "z": 0.0
+                },
+                "type": "plane",
+                "x_axis": {
+                  "x": 0.0,
+                  "y": 1.0,
+                  "z": 0.0
+                },
+                "y_axis": {
+                  "x": 0.0,
+                  "y": 0.0,
+                  "z": -1.0
+                }
+              }
+            },
+            "5": {
+              "holes": [],
+              "outer": 6,
+              "smooth_group": null,
+              "surface": {
+                "origin": {
+                  "x": 10000.0,
+                  "y": 0.0,
+                  "z": 1000.0
+                },
+                "type": "plane",
+                "x_axis": {
+                  "x": 1.0,
+                  "y": 0.0,
+                  "z": 0.0
+                },
+                "y_axis": {
+                  "x": 0.0,
+                  "y": 1.0,
+                  "z": 0.0
+                }
+              }
+            }
+          },
+          "half_edges": {
+            "10": {
+              "edge": 14,
+              "loop_id": 45,
+              "next": 46,
+              "origin": 4,
+              "prev": 48,
+              "twin": 28
+            },
+            "19": {
+              "edge": 53,
+              "loop_id": 6,
+              "next": 20,
+              "origin": 15,
+              "prev": 22,
+              "twin": 32
+            },
+            "20": {
+              "edge": 55,
+              "loop_id": 6,
+              "next": 21,
+              "origin": 16,
+              "prev": 19,
+              "twin": 37
+            },
+            "21": {
+              "edge": 56,
+              "loop_id": 6,
+              "next": 22,
+              "origin": 17,
+              "prev": 20,
+              "twin": 42
+            },
+            "22": {
+              "edge": 54,
+              "loop_id": 6,
+              "next": 19,
+              "origin": 18,
+              "prev": 21,
+              "twin": 47
+            },
+            "25": {
+              "edge": 13,
+              "loop_id": 24,
+              "next": 26,
+              "origin": 4,
+              "prev": 28,
+              "twin": 9
+            },
+            "26": {
+              "edge": 12,
+              "loop_id": 24,
+              "next": 27,
+              "origin": 3,
+              "prev": 25,
+              "twin": 8
+            },
+            "27": {
+              "edge": 11,
+              "loop_id": 24,
+              "next": 28,
+              "origin": 2,
+              "prev": 26,
+              "twin": 7
+            },
+            "28": {
+              "edge": 14,
+              "loop_id": 24,
+              "next": 25,
+              "origin": 1,
+              "prev": 27,
+              "twin": 10
+            },
+            "31": {
+              "edge": 50,
+              "loop_id": 30,
+              "next": 32,
+              "origin": 2,
+              "prev": 7,
+              "twin": 38
+            },
+            "32": {
+              "edge": 53,
+              "loop_id": 30,
+              "next": 33,
+              "origin": 16,
+              "prev": 31,
+              "twin": 19
+            },
+            "33": {
+              "edge": 49,
+              "loop_id": 30,
+              "next": 7,
+              "origin": 15,
+              "prev": 32,
+              "twin": 46
+            },
+            "36": {
+              "edge": 51,
+              "loop_id": 35,
+              "next": 37,
+              "origin": 3,
+              "prev": 8,
+              "twin": 43
+            },
+            "37": {
+              "edge": 55,
+              "loop_id": 35,
+              "next": 38,
+              "origin": 17,
+              "prev": 36,
+              "twin": 20
+            },
+            "38": {
+              "edge": 50,
+              "loop_id": 35,
+              "next": 8,
+              "origin": 16,
+              "prev": 37,
+              "twin": 31
+            },
+            "41": {
+              "edge": 52,
+              "loop_id": 40,
+              "next": 42,
+              "origin": 4,
+              "prev": 9,
+              "twin": 48
+            },
+            "42": {
+              "edge": 56,
+              "loop_id": 40,
+              "next": 43,
+              "origin": 18,
+              "prev": 41,
+              "twin": 21
+            },
+            "43": {
+              "edge": 51,
+              "loop_id": 40,
+              "next": 9,
+              "origin": 17,
+              "prev": 42,
+              "twin": 36
+            },
+            "46": {
+              "edge": 49,
+              "loop_id": 45,
+              "next": 47,
+              "origin": 1,
+              "prev": 10,
+              "twin": 33
+            },
+            "47": {
+              "edge": 54,
+              "loop_id": 45,
+              "next": 48,
+              "origin": 15,
+              "prev": 46,
+              "twin": 22
+            },
+            "48": {
+              "edge": 52,
+              "loop_id": 45,
+              "next": 10,
+              "origin": 18,
+              "prev": 47,
+              "twin": 41
+            },
+            "7": {
+              "edge": 11,
+              "loop_id": 30,
+              "next": 31,
+              "origin": 1,
+              "prev": 33,
+              "twin": 27
+            },
+            "8": {
+              "edge": 12,
+              "loop_id": 35,
+              "next": 36,
+              "origin": 2,
+              "prev": 38,
+              "twin": 26
+            },
+            "9": {
+              "edge": 13,
+              "loop_id": 40,
+              "next": 41,
+              "origin": 3,
+              "prev": 43,
+              "twin": 25
+            }
+          },
+          "loops": {
+            "24": {
+              "face": 23,
+              "first": 25
+            },
+            "30": {
+              "face": 29,
+              "first": 7
+            },
+            "35": {
+              "face": 34,
+              "first": 8
+            },
+            "40": {
+              "face": 39,
+              "first": 9
+            },
+            "45": {
+              "face": 44,
+              "first": 10
+            },
+            "6": {
+              "face": 5,
+              "first": 19
+            }
+          },
+          "next_id": 57,
+          "vertices": {
+            "1": {
+              "point": {
+                "x": 10000.0,
+                "y": 0.0,
+                "z": 0.0
+              }
+            },
+            "15": {
+              "point": {
+                "x": 10000.0,
+                "y": 0.0,
+                "z": 1000.0
+              }
+            },
+            "16": {
+              "point": {
+                "x": 11000.0,
+                "y": 0.0,
+                "z": 1000.0
+              }
+            },
+            "17": {
+              "point": {
+                "x": 11000.0,
+                "y": 1000.0,
+                "z": 1000.0
+              }
+            },
+            "18": {
+              "point": {
+                "x": 10000.0,
+                "y": 1000.0,
+                "z": 1000.0
+              }
+            },
+            "2": {
+              "point": {
+                "x": 11000.0,
+                "y": 0.0,
+                "z": 0.0
+              }
+            },
+            "3": {
+              "point": {
+                "x": 11000.0,
+                "y": 1000.0,
+                "z": 0.0
+              }
+            },
+            "4": {
+              "point": {
+                "x": 10000.0,
+                "y": 1000.0,
+                "z": 0.0
+              }
+            }
+          }
+        },
+        "kind": "form"
+      },
+      "category": "forms",
+      "design_option": null,
+      "host_id": null,
+      "level_id": null,
+      "name": null,
+      "params": {
+        "ferro.form.area": {
+          "type": "area",
+          "value": 6000000.0
+        },
+        "ferro.form.volume": {
+          "type": "volume",
+          "value": 1000000000.0
+        }
+      },
+      "phase_created": null,
+      "phase_demolished": null,
+      "type_id": null,
+      "uid": "00000000-0001-700d-8000-000000000000"
+    }
+  ],
+  "format": "ferro",
+  "format_version": 1,
+  "project": {
+    "name": "Nhà mẫu",
+    "origins": {
+      "project_base_point": {
+        "x": 0.0,
+        "y": 0.0,
+        "z": 0.0
+      },
+      "survey_point": {
+        "x": 0.0,
+        "y": 0.0,
+        "z": 0.0
+      },
+      "true_north": 0.0
+    }
+  }
+}

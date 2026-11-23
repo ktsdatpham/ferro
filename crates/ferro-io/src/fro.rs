@@ -121,13 +121,7 @@ impl FroStore {
         let ver: u32 = get("format_version")?
             .and_then(|v| v.parse().ok())
             .unwrap_or(0);
-        if ver == 0 || ver > FORMAT_VERSION {
-            return Err(IoError::new(
-                "ferro.io.version",
-                format!("file format {ver} is newer than this app supports ({FORMAT_VERSION})"),
-            ));
-        }
-        let project: ProjectInfo =
+        let mut project_v: Value =
             serde_json::from_str(&get("project")?.unwrap_or_else(|| "{}".into()))?;
         let mut stmt = self
             .conn
@@ -136,6 +130,9 @@ impl FroStore {
             .query_map([], |r| r.get::<_, String>(0))?
             .map(|s| -> Result<Value, IoError> { Ok(serde_json::from_str(&s?)?) })
             .collect::<Result<Vec<_>, _>>()?;
+        let mut values = values;
+        crate::migrate::migrate(ver, &mut project_v, &mut values)?;
+        let project: ProjectInfo = serde_json::from_value(project_v)?;
         let doc = Document::from_parts(project, elements_from_values(values)?)
             .map_err(|e| IoError::new("ferro.io.schema", e))?;
         let mut stmt = self.conn.prepare("SELECT json FROM journal ORDER BY seq")?;

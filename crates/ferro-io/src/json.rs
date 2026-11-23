@@ -4,7 +4,7 @@ use serde_json::{json, Map, Value};
 use std::collections::HashMap;
 
 /// Version of the logical file schema (D-21). Bump with a migration.
-pub const FORMAT_VERSION: u32 = 1;
+pub use crate::migrate::FORMAT_VERSION;
 
 const REF_FIELDS: [&str; 6] = [
     "level_id",
@@ -160,15 +160,14 @@ pub fn document_from_json(text: &str) -> Result<Document, IoError> {
     if root["format"] != "ferro" {
         return Err(IoError::new("ferro.io.not_ferro", "not a Ferro file"));
     }
-    let ver = root["format_version"].as_u64().unwrap_or(0) as u32;
-    if ver == 0 || ver > FORMAT_VERSION {
-        return Err(IoError::new(
-            "ferro.io.version",
-            format!("file format {ver} is newer than this app supports ({FORMAT_VERSION})"),
-        ));
-    }
-    let project: ProjectInfo = serde_json::from_value(root["project"].clone())?;
-    let values = root["elements"].as_array().cloned().unwrap_or_default();
+    let ver = root["format_version"]
+        .as_u64()
+        .unwrap_or(0)
+        .min(u32::MAX as u64) as u32;
+    let mut project_v = root["project"].clone();
+    let mut values = root["elements"].as_array().cloned().unwrap_or_default();
+    crate::migrate::migrate(ver, &mut project_v, &mut values)?;
+    let project: ProjectInfo = serde_json::from_value(project_v)?;
     let elements = elements_from_values(values)?;
     Document::from_parts(project, elements).map_err(|e| IoError::new("ferro.io.schema", e))
 }

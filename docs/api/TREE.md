@@ -891,12 +891,18 @@ IFC4 export (D-75, milestone 3): STEP physical file (ISO 10303-21), Reference Vi
 
 ### `ferro_io::json`
 
-- const `FORMAT_VERSION` — Version of the logical file schema (D-21). Bump with a migration.
 - fn `element_to_value` — Element → JSON with references rewritten as uids and the local id dropped.
 - fn `elements_from_values` — JSON values (uid references) → elements with fresh local ids in order.
 - fn `uid_map`
 - fn `document_to_json` — Serialise a document to the `.fro.json` interchange format.
 - fn `document_from_json` — Parse `.fro.json`. Unknown top-level keys are ignored (forward compatible).
+
+### `ferro_io::migrate`
+
+File format versions and migrations (D-21, M5-21).
+
+- const `FORMAT_VERSION` — Current file format version.
+- fn `migrate` — Check a file's version and bring its data up to [`FORMAT_VERSION`].
 
 ## `ferro-mcp`
 
