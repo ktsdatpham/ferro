@@ -8,6 +8,7 @@ mod ai;
 mod app;
 mod camera;
 mod link;
+mod material_editor;
 mod render;
 mod scene;
 mod tools;

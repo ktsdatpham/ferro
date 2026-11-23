@@ -14,6 +14,7 @@ mod events;
 mod failure;
 pub mod form_commands;
 pub mod geometry_source;
+pub mod material_commands;
 mod session;
 mod transaction;
 
@@ -28,3 +29,5 @@ mod bim_tests;
 mod form_tests;
 #[cfg(test)]
 mod geometry_source_tests;
+#[cfg(test)]
+mod material_tests;

@@ -1,5 +1,6 @@
-//! BIM element data (Foundation Spec ch. 3, D-41, D-70): materials, system
-//! family types with compound structures, walls, floors and hosted openings.
+//! BIM element data (Foundation Spec ch. 3, D-41, D-70): system family types
+//! with compound structures, walls, floors and hosted openings. `Material`
+//! lives in `model::material` and is re-exported here.
 //! Geometry is derived by regeneration (`model::generate`) and stored on the
 //! element as a cache; parameters are the source of truth.
 
@@ -9,19 +10,8 @@ use crate::math::{Length, Point2};
 use crate::topo::Body;
 use serde::{Deserialize, Serialize};
 
-/// A material (D-08 / Q-E8). Appearance follows glTF PBR; physical data and
-/// product links come later.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct Material {
-    /// sRGB base colour, 0..1.
-    pub color: [f32; 3],
-    #[serde(default = "default_roughness")]
-    pub roughness: f32,
-}
-
-fn default_roughness() -> f32 {
-    0.8
-}
+/// Re-export: `bim::Material` keeps working (milestone 2 path).
+pub use super::material::Material;
 
 /// Function of a layer in a compound structure (Revit: `MaterialFunctionAssignment`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

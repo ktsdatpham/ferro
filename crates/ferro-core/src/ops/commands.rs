@@ -656,6 +656,7 @@ any_command!(
     EraseEdges,
     EraseFaces,
     SetGeometrySource,
+    SetMaterial,
 );
 
 impl AnyCommand {

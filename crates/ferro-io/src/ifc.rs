@@ -10,6 +10,9 @@
 //!   `IfcOpeningElement`s that void their wall.
 //! * Base quantities (`Qto_WallBaseQuantities`, `Qto_SlabBaseQuantities`)
 //!   and `Pset_FerroCommon.FerroUid` for round trips.
+//! * Material property sets (`Pset_MaterialCommon`, `Pset_MaterialThermal`,
+//!   `Pset_MaterialMechanical`, `Pset_FerroMaterial`) and type
+//!   `ThermalTransmittance` when materials carry data, with SI units.
 //!
 //! GlobalIds are the element uids in IFC's base-64 encoding, so a re-export
 //! keeps the same ids.
@@ -18,6 +21,7 @@ use crate::IoError;
 use ferro_core::algo::body_mesh;
 use ferro_core::model::bim::{CompoundStructure, OpeningKind};
 use ferro_core::model::generate;
+use ferro_core::model::structure_quantities::StructureQuantities;
 use ferro_core::model::{
     keys, Category, Document, Element, ElementBody, ElementId, ParamValue, Uid,
 };
@@ -144,6 +148,189 @@ fn color(doc: &Document, e: &Element) -> [f64; 3] {
     }
 }
 
+/// SI units for material and type properties: the named units go into the
+/// project's `IfcUnitAssignment` (returned ids); base units used only inside
+/// derived units are written but not returned. All are SI base / derived
+/// units (kg, K, Pa, kg/m³, W/(m·K), J/(kg·K), 1/K, W/(m²·K)), matching the
+/// values stored in `ferro_core::model::material`.
+fn property_units(w: &mut Writer) -> Vec<usize> {
+    let kg = w.add("IFCSIUNIT(*,.MASSUNIT.,.KILO.,.GRAM.)".into());
+    let kelvin = w.add("IFCSIUNIT(*,.THERMODYNAMICTEMPERATUREUNIT.,$,.KELVIN.)".into());
+    let pascal = w.add("IFCSIUNIT(*,.PRESSUREUNIT.,$,.PASCAL.)".into());
+    // Not assigned (the project length unit is mm): only used below.
+    let metre = w.add("IFCSIUNIT(*,.LENGTHUNIT.,$,.METRE.)".into());
+    let watt = w.add("IFCSIUNIT(*,.POWERUNIT.,$,.WATT.)".into());
+    let joule = w.add("IFCSIUNIT(*,.ENERGYUNIT.,$,.JOULE.)".into());
+    let derived_unit = |w: &mut Writer, kind: &str, parts: &[(usize, i32)]| -> usize {
+        let elems: Vec<usize> = parts
+            .iter()
+            .map(|(u, e)| w.add(format!("IFCDERIVEDUNITELEMENT(#{u},{e})")))
+            .collect();
+        w.add(format!("IFCDERIVEDUNIT(({}),.{kind}.,$)", ids(&elems)))
+    };
+    let density = derived_unit(w, "MASSDENSITYUNIT", &[(kg, 1), (metre, -3)]);
+    let conductivity = derived_unit(
+        w,
+        "THERMALCONDUCTANCEUNIT",
+        &[(watt, 1), (metre, -1), (kelvin, -1)],
+    );
+    let specific_heat = derived_unit(
+        w,
+        "SPECIFICHEATCAPACITYUNIT",
+        &[(joule, 1), (kg, -1), (kelvin, -1)],
+    );
+    let modulus = derived_unit(w, "MODULUSOFELASTICITYUNIT", &[(pascal, 1)]);
+    let expansion = derived_unit(w, "THERMALEXPANSIONCOEFFICIENTUNIT", &[(kelvin, -1)]);
+    let transmittance = derived_unit(
+        w,
+        "THERMALTRANSMITTANCEUNIT",
+        &[(watt, 1), (metre, -2), (kelvin, -1)],
+    );
+    vec![
+        kg,
+        kelvin,
+        pascal,
+        density,
+        conductivity,
+        specific_heat,
+        modulus,
+        expansion,
+        transmittance,
+    ]
+}
+
+/// `IfcMaterialProperties` of a material, one per property set that has
+/// values: `Pset_MaterialCommon` (MassDensity), `Pset_MaterialThermal`
+/// (ThermalConductivity, SpecificHeatCapacity), `Pset_MaterialMechanical`
+/// (YoungModulus, PoissonRatio, ThermalExpansionCoefficient) as named in
+/// IFC4, and `Pset_FerroMaterial` for values IFC4 has no material property
+/// for (strengths, emissivity, solar absorptance, vapour resistance, GWP per
+/// stage with declared unit and EPD source, unit price).
+fn material_psets(w: &mut Writer, mat: usize, m: &ferro_core::model::bim::Material) {
+    let prop = |w: &mut Writer, name: &str, measure: &str, v: Option<f64>| -> Option<usize> {
+        v.filter(|v| v.is_finite()).map(|v| {
+            w.add(format!(
+                "IFCPROPERTYSINGLEVALUE({},$,{measure}({}),$)",
+                s(name),
+                f(v)
+            ))
+        })
+    };
+    let text = |w: &mut Writer, name: &str, measure: &str, v: Option<&str>| -> Option<usize> {
+        v.map(|v| {
+            w.add(format!(
+                "IFCPROPERTYSINGLEVALUE({},$,{measure}({}),$)",
+                s(name),
+                s(v)
+            ))
+        })
+    };
+    let pset = |w: &mut Writer, name: &str, props: Vec<Option<usize>>| {
+        let props: Vec<usize> = props.into_iter().flatten().collect();
+        if !props.is_empty() {
+            w.add(format!(
+                "IFCMATERIALPROPERTIES({},$,({}),#{mat})",
+                s(name),
+                ids(&props)
+            ));
+        }
+    };
+    let ph = m.physical.clone().unwrap_or_default();
+    let th = m.thermal.clone().unwrap_or_default();
+
+    let p = vec![prop(
+        w,
+        "MassDensity",
+        "IFCMASSDENSITYMEASURE",
+        m.density_kg_m3(),
+    )];
+    pset(w, "Pset_MaterialCommon", p);
+    let p = vec![
+        prop(
+            w,
+            "SpecificHeatCapacity",
+            "IFCSPECIFICHEATCAPACITYMEASURE",
+            th.specific_heat_j_kgk,
+        ),
+        prop(
+            w,
+            "ThermalConductivity",
+            "IFCTHERMALCONDUCTIVITYMEASURE",
+            th.conductivity_w_mk,
+        ),
+    ];
+    pset(w, "Pset_MaterialThermal", p);
+    let p = vec![
+        prop(
+            w,
+            "YoungModulus",
+            "IFCMODULUSOFELASTICITYMEASURE",
+            ph.youngs_modulus_pa,
+        ),
+        // IfcPositiveRatioMeasure: auxetic (ν ≤ 0) values are not written.
+        prop(
+            w,
+            "PoissonRatio",
+            "IFCPOSITIVERATIOMEASURE",
+            ph.poisson_ratio.filter(|v| *v > 0.0),
+        ),
+        prop(
+            w,
+            "ThermalExpansionCoefficient",
+            "IFCTHERMALEXPANSIONCOEFFICIENTMEASURE",
+            ph.thermal_expansion_per_k,
+        ),
+    ];
+    pset(w, "Pset_MaterialMechanical", p);
+
+    let mut p = vec![
+        prop(
+            w,
+            "CompressiveStrength",
+            "IFCPRESSUREMEASURE",
+            ph.compressive_strength_pa,
+        ),
+        prop(
+            w,
+            "TensileStrength",
+            "IFCPRESSUREMEASURE",
+            ph.tensile_strength_pa,
+        ),
+        prop(w, "Emissivity", "IFCNORMALISEDRATIOMEASURE", th.emissivity),
+        prop(
+            w,
+            "SolarAbsorptance",
+            "IFCNORMALISEDRATIOMEASURE",
+            th.solar_absorptance,
+        ),
+        prop(
+            w,
+            "VapourResistanceFactor",
+            "IFCPOSITIVERATIOMEASURE",
+            th.vapour_resistance_factor,
+        ),
+    ];
+    if let Some(env) = &m.environmental {
+        p.push(text(
+            w,
+            "GWPDeclaredUnit",
+            "IFCLABEL",
+            Some(env.declared_unit.as_str()),
+        ));
+        for (k, v) in env.gwp_stages() {
+            // e.g. GWP_A1_A3, kg CO2e per declared unit.
+            p.push(prop(w, &k.to_uppercase(), "IFCREAL", v));
+        }
+        p.push(text(w, "EPDSource", "IFCTEXT", env.epd_source.as_deref()));
+    }
+    if let Some(c) = &m.cost {
+        p.push(prop(w, "UnitPrice", "IFCREAL", Some(c.unit_price)));
+        p.push(text(w, "Currency", "IFCLABEL", Some(&c.currency)));
+        p.push(text(w, "PriceUnit", "IFCLABEL", Some(c.unit.as_str())));
+    }
+    pset(w, "Pset_FerroMaterial", p);
+}
+
 /// Serialise a document as an IFC4 file.
 pub fn export_ifc(doc: &Document) -> Result<String, IoError> {
     let mut w = Writer { lines: Vec::new() };
@@ -154,7 +341,22 @@ pub fn export_ifc(doc: &Document) -> Result<String, IoError> {
     let area = w.add("IFCSIUNIT(*,.AREAUNIT.,$,.SQUARE_METRE.)".into());
     let vol = w.add("IFCSIUNIT(*,.VOLUMEUNIT.,$,.CUBIC_METRE.)".into());
     let ang = w.add("IFCSIUNIT(*,.PLANEANGLEUNIT.,$,.RADIAN.)".into());
-    let units = w.add(format!("IFCUNITASSIGNMENT((#{len},#{area},#{vol},#{ang}))"));
+    let mut unit_ids = vec![len, area, vol, ang];
+    // Units of material / type properties, only when there are some, so
+    // files without material data are unchanged.
+    let has_material_data = doc.elements().any(|e| match &e.body {
+        ElementBody::Material(m) => {
+            m.physical.is_some()
+                || m.thermal.is_some()
+                || m.environmental.is_some()
+                || m.cost.is_some()
+        }
+        _ => false,
+    });
+    if has_material_data {
+        unit_ids.extend(property_units(&mut w));
+    }
+    let units = w.add(format!("IFCUNITASSIGNMENT(({}))", ids(&unit_ids)));
     let origin = w.point(0.0, 0.0, 0.0);
     let world = w.add(format!("IFCAXIS2PLACEMENT3D(#{origin},$,$)"));
     let north = w.add("IFCDIRECTION((0.,1.))".into());
@@ -235,6 +437,11 @@ pub fn export_ifc(doc: &Document) -> Result<String, IoError> {
             material_of.insert(e.id, m);
         }
     }
+    for e in doc.elements() {
+        if let (ElementBody::Material(m), Some(&mat)) = (&e.body, material_of.get(&e.id)) {
+            material_psets(&mut w, mat, m);
+        }
+    }
     let default_material = w.add("IFCMATERIAL('Default',$,$)".into());
     let layer_set = |w: &mut Writer, name: &str, st: &CompoundStructure| -> usize {
         let layers: Vec<usize> = st
@@ -269,8 +476,31 @@ pub fn export_ifc(doc: &Document) -> Result<String, IoError> {
             _ => continue,
         };
         let ls = layer_set(&mut w, &e.label(), st);
+        // Pset_WallCommon / Pset_SlabCommon.ThermalTransmittance when every
+        // layer has a conductivity (ISO 6946, see StructureQuantities).
+        let u_value = StructureQuantities::from_type(doc, e.id).and_then(|q| q.u_value_w_m2k);
+        let psets = match u_value {
+            Some(u) if has_material_data => {
+                let pset_name = if class == "IFCWALLTYPE" {
+                    "Pset_WallCommon"
+                } else {
+                    "Pset_SlabCommon"
+                };
+                let p = w.add(format!(
+                    "IFCPROPERTYSINGLEVALUE('ThermalTransmittance',$,IFCTHERMALTRANSMITTANCEMEASURE({}),$)",
+                    f(u)
+                ));
+                let ps = w.add(format!(
+                    "IFCPROPERTYSET({},$,{},$,(#{p}))",
+                    s(&derived(&format!("typepset:{}", e.uid))),
+                    s(pset_name)
+                ));
+                format!("(#{ps})")
+            }
+            _ => "$".into(),
+        };
         let t = w.add(format!(
-            "{class}({},$,{},$,$,$,$,$,$,{predefined})",
+            "{class}({},$,{},$,$,{psets},$,$,$,{predefined})",
             s(&ifc_guid(e.uid.0)),
             s(&e.label())
         ));
@@ -671,5 +901,88 @@ mod tests {
                 assert!(i >= 1 && i <= n, "dangling #{i}");
             }
         }
+    }
+
+    #[test]
+    fn material_data_becomes_property_sets() {
+        let s = house();
+        let plain = export_ifc(s.doc()).unwrap();
+        assert!(
+            !plain.contains("IFCMATERIALPROPERTIES"),
+            "no data, no psets"
+        );
+        assert!(!plain.contains("IFCDERIVEDUNIT("));
+
+        let mut s = house();
+        s.execute(
+            AnyCommand::from_tool(
+                "set_material",
+                &json!({"material": 3,
+                    "thermal": {"conductivity_w_mk": 0.77, "specific_heat_j_kgk": 840},
+                    "physical": {"density_kg_m3": 1800, "youngs_modulus_pa": 5e9, "poisson_ratio": 0.2},
+                    "environmental": {"declared_unit": "kg", "gwp_a1_a3": 0.24, "epd_source": "EPD-1"},
+                    "cost": {"unit_price": 1500000, "currency": "VND", "unit": "m3"}}),
+            )
+            .unwrap(),
+            &ExecContext::user(),
+        )
+        .unwrap();
+        let ifc = export_ifc(s.doc()).unwrap();
+        for needle in [
+            "IFCMATERIALPROPERTIES('Pset_MaterialCommon'",
+            "IFCMATERIALPROPERTIES('Pset_MaterialThermal'",
+            "IFCMATERIALPROPERTIES('Pset_MaterialMechanical'",
+            "IFCMATERIALPROPERTIES('Pset_FerroMaterial'",
+            "'MassDensity',$,IFCMASSDENSITYMEASURE(1800.)",
+            "'ThermalConductivity',$,IFCTHERMALCONDUCTIVITYMEASURE(0.77)",
+            "'YoungModulus',$,IFCMODULUSOFELASTICITYMEASURE(5000000000.)",
+            "'GWP_A1_A3',$,IFCREAL(0.24)",
+            "'Currency',$,IFCLABEL('VND')",
+            ".MASSDENSITYUNIT.",
+            ".THERMALCONDUCTANCEUNIT.",
+        ] {
+            assert!(ifc.contains(needle), "missing {needle}");
+        }
+        // The finish layers of the wall type have no material, so no
+        // U-value is claimed for it.
+        assert!(!ifc.contains("ThermalTransmittance"));
+        let n = ifc.matches("\n#").count();
+        for cap in ifc.split('#').skip(1) {
+            let num: String = cap.chars().take_while(|c| c.is_ascii_digit()).collect();
+            if let Ok(i) = num.parse::<usize>() {
+                assert!(i >= 1 && i <= n, "dangling #{i}");
+            }
+        }
+    }
+
+    #[test]
+    fn complete_wall_type_gets_thermal_transmittance() {
+        let mut s = Session::new(Document::new("U"), Box::new(SequentialIds::new(1)));
+        for (name, args) in [
+            (
+                "create_material",
+                json!({"name": "Brick", "color": "#b5533c", "thermal": {"conductivity_w_mk": 0.77}}),
+            ),
+            (
+                "create_wall_type",
+                json!({"name": "Brick 200", "thickness": 200, "material": 1}),
+            ),
+        ] {
+            s.execute(
+                AnyCommand::from_tool(name, &args).unwrap(),
+                &ExecContext::user(),
+            )
+            .unwrap();
+        }
+        let ifc = export_ifc(s.doc()).unwrap();
+        // U = 1 / (0.13 + 0.2/0.77 + 0.04) = 2.3172...
+        let at = ifc
+            .find("IFCTHERMALTRANSMITTANCEMEASURE(")
+            .expect("thermal transmittance");
+        let rest = &ifc[at + "IFCTHERMALTRANSMITTANCEMEASURE(".len()..];
+        let v: f64 = rest[..rest.find(')').unwrap()].parse().unwrap();
+        assert!((v - 1.0 / (0.13 + 0.2 / 0.77 + 0.04)).abs() < 1e-9);
+        assert!(ifc.contains("'Pset_WallCommon'"));
+        assert!(ifc.contains(".THERMALTRANSMITTANCEUNIT."));
     }
 }

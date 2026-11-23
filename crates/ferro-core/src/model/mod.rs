@@ -11,7 +11,9 @@ mod document;
 mod element;
 pub mod generate;
 mod ids;
+pub mod material;
 mod parameter;
+pub mod structure_quantities;
 
 pub use category::Category;
 pub use document::{Document, ProjectInfo, ProjectOrigins, EXTENT_LIMIT_MM};

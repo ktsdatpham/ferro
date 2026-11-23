@@ -35,6 +35,10 @@ for the same concept.
 | `Regenerate` | Rebuild dependents | Update, Refresh, Recompute |
 | `Host` / hosted | Containment relation | Parent / child (for this) |
 | `Material` | Appearance + physical data, an element | Texture, Shader (for this) |
+| `AppearanceAsset`, `PhysicalAsset`, `ThermalAsset`, `EnvironmentalAsset`, `CostAsset` | Optional data groups of a `Material` (Revit: Appearance / Physical / Thermal asset); appearance follows OpenPBR | Properties, Shader, Profile (for this) |
+| `ImageMapping` | An image laid on faces at a real-world tile size (mm) | Texture (as a type), UV map |
+| `MaterialUnit` | Unit a GWP figure or price refers to: m³, kg or m² of material (EPD "declared unit") | Measure, Uom |
+| `StructureQuantities` | U-value, mass, GWP and cost per m² of a `CompoundStructure`, from its layer materials | Build-up data, Assembly properties |
 | `CompoundStructure` / `CompoundLayer` | Layers of a wall / floor type | Build-up, Layer (alone), Ply |
 | `WallType` / `FloorType` | System family types | WallStyle, Assembly |
 | `Opening` | Door or window hosted by a wall | Hole, Cutout, Insert (as a type) |

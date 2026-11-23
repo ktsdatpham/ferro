@@ -7,8 +7,8 @@ use super::{CommandError, Transaction};
 use crate::geom::{Arc, Curve, Line};
 use crate::math::{tol, Length, Point2, Point3, Vec2, Vec3};
 use crate::model::bim::{
-    CompoundLayer, CompoundStructure, Floor, FloorType, LayerFunction, LocationLine, Material,
-    Opening, OpeningKind, Wall, WallTop, WallType,
+    CompoundLayer, CompoundStructure, Floor, FloorType, LayerFunction, LocationLine, Opening,
+    OpeningKind, Wall, WallTop, WallType,
 };
 use crate::model::generate::{self, WallLayout};
 use crate::model::{Category, Element, ElementBody, ElementId};
@@ -65,37 +65,7 @@ fn check_unique_name(
 
 // --------------------------------------------------------------- materials
 
-/// Create a material with a base colour (`"#rrggbb"`).
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct CreateMaterial {
-    pub name: String,
-    pub color: String,
-    #[serde(default)]
-    pub roughness: Option<f32>,
-}
-
-impl Command for CreateMaterial {
-    const NAME: &'static str = "create_material";
-    fn execute(&self, tx: &mut Transaction) -> Result<CommandOutput, CommandError> {
-        check_unique_name(tx, &self.name, |e| {
-            matches!(e.body, ElementBody::Material(_))
-        })?;
-        let color = parse_color(&self.color).ok_or_else(|| {
-            err(
-                "ferro.model.invalid_color",
-                format!("{:?} is not a #rrggbb colour", self.color),
-            )
-        })?;
-        let roughness = self.roughness.unwrap_or(0.8).clamp(0.0, 1.0);
-        let id = tx.create(
-            Category::Materials,
-            Some(self.name.clone()),
-            None,
-            ElementBody::Material(Material { color, roughness }),
-        )?;
-        Ok(json!({ "element": id }))
-    }
-}
+pub use super::material_commands::{CreateMaterial, SetMaterial};
 
 // ------------------------------------------------------------------- types
 
