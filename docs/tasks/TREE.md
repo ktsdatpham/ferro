@@ -93,6 +93,12 @@ Legend: `[ ]` open · `[~]` in progress · `[x]` done · `✓` verified ·
 - [ ] **M5-19 Problems panel** ("What's Wrong"): regeneration warnings and broken references listed, click selects, fix hints; references carry `exact` / `unverified`, and a lost reference is reported, never silently re-attached
 - [ ] **M5-20 Model cache in `.fro`**: display meshes (and B-rep) cached so files open without regenerating; linked models load light (mesh + faces needed to snap / host) and resolve on edit
 - [ ] **M5-18 `ferro-cli`**: run commands and scripts without the UI (agents, CI, benchmarks)
+- [ ] **M5-21 File versions and migrations**: `format_version` bumped whenever saved data gains a shape older Ferro cannot read (quantities, material assets, definitions did); a migration chain from every old version, tested on saved samples of each milestone; newer files refused with a clear message
+- [ ] **M5-22 Views as elements** (D-33): `View3D` / `PlanView` / `SectionView` carry camera, section box / plane, style (X-ray, wireframe, hidden line), hidden elements and tag filters — today's view state (section, hide, styles) moves into them; saved, switchable, usable by agents
+- [ ] **M5-23 Design options and phases** (D-32): option sets / options and phase created / demolished made real (filtering, views, IFC / Revit mapping) before collaboration builds on them
+- [ ] **M5-24 Project settings**: display units per project (mm / m, imperial), precision, Rsi / Rse choices, currency, location (latitude / longitude, time zone, EPW) — one place that UI, MCP and exports read
+- [ ] **M5-25 Family and component definition format** (D-43, D-71): `.ffa` = parameters + formulas + geometry (Forms / profiles / sweeps) + type catalog; components are instances of a definition; what M6-4, M6-8–M6-10 build on
+- [ ] **M5-26 Change format for sync and branches** (D-34, D-55, F10): every property has a stable path; a change is a list of path edits; diff / merge / sync use it
 - [ ] **M5-14 Python SDK** (ADR 0005)
   - [x] M5-14.1 `ferro-mcp --tools-json` prints the tool list (schemas) for generators @agent-python
     - accept: `cargo run -q -p ferro-mcp -- --tools-json` prints `{"tools": [...]}` equal to MCP `tools/list`; `cargo test -p ferro-mcp` passes (incl. `tools_json_matches_tools_list`, `python_sdk_snapshot_is_current`) ✓ verified @lead (52 tools, 8 tests)
