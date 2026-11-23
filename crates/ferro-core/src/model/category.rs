@@ -24,10 +24,11 @@ pub enum Category {
     Rooms,
     Furniture,
     GenericModels,
+    Materials,
 }
 
 impl Category {
-    pub const ALL: [Category; 16] = [
+    pub const ALL: [Category; 17] = [
         Category::Levels,
         Category::Grids,
         Category::ReferencePlanes,
@@ -44,6 +45,7 @@ impl Category {
         Category::Rooms,
         Category::Furniture,
         Category::GenericModels,
+        Category::Materials,
     ];
 
     /// Revit `BuiltInCategory` name.
@@ -65,6 +67,7 @@ impl Category {
             Category::Rooms => "OST_Rooms",
             Category::Furniture => "OST_Furniture",
             Category::GenericModels => "OST_GenericModel",
+            Category::Materials => "OST_Materials",
         }
     }
 
@@ -87,6 +90,7 @@ impl Category {
             Category::Rooms => "IfcSpace",
             Category::Furniture => "IfcFurniture",
             Category::GenericModels => "IfcBuildingElementProxy",
+            Category::Materials => "IfcMaterial",
         }
     }
 
@@ -94,7 +98,11 @@ impl Category {
     pub fn classifiable_form(&self) -> bool {
         !matches!(
             self,
-            Category::Levels | Category::Grids | Category::ReferencePlanes | Category::Rooms
+            Category::Levels
+                | Category::Grids
+                | Category::ReferencePlanes
+                | Category::Rooms
+                | Category::Materials
         )
     }
 }

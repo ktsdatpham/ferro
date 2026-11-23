@@ -140,15 +140,15 @@ impl SnapScene {
             if exclude.contains(&e.id) {
                 continue;
             }
-            let Some(f) = e.as_form() else { continue };
-            for (_, p) in f.body.vertices() {
+            let Some(g) = e.geometry() else { continue };
+            for (_, p) in g.vertices() {
                 s.points.push(SnapPoint {
                     point: p,
                     kind: SnapKind::Endpoint,
                     element: Some(e.id),
                 });
             }
-            for (_, a, b) in f.body.edges() {
+            for (_, a, b) in g.edges() {
                 s.points.push(SnapPoint {
                     point: Point3::midpoint(a, b),
                     kind: SnapKind::Midpoint,
@@ -160,11 +160,11 @@ impl SnapScene {
                     element: e.id,
                 });
             }
-            if let Ok(m) = body_mesh(&f.body) {
+            if let Ok(m) = body_mesh(g) {
                 for (k, t) in m.indices.iter().enumerate() {
                     let tri = t.map(|i| m.positions[i as usize]);
                     let face = m.triangle_faces[k];
-                    let normal = f.body.face_normal(face).unwrap_or(UnitVec3::Z);
+                    let normal = g.face_normal(face).unwrap_or(UnitVec3::Z);
                     s.triangles.push(SnapTriangle {
                         tri,
                         element: e.id,

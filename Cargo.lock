@@ -736,6 +736,7 @@ version = "0.1.0"
 dependencies = [
  "ferro-core",
  "ferro-io",
+ "ferro-tools",
  "serde",
  "serde_json",
 ]
@@ -745,6 +746,15 @@ name = "ferro-snap"
 version = "0.1.0"
 dependencies = [
  "ferro-core",
+ "serde_json",
+]
+
+[[package]]
+name = "ferro-tools"
+version = "0.1.0"
+dependencies = [
+ "ferro-core",
+ "serde",
  "serde_json",
 ]
 

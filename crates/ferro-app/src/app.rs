@@ -794,6 +794,101 @@ impl FerroApp {
                         ui.label(format!("{:.3} m", l.elevation.m()));
                         ui.end_row();
                     }
+                    ElementBody::Wall(_) | ElementBody::Floor(_) => {
+                        let is_wall = e.as_wall().is_some();
+                        let types: Vec<(ElementId, String)> = self
+                            .session
+                            .doc()
+                            .elements()
+                            .filter(|t| {
+                                if is_wall {
+                                    matches!(t.body, ElementBody::WallType(_))
+                                } else {
+                                    matches!(t.body, ElementBody::FloorType(_))
+                                }
+                            })
+                            .map(|t| (t.id, t.label()))
+                            .collect();
+                        let mut chosen = e.type_id;
+                        ui.label("Type");
+                        let current = chosen
+                            .and_then(|t| self.session.doc().get(t))
+                            .map(|t| t.label())
+                            .unwrap_or_default();
+                        egui::ComboBox::from_id_salt("type")
+                            .selected_text(current)
+                            .show_ui(ui, |ui| {
+                                for (tid, name) in &types {
+                                    ui.selectable_value(&mut chosen, Some(*tid), name);
+                                }
+                            });
+                        ui.end_row();
+                        if let (Some(t), true) = (chosen, chosen != e.type_id) {
+                            self.run(
+                                ferro_core::ops::bim_commands::SetElementType {
+                                    element: id,
+                                    element_type: t,
+                                }
+                                .into(),
+                            );
+                        }
+                        for (k, label) in [
+                            (keys::LENGTH, "Length"),
+                            (keys::HEIGHT, "Height"),
+                            (keys::THICKNESS, "Thickness"),
+                        ] {
+                            if let Some(ParamValue::Length(l)) = e.param(k) {
+                                ui.label(label);
+                                ui.label(format!("{:.0} mm", l.mm()));
+                                ui.end_row();
+                            }
+                        }
+                        if let Some(ParamValue::Area(a)) = e.param(keys::AREA) {
+                            ui.label("Area");
+                            ui.label(format!("{:.2} m²", a / 1e6));
+                            ui.end_row();
+                        }
+                        if let Some(ParamValue::Volume(v)) = e.param(keys::VOLUME) {
+                            ui.label("Volume");
+                            ui.label(format!("{:.3} m³", v / 1e9));
+                            ui.end_row();
+                        }
+                    }
+                    ElementBody::Opening(o) => {
+                        if let Some(h) = e.host_id.and_then(|h| self.session.doc().get(h)) {
+                            ui.label("Host");
+                            ui.label(h.label());
+                            ui.end_row();
+                        }
+                        ui.label("Size");
+                        ui.label(format!("{:.0} × {:.0} mm", o.width.mm(), o.height.mm()));
+                        ui.end_row();
+                        ui.label("Sill");
+                        ui.label(format!("{:.0} mm", o.sill.mm()));
+                        ui.end_row();
+                    }
+                    ElementBody::WallType(ferro_core::model::bim::WallType { structure })
+                    | ElementBody::FloorType(ferro_core::model::bim::FloorType { structure }) => {
+                        ui.label("Thickness");
+                        ui.label(format!("{:.0} mm", structure.thickness()));
+                        ui.end_row();
+                        for l in &structure.layers {
+                            ui.label(format!("{:?}", l.function));
+                            let mat = l
+                                .material
+                                .and_then(|m| self.session.doc().get(m))
+                                .map(|m| m.label())
+                                .unwrap_or_else(|| "—".into());
+                            ui.label(format!("{:.0} mm  {mat}", l.thickness.mm()));
+                            ui.end_row();
+                        }
+                    }
+                    ElementBody::Material(m) => {
+                        ui.label("Colour");
+                        let [r, g, b] = m.color.map(|c| (c * 255.0).round() as u8);
+                        ui.colored_label(Color32::from_rgb(r, g, b), "■■■");
+                        ui.end_row();
+                    }
                 }
                 if let Some(ParamValue::Area(a)) = e.param(keys::FORM_AREA) {
                     ui.label("Surface area");

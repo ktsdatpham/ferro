@@ -5,9 +5,11 @@
 //! only possible through `ops::Transaction` (D-17); the mutating methods here
 //! are crate-private.
 
+pub mod bim;
 mod category;
 mod document;
 mod element;
+pub mod generate;
 mod ids;
 mod parameter;
 

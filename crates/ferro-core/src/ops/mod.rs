@@ -8,6 +8,7 @@
 //! * A [`Session`] owns the current document, undo / redo, transaction groups
 //!   (one undo step per gesture) and the journal (D-29).
 
+pub mod bim_commands;
 pub mod commands;
 mod events;
 mod failure;
@@ -19,3 +20,5 @@ pub use events::DocumentChanged;
 pub use failure::{CommandError, Failure, Severity};
 pub use session::{Actor, ActorKind, ExecContext, JournalEntry, Outcome, Session};
 pub use transaction::{IdSource, SequentialIds, Transaction};
+#[cfg(test)]
+mod bim_tests;

@@ -55,7 +55,7 @@ impl SceneCache {
         // Re-mesh changed elements only.
         let mut fresh = HashMap::new();
         for e in doc.elements() {
-            let Some(f) = e.as_form() else { continue };
+            let Some(g) = e.geometry() else { continue };
             let reuse = self
                 .last
                 .as_ref()
@@ -63,7 +63,7 @@ impl SceneCache {
                 .and_then(|_| self.meshes.remove(&e.id));
             let m = match reuse {
                 Some(m) => m,
-                None => body_mesh(&f.body).unwrap_or_default(),
+                None => body_mesh(g).unwrap_or_default(),
             };
             fresh.insert(e.id, m);
         }
@@ -79,7 +79,7 @@ impl SceneCache {
             [v.x as f32, v.y as f32, v.z as f32]
         };
         for e in doc.elements() {
-            let Some(f) = e.as_form() else { continue };
+            let Some(g) = e.geometry() else { continue };
             let selected = selection.contains(&e.id);
             let color = if selected {
                 let c = face_color(e.category);
@@ -106,7 +106,7 @@ impl SceneCache {
             }
             let edge = if selected { SELECT } else { EDGE };
             // Hide edges inside smooth groups (facets of one curved surface).
-            for (a, b) in visible_edges(&f.body) {
+            for (a, b) in visible_edges(g) {
                 self.lines.push(line_vertex(rel(a), edge));
                 self.lines.push(line_vertex(rel(b), edge));
             }

@@ -9,5 +9,6 @@ repository.workspace = true
 [dependencies]
 ferro-core = { path = "../ferro-core" }
 ferro-io = { path = "../ferro-io" }
+ferro-tools = { path = "../ferro-tools" }
 serde.workspace = true
 serde_json.workspace = true

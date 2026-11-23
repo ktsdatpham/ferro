@@ -1,0 +1,12 @@
+[package]
+name = "ferro-tools"
+description = "Shared AI tool surface for Ferro: tool schemas, unit normalisation, dispatch and the Ferro Link protocol."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+ferro-core = { path = "../ferro-core" }
+serde.workspace = true
+serde_json.workspace = true
