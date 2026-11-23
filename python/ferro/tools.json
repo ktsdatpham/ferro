@@ -1,0 +1,1713 @@
+{
+  "tools": [
+    {
+      "description": "Create a level (named elevation, e.g. a storey). Elements placed on a level move with it.",
+      "inputSchema": {
+        "properties": {
+          "elevation": {
+            "description": "Length: number = millimetres, or a string with units such as \"3m\", \"300cm\", \"10'\".",
+            "type": [
+              "number",
+              "string"
+            ]
+          },
+          "is_building_storey": {
+            "description": "Default true.",
+            "type": "boolean"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "elevation"
+        ],
+        "type": "object"
+      },
+      "name": "create_level"
+    },
+    {
+      "description": "Change a level's elevation. Elements on that level move with it.",
+      "inputSchema": {
+        "properties": {
+          "elevation": {
+            "description": "Length: number = millimetres, or a string with units such as \"3m\", \"300cm\", \"10'\".",
+            "type": [
+              "number",
+              "string"
+            ]
+          },
+          "level": {
+            "description": "Level element id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "level",
+          "elevation"
+        ],
+        "type": "object"
+      },
+      "name": "set_level_elevation"
+    },
+    {
+      "description": "Draw a horizontal rectangular face (SketchUp Rectangle tool). Returns {element, face}. With `level`, origin z is relative to the level elevation.",
+      "inputSchema": {
+        "properties": {
+          "depth": {
+            "description": "Length: number = millimetres, or a string with units such as \"3m\", \"300cm\", \"10'\".",
+            "type": [
+              "number",
+              "string"
+            ]
+          },
+          "level": {
+            "description": "Optional level id",
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "origin": {
+            "description": "Corner [x, y, z] (z optional): numbers in millimetres or strings with units (\"3m\"). Z is up, X east, Y north.",
+            "items": {
+              "type": [
+                "number",
+                "string"
+              ]
+            },
+            "maxItems": 3,
+            "minItems": 2,
+            "type": "array"
+          },
+          "width": {
+            "description": "Length: number = millimetres, or a string with units such as \"3m\", \"300cm\", \"10'\".",
+            "type": [
+              "number",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "origin",
+          "width",
+          "depth"
+        ],
+        "type": "object"
+      },
+      "name": "create_rectangle"
+    },
+    {
+      "description": "Draw a planar polygon face from 3+ points. Returns {element, face}.",
+      "inputSchema": {
+        "properties": {
+          "level": {
+            "description": "Optional level id",
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "points": {
+            "items": {
+              "description": "Vertex [x, y, z] (z optional): numbers in millimetres or strings with units (\"3m\"). Z is up, X east, Y north.",
+              "items": {
+                "type": [
+                  "number",
+                  "string"
+                ]
+              },
+              "maxItems": 3,
+              "minItems": 2,
+              "type": "array"
+            },
+            "minItems": 3,
+            "type": "array"
+          },
+          "relative_to_level": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "points"
+        ],
+        "type": "object"
+      },
+      "name": "create_polygon"
+    },
+    {
+      "description": "Create a box (rectangle pulled up). Fastest way to block out a volume. Returns {element}.",
+      "inputSchema": {
+        "properties": {
+          "depth": {
+            "description": "Length: number = millimetres, or a string with units such as \"3m\", \"300cm\", \"10'\".",
+            "type": [
+              "number",
+              "string"
+            ]
+          },
+          "height": {
+            "description": "Length: number = millimetres, or a string with units such as \"3m\", \"300cm\", \"10'\".",
+            "type": [
+              "number",
+              "string"
+            ]
+          },
+          "level": {
+            "description": "Optional level id",
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "origin": {
+            "description": "Bottom corner [x, y, z] (z optional): numbers in millimetres or strings with units (\"3m\"). Z is up, X east, Y north.",
+            "items": {
+              "type": [
+                "number",
+                "string"
+              ]
+            },
+            "maxItems": 3,
+            "minItems": 2,
+            "type": "array"
+          },
+          "width": {
+            "description": "Length: number = millimetres, or a string with units such as \"3m\", \"300cm\", \"10'\".",
+            "type": [
+              "number",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "origin",
+          "width",
+          "depth",
+          "height"
+        ],
+        "type": "object"
+      },
+      "name": "create_box"
+    },
+    {
+      "description": "Push / pull a face along its normal (SketchUp Push/Pull). Negative distance pushes inward. On a Form it edits geometry; on a wall, floor, door or window it edits parameters instead (top face → height, end face → length, side face → moves the wall, opening edges → size). Get face ids from get_element.",
+      "inputSchema": {
+        "properties": {
+          "distance": {
+            "description": "Length: number = millimetres, or a string with units such as \"3m\", \"300cm\", \"10'\".",
+            "type": [
+              "number",
+              "string"
+            ]
+          },
+          "element": {
+            "description": "Form element id",
+            "type": "integer"
+          },
+          "face": {
+            "description": "Face id within the Form",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "element",
+          "face",
+          "distance"
+        ],
+        "type": "object"
+      },
+      "name": "push_pull_face"
+    },
+    {
+      "description": "Move elements by a vector.",
+      "inputSchema": {
+        "properties": {
+          "elements": {
+            "description": "Element ids",
+            "items": {
+              "type": "integer"
+            },
+            "type": "array"
+          },
+          "vector": {
+            "description": "Displacement [x, y, z] (z optional): numbers in millimetres or strings with units (\"3m\"). Z is up, X east, Y north.",
+            "items": {
+              "type": [
+                "number",
+                "string"
+              ]
+            },
+            "maxItems": 3,
+            "minItems": 2,
+            "type": "array"
+          }
+        },
+        "required": [
+          "elements",
+          "vector"
+        ],
+        "type": "object"
+      },
+      "name": "move_elements"
+    },
+    {
+      "description": "Rotate elements about a vertical axis through `center`. Angle in degrees, counter-clockwise positive.",
+      "inputSchema": {
+        "properties": {
+          "angle": {
+            "description": "Degrees",
+            "type": "number"
+          },
+          "center": {
+            "description": "Axis point [x, y, z] (z optional): numbers in millimetres or strings with units (\"3m\"). Z is up, X east, Y north.",
+            "items": {
+              "type": [
+                "number",
+                "string"
+              ]
+            },
+            "maxItems": 3,
+            "minItems": 2,
+            "type": "array"
+          },
+          "elements": {
+            "description": "Element ids",
+            "items": {
+              "type": "integer"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "elements",
+          "center",
+          "angle"
+        ],
+        "type": "object"
+      },
+      "name": "rotate_elements"
+    },
+    {
+      "description": "Copy elements offset by a vector; count > 1 makes a linear array. Returns new ids.",
+      "inputSchema": {
+        "properties": {
+          "count": {
+            "maximum": 1000,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "elements": {
+            "description": "Element ids",
+            "items": {
+              "type": "integer"
+            },
+            "type": "array"
+          },
+          "vector": {
+            "description": "Offset per copy [x, y, z] (z optional): numbers in millimetres or strings with units (\"3m\"). Z is up, X east, Y north.",
+            "items": {
+              "type": [
+                "number",
+                "string"
+              ]
+            },
+            "maxItems": 3,
+            "minItems": 2,
+            "type": "array"
+          }
+        },
+        "required": [
+          "elements",
+          "vector"
+        ],
+        "type": "object"
+      },
+      "name": "copy_elements"
+    },
+    {
+      "description": "Delete elements. References from other elements are cleared with a warning.",
+      "inputSchema": {
+        "properties": {
+          "elements": {
+            "description": "Element ids",
+            "items": {
+              "type": "integer"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "elements"
+        ],
+        "type": "object"
+      },
+      "name": "delete_elements"
+    },
+    {
+      "description": "Rename an element (null clears).",
+      "inputSchema": {
+        "properties": {
+          "element": {
+            "description": "Element id",
+            "type": "integer"
+          },
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "element",
+          "name"
+        ],
+        "type": "object"
+      },
+      "name": "set_name"
+    },
+    {
+      "description": "Set a typed parameter. Key format namespace.group.name (e.g. ferro.common.comments, acme.fengshui.score). Value: {\"type\": \"length\"|\"angle\"|\"area\"|\"volume\"|\"number\"|\"integer\"|\"bool\"|\"text\"|\"tags\"|\"element_ref\", \"value\": ...}. Lengths in mm, angles in radians here. Computed keys (ferro.form.area, ferro.form.volume) are read-only.",
+      "inputSchema": {
+        "properties": {
+          "element": {
+            "description": "Element id",
+            "type": "integer"
+          },
+          "key": {
+            "type": "string"
+          },
+          "value": {
+            "type": "object"
+          }
+        },
+        "required": [
+          "element",
+          "key",
+          "value"
+        ],
+        "type": "object"
+      },
+      "name": "set_parameter"
+    },
+    {
+      "description": "Classify directly edited geometry (a Form, or a frozen wall / floor) as a BIM category: a free-form wall keeps its shape and becomes a Wall with type, materials and parameters, exported to Revit / IFC as a wall. A type that no longer fits is removed.",
+      "inputSchema": {
+        "properties": {
+          "category": {
+            "enum": [
+              "forms",
+              "walls",
+              "floors",
+              "roofs",
+              "ceilings",
+              "columns",
+              "doors",
+              "windows",
+              "stairs",
+              "railings",
+              "furniture",
+              "generic_models"
+            ],
+            "type": "string"
+          },
+          "element": {
+            "description": "Element with direct geometry",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "element",
+          "category"
+        ],
+        "type": "object"
+      },
+      "name": "set_category"
+    },
+    {
+      "description": "Switch where an element's geometry comes from. 'direct': freeze a parametric wall / floor so it can be edited freely like a SketchUp group (keeps category, type, parameters; hosted doors / windows freeze with it). 'parametric': turn a directly edited wall (rectangular box) or floor (flat slab with vertical sides) back into a parametric one, using a type of the same thickness; fails with ferro.model.not_recognised or ferro.model.no_matching_type. Returns {element, changed}.",
+      "inputSchema": {
+        "properties": {
+          "element": {
+            "description": "Element id",
+            "type": "integer"
+          },
+          "source": {
+            "enum": [
+              "direct",
+              "parametric"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "element",
+          "source"
+        ],
+        "type": "object"
+      },
+      "name": "set_geometry_source"
+    },
+    {
+      "description": "Rename the project.",
+      "inputSchema": {
+        "properties": {
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "type": "object"
+      },
+      "name": "set_project_name"
+    },
+    {
+      "description": "Create a material with a base colour. Returns {element}.",
+      "inputSchema": {
+        "properties": {
+          "color": {
+            "description": "#rrggbb",
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "roughness": {
+            "maximum": 1,
+            "minimum": 0,
+            "type": "number"
+          }
+        },
+        "required": [
+          "name",
+          "color"
+        ],
+        "type": "object"
+      },
+      "name": "create_material"
+    },
+    {
+      "description": "Create a wall type: either one layer of `thickness` (+ optional material id) or `layers` listed from the exterior face to the interior face, each {function: structure|substrate|insulation|finish|membrane, thickness, material?}.",
+      "inputSchema": {
+        "properties": {
+          "layers": {
+            "items": {
+              "properties": {
+                "function": {
+                  "enum": [
+                    "structure",
+                    "substrate",
+                    "insulation",
+                    "finish",
+                    "membrane"
+                  ],
+                  "type": "string"
+                },
+                "material": {
+                  "description": "Material id",
+                  "type": "integer"
+                },
+                "thickness": {
+                  "description": "Length: number = millimetres, or a string with units such as \"3m\", \"300cm\", \"10'\".",
+                  "type": [
+                    "number",
+                    "string"
+                  ]
+                }
+              },
+              "required": [
+                "function",
+                "thickness"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "material": {
+            "description": "Optional material id",
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "thickness": {
+            "description": "Length: number = millimetres, or a string with units such as \"3m\", \"300cm\", \"10'\".",
+            "type": [
+              "number",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "type": "object"
+      },
+      "name": "create_wall_type"
+    },
+    {
+      "description": "Create a floor type (layers from top to bottom), like create_wall_type.",
+      "inputSchema": {
+        "properties": {
+          "layers": {
+            "items": {
+              "properties": {
+                "function": {
+                  "enum": [
+                    "structure",
+                    "substrate",
+                    "insulation",
+                    "finish",
+                    "membrane"
+                  ],
+                  "type": "string"
+                },
+                "material": {
+                  "description": "Material id",
+                  "type": "integer"
+                },
+                "thickness": {
+                  "description": "Length: number = millimetres, or a string with units such as \"3m\", \"300cm\", \"10'\".",
+                  "type": [
+                    "number",
+                    "string"
+                  ]
+                }
+              },
+              "required": [
+                "function",
+                "thickness"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "material": {
+            "description": "Optional material id",
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "thickness": {
+            "description": "Length: number = millimetres, or a string with units such as \"3m\", \"300cm\", \"10'\".",
+            "type": [
+              "number",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "type": "object"
+      },
+      "name": "create_floor_type"
+    },
+    {
+      "description": "Create a straight wall from start to end (z ignored; the base is the level elevation + base_offset). The exterior face is on the LEFT of the direction of travel, so draw outer walls clockwise seen from above (as in Revit). Height: top_level (+ top_offset), else height (default 3 m). Default type \"Generic - 200mm\". Returns {element}.",
+      "inputSchema": {
+        "properties": {
+          "base_offset": {
+            "description": "Length: number = millimetres, or a string with units such as \"3m\", \"300cm\", \"10'\".",
+            "type": [
+              "number",
+              "string"
+            ]
+          },
+          "end": {
+            "description": "End [x, y, z] (z optional): numbers in millimetres or strings with units (\"3m\"). Z is up, X east, Y north.",
+            "items": {
+              "type": [
+                "number",
+                "string"
+              ]
+            },
+            "maxItems": 3,
+            "minItems": 2,
+            "type": "array"
+          },
+          "height": {
+            "description": "Length: number = millimetres, or a string with units such as \"3m\", \"300cm\", \"10'\".",
+            "type": [
+              "number",
+              "string"
+            ]
+          },
+          "level": {
+            "description": "Base level id",
+            "type": "integer"
+          },
+          "location_line": {
+            "enum": [
+              "wall_centerline",
+              "core_centerline",
+              "finish_exterior",
+              "finish_interior"
+            ],
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "start": {
+            "description": "Start [x, y, z] (z optional): numbers in millimetres or strings with units (\"3m\"). Z is up, X east, Y north.",
+            "items": {
+              "type": [
+                "number",
+                "string"
+              ]
+            },
+            "maxItems": 3,
+            "minItems": 2,
+            "type": "array"
+          },
+          "top_level": {
+            "description": "Level the top is attached to",
+            "type": "integer"
+          },
+          "top_offset": {
+            "description": "Length: number = millimetres, or a string with units such as \"3m\", \"300cm\", \"10'\".",
+            "type": [
+              "number",
+              "string"
+            ]
+          },
+          "wall_type": {
+            "description": "Wall type id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "start",
+          "end"
+        ],
+        "type": "object"
+      },
+      "name": "create_wall"
+    },
+    {
+      "description": "Create a chain of walls through points (closed adds the closing wall). Corners are mitred automatically. Returns {elements}.",
+      "inputSchema": {
+        "properties": {
+          "base_offset": {
+            "description": "Length: number = millimetres, or a string with units such as \"3m\", \"300cm\", \"10'\".",
+            "type": [
+              "number",
+              "string"
+            ]
+          },
+          "closed": {
+            "type": "boolean"
+          },
+          "height": {
+            "description": "Length: number = millimetres, or a string with units such as \"3m\", \"300cm\", \"10'\".",
+            "type": [
+              "number",
+              "string"
+            ]
+          },
+          "level": {
+            "description": "Base level id",
+            "type": "integer"
+          },
+          "location_line": {
+            "enum": [
+              "wall_centerline",
+              "core_centerline",
+              "finish_exterior",
+              "finish_interior"
+            ],
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "points": {
+            "items": {
+              "description": "Vertex [x, y, z] (z optional): numbers in millimetres or strings with units (\"3m\"). Z is up, X east, Y north.",
+              "items": {
+                "type": [
+                  "number",
+                  "string"
+                ]
+              },
+              "maxItems": 3,
+              "minItems": 2,
+              "type": "array"
+            },
+            "minItems": 2,
+            "type": "array"
+          },
+          "top_level": {
+            "description": "Level the top is attached to",
+            "type": "integer"
+          },
+          "top_offset": {
+            "description": "Length: number = millimetres, or a string with units such as \"3m\", \"300cm\", \"10'\".",
+            "type": [
+              "number",
+              "string"
+            ]
+          },
+          "wall_type": {
+            "description": "Wall type id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "points"
+        ],
+        "type": "object"
+      },
+      "name": "create_walls"
+    },
+    {
+      "description": "Create a curved wall along the arc start → mid → end. Openings in curved walls are not supported yet.",
+      "inputSchema": {
+        "properties": {
+          "base_offset": {
+            "description": "Length: number = millimetres, or a string with units such as \"3m\", \"300cm\", \"10'\".",
+            "type": [
+              "number",
+              "string"
+            ]
+          },
+          "end": {
+            "description": "End [x, y, z] (z optional): numbers in millimetres or strings with units (\"3m\"). Z is up, X east, Y north.",
+            "items": {
+              "type": [
+                "number",
+                "string"
+              ]
+            },
+            "maxItems": 3,
+            "minItems": 2,
+            "type": "array"
+          },
+          "height": {
+            "description": "Length: number = millimetres, or a string with units such as \"3m\", \"300cm\", \"10'\".",
+            "type": [
+              "number",
+              "string"
+            ]
+          },
+          "level": {
+            "description": "Base level id",
+            "type": "integer"
+          },
+          "location_line": {
+            "enum": [
+              "wall_centerline",
+              "core_centerline",
+              "finish_exterior",
+              "finish_interior"
+            ],
+            "type": "string"
+          },
+          "mid": {
+            "description": "A point on the arc [x, y, z] (z optional): numbers in millimetres or strings with units (\"3m\"). Z is up, X east, Y north.",
+            "items": {
+              "type": [
+                "number",
+                "string"
+              ]
+            },
+            "maxItems": 3,
+            "minItems": 2,
+            "type": "array"
+          },
+          "name": {
+            "type": "string"
+          },
+          "start": {
+            "description": "Start [x, y, z] (z optional): numbers in millimetres or strings with units (\"3m\"). Z is up, X east, Y north.",
+            "items": {
+              "type": [
+                "number",
+                "string"
+              ]
+            },
+            "maxItems": 3,
+            "minItems": 2,
+            "type": "array"
+          },
+          "top_level": {
+            "description": "Level the top is attached to",
+            "type": "integer"
+          },
+          "top_offset": {
+            "description": "Length: number = millimetres, or a string with units such as \"3m\", \"300cm\", \"10'\".",
+            "type": [
+              "number",
+              "string"
+            ]
+          },
+          "wall_type": {
+            "description": "Wall type id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "start",
+          "mid",
+          "end"
+        ],
+        "type": "object"
+      },
+      "name": "create_arc_wall"
+    },
+    {
+      "description": "Give a wall a fixed (unconnected) height.",
+      "inputSchema": {
+        "properties": {
+          "height": {
+            "description": "Length: number = millimetres, or a string with units such as \"3m\", \"300cm\", \"10'\".",
+            "type": [
+              "number",
+              "string"
+            ]
+          },
+          "wall": {
+            "description": "Wall id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "wall",
+          "height"
+        ],
+        "type": "object"
+      },
+      "name": "set_wall_height"
+    },
+    {
+      "description": "Change the type of a wall (wall type) or floor (floor type).",
+      "inputSchema": {
+        "properties": {
+          "element": {
+            "description": "Wall or floor id",
+            "type": "integer"
+          },
+          "element_type": {
+            "description": "Type id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "element",
+          "element_type"
+        ],
+        "type": "object"
+      },
+      "name": "set_element_type"
+    },
+    {
+      "description": "Create a floor slab from a plan outline: points [x, y] in mm, optional holes. Its top sits at level elevation + offset; it extends down by the type thickness. Returns {element}.",
+      "inputSchema": {
+        "properties": {
+          "floor_type": {
+            "description": "Optional floor type id",
+            "type": "integer"
+          },
+          "holes": {
+            "items": {
+              "items": {
+                "description": "Vertex [x, y, z] (z optional): numbers in millimetres or strings with units (\"3m\"). Z is up, X east, Y north.",
+                "items": {
+                  "type": [
+                    "number",
+                    "string"
+                  ]
+                },
+                "maxItems": 3,
+                "minItems": 2,
+                "type": "array"
+              },
+              "type": "array"
+            },
+            "type": "array"
+          },
+          "level": {
+            "description": "Optional level id",
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "offset": {
+            "description": "Length: number = millimetres, or a string with units such as \"3m\", \"300cm\", \"10'\".",
+            "type": [
+              "number",
+              "string"
+            ]
+          },
+          "points": {
+            "items": {
+              "description": "Vertex (z ignored) [x, y, z] (z optional): numbers in millimetres or strings with units (\"3m\"). Z is up, X east, Y north.",
+              "items": {
+                "type": [
+                  "number",
+                  "string"
+                ]
+              },
+              "maxItems": 3,
+              "minItems": 2,
+              "type": "array"
+            },
+            "minItems": 3,
+            "type": "array"
+          }
+        },
+        "required": [
+          "points"
+        ],
+        "type": "object"
+      },
+      "name": "create_floor"
+    },
+    {
+      "description": "Place a door or window in a straight wall. position = distance from the wall start to the opening centre. Defaults: door 900 × 2100; window 1200 × 1200 with 900 sill. Fails if it does not fit. Returns {element}.",
+      "inputSchema": {
+        "properties": {
+          "height": {
+            "description": "Length: number = millimetres, or a string with units such as \"3m\", \"300cm\", \"10'\".",
+            "type": [
+              "number",
+              "string"
+            ]
+          },
+          "kind": {
+            "enum": [
+              "door",
+              "window"
+            ],
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "position": {
+            "description": "Length: number = millimetres, or a string with units such as \"3m\", \"300cm\", \"10'\".",
+            "type": [
+              "number",
+              "string"
+            ]
+          },
+          "sill": {
+            "description": "Length: number = millimetres, or a string with units such as \"3m\", \"300cm\", \"10'\".",
+            "type": [
+              "number",
+              "string"
+            ]
+          },
+          "wall": {
+            "description": "Host wall id",
+            "type": "integer"
+          },
+          "width": {
+            "description": "Length: number = millimetres, or a string with units such as \"3m\", \"300cm\", \"10'\".",
+            "type": [
+              "number",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "wall",
+          "kind",
+          "position"
+        ],
+        "type": "object"
+      },
+      "name": "create_opening"
+    },
+    {
+      "description": "Change a door or window: position along the wall, width, height, sill. Omitted fields keep their value.",
+      "inputSchema": {
+        "properties": {
+          "height": {
+            "description": "Length: number = millimetres, or a string with units such as \"3m\", \"300cm\", \"10'\".",
+            "type": [
+              "number",
+              "string"
+            ]
+          },
+          "opening": {
+            "description": "Door or window id",
+            "type": "integer"
+          },
+          "position": {
+            "description": "Length: number = millimetres, or a string with units such as \"3m\", \"300cm\", \"10'\".",
+            "type": [
+              "number",
+              "string"
+            ]
+          },
+          "sill": {
+            "description": "Length: number = millimetres, or a string with units such as \"3m\", \"300cm\", \"10'\".",
+            "type": [
+              "number",
+              "string"
+            ]
+          },
+          "width": {
+            "description": "Length: number = millimetres, or a string with units such as \"3m\", \"300cm\", \"10'\".",
+            "type": [
+              "number",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "opening"
+        ],
+        "type": "object"
+      },
+      "name": "set_opening"
+    },
+    {
+      "description": "Change a wall: start + end (+ mid for a curved wall), base_offset, height (fixed top) or top_level (+ top_offset), location_line. Omitted fields keep their value.",
+      "inputSchema": {
+        "properties": {
+          "base_offset": {
+            "description": "Length: number = millimetres, or a string with units such as \"3m\", \"300cm\", \"10'\".",
+            "type": [
+              "number",
+              "string"
+            ]
+          },
+          "end": {
+            "description": "End [x, y, z] (z optional): numbers in millimetres or strings with units (\"3m\"). Z is up, X east, Y north.",
+            "items": {
+              "type": [
+                "number",
+                "string"
+              ]
+            },
+            "maxItems": 3,
+            "minItems": 2,
+            "type": "array"
+          },
+          "height": {
+            "description": "Length: number = millimetres, or a string with units such as \"3m\", \"300cm\", \"10'\".",
+            "type": [
+              "number",
+              "string"
+            ]
+          },
+          "location_line": {
+            "enum": [
+              "wall_centerline",
+              "core_centerline",
+              "finish_exterior",
+              "finish_interior"
+            ],
+            "type": "string"
+          },
+          "mid": {
+            "description": "Point on the arc (curved walls) [x, y, z] (z optional): numbers in millimetres or strings with units (\"3m\"). Z is up, X east, Y north.",
+            "items": {
+              "type": [
+                "number",
+                "string"
+              ]
+            },
+            "maxItems": 3,
+            "minItems": 2,
+            "type": "array"
+          },
+          "start": {
+            "description": "Start [x, y, z] (z optional): numbers in millimetres or strings with units (\"3m\"). Z is up, X east, Y north.",
+            "items": {
+              "type": [
+                "number",
+                "string"
+              ]
+            },
+            "maxItems": 3,
+            "minItems": 2,
+            "type": "array"
+          },
+          "top_level": {
+            "description": "Level the top attaches to",
+            "type": "integer"
+          },
+          "top_offset": {
+            "description": "Length: number = millimetres, or a string with units such as \"3m\", \"300cm\", \"10'\".",
+            "type": [
+              "number",
+              "string"
+            ]
+          },
+          "wall": {
+            "description": "Wall id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "wall"
+        ],
+        "type": "object"
+      },
+      "name": "set_wall"
+    },
+    {
+      "description": "Change a floor's outline (points [x, y]), holes or offset. Omitted fields keep their value.",
+      "inputSchema": {
+        "properties": {
+          "floor": {
+            "description": "Floor id",
+            "type": "integer"
+          },
+          "holes": {
+            "items": {
+              "items": {
+                "description": "Vertex [x, y, z] (z optional): numbers in millimetres or strings with units (\"3m\"). Z is up, X east, Y north.",
+                "items": {
+                  "type": [
+                    "number",
+                    "string"
+                  ]
+                },
+                "maxItems": 3,
+                "minItems": 2,
+                "type": "array"
+              },
+              "type": "array"
+            },
+            "type": "array"
+          },
+          "offset": {
+            "description": "Length: number = millimetres, or a string with units such as \"3m\", \"300cm\", \"10'\".",
+            "type": [
+              "number",
+              "string"
+            ]
+          },
+          "points": {
+            "items": {
+              "description": "Vertex [x, y, z] (z optional): numbers in millimetres or strings with units (\"3m\"). Z is up, X east, Y north.",
+              "items": {
+                "type": [
+                  "number",
+                  "string"
+                ]
+              },
+              "maxItems": 3,
+              "minItems": 2,
+              "type": "array"
+            },
+            "minItems": 3,
+            "type": "array"
+          }
+        },
+        "required": [
+          "floor"
+        ],
+        "type": "object"
+      },
+      "name": "set_floor"
+    },
+    {
+      "description": "Draw on a face of a Form (lines or a closed shape, points on the face plane): the face splits, like drawing on a face in SketchUp. Returns new_faces, ready for push_pull_face (push in to make a pocket, push to the opposite face to cut a hole).",
+      "inputSchema": {
+        "properties": {
+          "closed": {
+            "type": "boolean"
+          },
+          "element": {
+            "description": "Form id",
+            "type": "integer"
+          },
+          "face": {
+            "description": "Face id",
+            "type": "integer"
+          },
+          "points": {
+            "items": {
+              "description": "Point on the face [x, y, z] (z optional): numbers in millimetres or strings with units (\"3m\"). Z is up, X east, Y north.",
+              "items": {
+                "type": [
+                  "number",
+                  "string"
+                ]
+              },
+              "maxItems": 3,
+              "minItems": 2,
+              "type": "array"
+            },
+            "minItems": 2,
+            "type": "array"
+          }
+        },
+        "required": [
+          "element",
+          "face",
+          "points"
+        ],
+        "type": "object"
+      },
+      "name": "imprint_face"
+    },
+    {
+      "description": "Draw a circle (segments, default 24). With element + face it is drawn on that face; otherwise a new circular face (normal defaults to up). Pulling it gives a smooth cylinder.",
+      "inputSchema": {
+        "properties": {
+          "center": {
+            "description": "Centre [x, y, z] (z optional): numbers in millimetres or strings with units (\"3m\"). Z is up, X east, Y north.",
+            "items": {
+              "type": [
+                "number",
+                "string"
+              ]
+            },
+            "maxItems": 3,
+            "minItems": 2,
+            "type": "array"
+          },
+          "element": {
+            "description": "Form id",
+            "type": "integer"
+          },
+          "face": {
+            "description": "Face id",
+            "type": "integer"
+          },
+          "level": {
+            "description": "Optional level id",
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "normal": {
+            "description": "Normal direction [x, y, z] (z optional): numbers in millimetres or strings with units (\"3m\"). Z is up, X east, Y north.",
+            "items": {
+              "type": [
+                "number",
+                "string"
+              ]
+            },
+            "maxItems": 3,
+            "minItems": 2,
+            "type": "array"
+          },
+          "radius": {
+            "description": "Length: number = millimetres, or a string with units such as \"3m\", \"300cm\", \"10'\".",
+            "type": [
+              "number",
+              "string"
+            ]
+          },
+          "segments": {
+            "maximum": 360,
+            "minimum": 3,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "center",
+          "radius"
+        ],
+        "type": "object"
+      },
+      "name": "create_circle"
+    },
+    {
+      "description": "Offset a face's outline inwards by a distance (SketchUp Offset); the inner copy splits the face.",
+      "inputSchema": {
+        "properties": {
+          "distance": {
+            "description": "Length: number = millimetres, or a string with units such as \"3m\", \"300cm\", \"10'\".",
+            "type": [
+              "number",
+              "string"
+            ]
+          },
+          "element": {
+            "description": "Form id",
+            "type": "integer"
+          },
+          "face": {
+            "description": "Face id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "element",
+          "face",
+          "distance"
+        ],
+        "type": "object"
+      },
+      "name": "offset_face"
+    },
+    {
+      "description": "Move vertices, edges or faces of a Form (connected faces stretch), e.g. move a top edge sideways to make a sloped roof. Faces must stay flat.",
+      "inputSchema": {
+        "properties": {
+          "edges": {
+            "description": "Edge ids",
+            "items": {
+              "type": "integer"
+            },
+            "type": "array"
+          },
+          "element": {
+            "description": "Form id",
+            "type": "integer"
+          },
+          "faces": {
+            "description": "Face ids",
+            "items": {
+              "type": "integer"
+            },
+            "type": "array"
+          },
+          "vector": {
+            "description": "Displacement [x, y, z] (z optional): numbers in millimetres or strings with units (\"3m\"). Z is up, X east, Y north.",
+            "items": {
+              "type": [
+                "number",
+                "string"
+              ]
+            },
+            "maxItems": 3,
+            "minItems": 2,
+            "type": "array"
+          },
+          "vertices": {
+            "description": "Vertex ids",
+            "items": {
+              "type": "integer"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "element",
+          "vector"
+        ],
+        "type": "object"
+      },
+      "name": "move_geometry"
+    },
+    {
+      "description": "Scale Forms about a centre: factor (uniform) or factors [x, y, z].",
+      "inputSchema": {
+        "properties": {
+          "center": {
+            "description": "Centre [x, y, z] (z optional): numbers in millimetres or strings with units (\"3m\"). Z is up, X east, Y north.",
+            "items": {
+              "type": [
+                "number",
+                "string"
+              ]
+            },
+            "maxItems": 3,
+            "minItems": 2,
+            "type": "array"
+          },
+          "elements": {
+            "description": "Form ids",
+            "items": {
+              "type": "integer"
+            },
+            "type": "array"
+          },
+          "factor": {
+            "type": "number"
+          },
+          "factors": {
+            "items": {
+              "type": "number"
+            },
+            "maxItems": 3,
+            "minItems": 3,
+            "type": "array"
+          }
+        },
+        "required": [
+          "elements",
+          "center"
+        ],
+        "type": "object"
+      },
+      "name": "scale_elements"
+    },
+    {
+      "description": "Erase edges of a Form: an edge between faces in one plane merges them; other edges remove their faces.",
+      "inputSchema": {
+        "properties": {
+          "edges": {
+            "description": "Edge ids",
+            "items": {
+              "type": "integer"
+            },
+            "type": "array"
+          },
+          "element": {
+            "description": "Form id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "element",
+          "edges"
+        ],
+        "type": "object"
+      },
+      "name": "erase_edges"
+    },
+    {
+      "description": "Erase faces of a Form (it becomes open); erasing all faces deletes it.",
+      "inputSchema": {
+        "properties": {
+          "element": {
+            "description": "Form id",
+            "type": "integer"
+          },
+          "faces": {
+            "description": "Face ids",
+            "items": {
+              "type": "integer"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "element",
+          "faces"
+        ],
+        "type": "object"
+      },
+      "name": "erase_faces"
+    },
+    {
+      "description": "Elements the user has selected in the Ferro app, with their summaries. Use it for requests like \"make the selected wall taller\".",
+      "inputSchema": {
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "name": "get_selection"
+    },
+    {
+      "description": "Select elements in the Ferro app so the user sees what you mean.",
+      "inputSchema": {
+        "properties": {
+          "elements": {
+            "description": "Element ids (empty clears)",
+            "items": {
+              "type": "integer"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "elements"
+        ],
+        "type": "object"
+      },
+      "name": "select_elements"
+    },
+    {
+      "description": "Version number of the open document; it increases with every change. Revit polls it to pull changes live.",
+      "inputSchema": {
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "name": "get_document_version"
+    },
+    {
+      "description": "Ferro → Revit: the operations (in feet) that bring a Revit model up to date. `state` lists the Revit elements already tagged with Ferro uids and their signatures.",
+      "inputSchema": {
+        "properties": {
+          "state": {
+            "description": "{elements: [{ferro_uid, unique_id, signature}]}",
+            "type": "object"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "name": "revit_plan"
+    },
+    {
+      "description": "Revit → Ferro: apply a snapshot of the Revit model (levels, types, walls, floors, doors, windows; lengths in feet). Returns the Ferro uids of created elements.",
+      "inputSchema": {
+        "properties": {
+          "snapshot": {
+            "type": "object"
+          }
+        },
+        "required": [
+          "snapshot"
+        ],
+        "type": "object"
+      },
+      "name": "revit_import"
+    },
+    {
+      "description": "Summarise the model: id, uid, name, category, level, faces, area (m²), volume (m³). Optional category filter.",
+      "inputSchema": {
+        "properties": {
+          "category": {
+            "type": "string"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "name": "list_elements"
+    },
+    {
+      "description": "Full detail of one element, including each face id with its normal, area and centre (use for push_pull_face).",
+      "inputSchema": {
+        "properties": {
+          "element": {
+            "description": "Element id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "element"
+        ],
+        "type": "object"
+      },
+      "name": "get_element"
+    },
+    {
+      "description": "Undo the last change.",
+      "inputSchema": {
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "name": "undo"
+    },
+    {
+      "description": "Redo the last undone change.",
+      "inputSchema": {
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "name": "redo"
+    },
+    {
+      "description": "Recent history: who changed what, with which commands.",
+      "inputSchema": {
+        "properties": {
+          "limit": {
+            "type": "integer"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "name": "get_journal"
+    },
+    {
+      "description": "Start a new empty project.",
+      "inputSchema": {
+        "properties": {
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "name": "new_document"
+    },
+    {
+      "description": "Open a .fro or .fro.json file.",
+      "inputSchema": {
+        "properties": {
+          "path": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "path"
+        ],
+        "type": "object"
+      },
+      "name": "open_document"
+    },
+    {
+      "description": "Save to .fro (SQLite) or .fro.json. Without path, saves to the opened file.",
+      "inputSchema": {
+        "properties": {
+          "path": {
+            "type": "string"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "name": "save_document"
+    },
+    {
+      "description": "Export the model geometry to Wavefront OBJ (Y-up, metres).",
+      "inputSchema": {
+        "properties": {
+          "path": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "path"
+        ],
+        "type": "object"
+      },
+      "name": "export_obj"
+    },
+    {
+      "description": "Export the model geometry to binary glTF (Y-up, metres).",
+      "inputSchema": {
+        "properties": {
+          "path": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "path"
+        ],
+        "type": "object"
+      },
+      "name": "export_glb"
+    },
+    {
+      "description": "Export to IFC4 (walls, slabs, doors, windows with openings, types with material layers, storeys, base quantities; millimetres).",
+      "inputSchema": {
+        "properties": {
+          "path": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "path"
+        ],
+        "type": "object"
+      },
+      "name": "export_ifc"
+    },
+    {
+      "description": "Whether the Ferro app is open and linked. When linked, every tool acts on the model open in the app; changes appear there as a proposal the user accepts or rejects.",
+      "inputSchema": {
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "name": "link_status"
+    }
+  ]
+}

@@ -9,6 +9,8 @@ step() { printf '\n== %s\n' "$1"; }
 
 step "structure (glossary, layers, core deps, task tree, API map)"
 python3 scripts/lint.py
+step "python sdk tests"
+python3 -m unittest discover -s python/tests
 step "format"
 cargo fmt --all -- --check
 if [[ "${1:-}" == "--quick" ]]; then
