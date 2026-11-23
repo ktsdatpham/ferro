@@ -99,7 +99,12 @@ A **circle** is an `Arc` whose sweep is 2π, and `is_closed()` is true.
   Revit: `CurveLoop`.
 - `Profile`: one **outer** loop (counter-clockwise about the plane normal) and
   zero or more **hole** loops (clockwise), all coplanar and non-intersecting.
-  `Profile::from_loops(...)` normalises orientation and validates.
+  `Profile::from_loops(...)` normalises orientation and validates with exact
+  predicates (D-53): every loop is simple (`ferro.geom.self_intersecting_profile`
+  for a bow-tie or a repeated point; `ferro.geom.degenerate` when all points
+  are collinear), holes lie inside the outer loop without touching it or each
+  other (`ferro.geom.invalid_profile`). `create_polygon` and closed imprint
+  curves apply the same simple-loop test.
   Revit: the sketch of a floor / roof / extrusion (`CurveArrArray`).
 
 Every sketch-based element (floor, roof, extrusion, opening) is defined by a

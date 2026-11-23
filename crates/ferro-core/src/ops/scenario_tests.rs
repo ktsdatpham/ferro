@@ -705,7 +705,8 @@ fn every_command_rejects_degenerate_and_wrong_inputs_with_rollback() {
         (
             "create_floor",
             json!({"points": [{"x":0,"y":0},{"x":1000,"y":0},{"x":2000,"y":0}]}),
-            "ferro.topo.degenerate_loop",
+            // Same code as create_polygon (M5-15.12).
+            "ferro.geom.degenerate",
         ),
         (
             "create_floor",
@@ -1707,30 +1708,155 @@ fn preview_matches_execute() {
     }
 }
 
-/// A self-intersecting (bow-tie) outline is not a valid face or floor.
+/// A self-intersecting (bow-tie) outline is not a valid face or floor
+/// (M5-15.10).
 #[test]
-#[ignore = "bug: self-intersecting (bow-tie) outlines are accepted by create_polygon / create_floor (M5-15.10)"]
 fn self_intersecting_outlines_are_rejected() {
     let mut f = Fx::new();
     let bow = [(0.0, 0.0), (3000.0, 1000.0), (3000.0, 0.0), (0.0, 2000.0)];
-    let r = checked(
+    expect_code(
         &mut f.s,
         "create_polygon",
         json!({"points": bow.iter().map(|(x, y)| p(*x, *y + 70_000.0, 0.0)).collect::<Vec<_>>()}),
+        "ferro.geom.self_intersecting_profile",
     );
-    assert!(r.is_err(), "bow-tie face accepted");
+    // Vertical bow-tie (any plane) and a figure eight through a repeated point.
+    expect_code(
+        &mut f.s,
+        "create_polygon",
+        json!({"points": bow.iter().map(|(x, z)| p(*x, 70_000.0, *z)).collect::<Vec<_>>()}),
+        "ferro.geom.self_intersecting_profile",
+    );
+    let eight = [
+        (0.0, 0.0),
+        (1000.0, 0.0),
+        (1000.0, 1000.0),
+        (2000.0, 1000.0),
+        (2000.0, 2000.0),
+        (1000.0, 2000.0),
+        (1000.0, 1000.0),
+        (0.0, 1000.0),
+    ];
+    expect_code(
+        &mut f.s,
+        "create_polygon",
+        json!({"points": eight.iter().map(|(x, y)| p(*x, *y + 70_000.0, 0.0)).collect::<Vec<_>>()}),
+        "ferro.geom.self_intersecting_profile",
+    );
+    // Tolerance edge: a notch whose tip stops 1 mm short of the opposite
+    // edge is simple; reaching it is not.
+    let notch = |tip: f64| {
+        [
+            (0.0, 0.0),
+            (3000.0, 0.0),
+            (3000.0, 2000.0),
+            (1600.0, 2000.0),
+            (1500.0, tip),
+            (1400.0, 2000.0),
+            (0.0, 2000.0),
+        ]
+        .iter()
+        .map(|(x, y)| p(*x, *y + 80_000.0, 0.0))
+        .collect::<Vec<_>>()
+    };
+    expect_ok(&mut f.s, "create_polygon", json!({ "points": notch(1.0) }));
+    expect_code(
+        &mut f.s,
+        "create_polygon",
+        json!({ "points": notch(0.0) }),
+        "ferro.geom.self_intersecting_profile",
+    );
 }
 
-/// A self-intersecting (bow-tie) floor outline is rejected.
+/// A self-intersecting (bow-tie) floor outline is rejected (M5-15.10), and so
+/// are holes outside the outline, touching it, or overlapping each other.
 #[test]
-#[ignore = "bug: self-intersecting (bow-tie) outlines are accepted by create_polygon / create_floor (M5-15.10)"]
 fn self_intersecting_floor_outlines_are_rejected() {
     let mut f = Fx::new();
+    let xy = |pts: &[(f64, f64)]| {
+        pts.iter()
+            .map(|(x, y)| json!({"x": x, "y": y + 70_000.0}))
+            .collect::<Vec<_>>()
+    };
     let bow = [(0.0, 0.0), (3000.0, 1000.0), (3000.0, 0.0), (0.0, 2000.0)];
-    let r = checked(
+    expect_code(
         &mut f.s,
         "create_floor",
-        json!({"points": bow.iter().map(|(x, y)| json!({"x": x, "y": y + 70_000.0})).collect::<Vec<_>>()}),
+        json!({ "points": xy(&bow) }),
+        "ferro.geom.self_intersecting_profile",
     );
-    assert!(r.is_err(), "bow-tie floor accepted");
+    let sq = |x: f64, y: f64, s: f64| xy(&[(x, y), (x + s, y), (x + s, y + s), (x, y + s)]);
+    let outer = sq(0.0, 0.0, 6000.0);
+    for holes in [
+        json!([sq(7000.0, 0.0, 500.0)]), // outside
+        json!([sq(0.0, 1000.0, 500.0)]), // touching the outline
+        json!([sq(1000.0, 1000.0, 1000.0), sq(1500.0, 1500.0, 1000.0)]), // overlapping
+        json!([xy(&[
+            (1000.0, 1000.0),
+            (2000.0, 1300.0),
+            (2000.0, 1000.0),
+            (1000.0, 1600.0)
+        ])]), // bow-tie hole
+    ] {
+        assert!(
+            checked(
+                &mut f.s,
+                "create_floor",
+                json!({"points": outer, "holes": holes})
+            )
+            .is_err(),
+            "{holes}"
+        );
+    }
+    expect_ok(
+        &mut f.s,
+        "create_floor",
+        json!({"points": outer, "holes": [sq(1000.0, 1000.0, 1000.0), sq(3000.0, 3000.0, 1000.0)]}),
+    );
+}
+
+/// Collinear outlines give the same code from `create_polygon` and
+/// `create_floor` (M5-15.12).
+#[test]
+fn collinear_outlines_fail_with_the_same_code() {
+    let mut f = Fx::new();
+    let line = [(0.0, 0.0), (1000.0, 0.0), (2500.0, 0.0)];
+    expect_code(
+        &mut f.s,
+        "create_polygon",
+        json!({"points": line.iter().map(|(x, y)| p(*x, *y + 70_000.0, 0.0)).collect::<Vec<_>>()}),
+        "ferro.geom.degenerate",
+    );
+    expect_code(
+        &mut f.s,
+        "create_floor",
+        json!({"points": line.iter().map(|(x, y)| json!({"x": x, "y": y + 70_000.0})).collect::<Vec<_>>()}),
+        "ferro.geom.degenerate",
+    );
+}
+
+/// A closed imprint curve that crosses itself (bow-tie) is refused with the
+/// self-intersection code; a closed curve repeating its first point is still
+/// fine (M5-15.10).
+#[test]
+fn imprinting_a_bow_tie_is_refused() {
+    let mut f = Fx::new();
+    let e = boxed(&mut f.s, [0.0, 70_000.0, 0.0], 4000.0, 3000.0, 1000.0);
+    let top = face_towards(&geometry(&f.s, e), Vec3::Z);
+    expect_code(
+        &mut f.s,
+        "imprint_face",
+        json!({"element": e, "face": top, "closed": true, "points": [
+            p(1000.0, 71_000.0, 1000.0), p(3000.0, 72_000.0, 1000.0),
+            p(3000.0, 71_000.0, 1000.0), p(1000.0, 72_000.0, 1000.0)]}),
+        "ferro.geom.self_intersecting_profile",
+    );
+    expect_ok(
+        &mut f.s,
+        "imprint_face",
+        json!({"element": e, "face": top, "closed": true, "points": [
+            p(1000.0, 71_000.0, 1000.0), p(3000.0, 71_000.0, 1000.0),
+            p(3000.0, 72_000.0, 1000.0), p(1000.0, 72_000.0, 1000.0),
+            p(1000.0, 71_000.0, 1000.0)]}),
+    );
 }

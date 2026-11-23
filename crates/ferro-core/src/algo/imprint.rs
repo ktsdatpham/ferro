@@ -123,8 +123,9 @@ fn inside(p: Point2, outer: &[Point2], holes: &[Vec<Point2>]) -> bool {
 /// boundary vertices too, so the body stays manifold.
 ///
 /// Fails with `Unsupported` for curved faces, `NotOnFace` style geometry
-/// errors when points are off the plane, and `Degenerate` when the curve
-/// splits nothing.
+/// errors when points are off the plane, `Degenerate` when the curve
+/// splits nothing, and `SelfIntersecting` (`ferro.geom.self_intersecting_profile`)
+/// when a closed curve crosses or touches itself.
 pub fn imprint_face(
     body: &mut Body,
     face: FaceId,
@@ -153,6 +154,21 @@ pub fn imprint_face(
         }
     }
     let to2 = |p: Point3| plane.to_local(p);
+    if closed {
+        // A closed curve that crosses or touches itself (a bow-tie) would
+        // leave a pinched region: refuse it with exact predicates (D-53). A
+        // repeated closing point is tolerated.
+        let mut c2: Vec<Point2> = curve.iter().map(|p| to2(*p)).collect();
+        if c2.len() > 3 && c2[0].distance_to(c2[c2.len() - 1]) <= tol::VERTEX_TOL {
+            c2.pop();
+        }
+        if c2.len() >= 3
+            && !predicates::points_are_collinear(&c2)
+            && !predicates::polygon_is_simple(&c2)
+        {
+            return Err(crate::geom::GeomError::SelfIntersecting.into());
+        }
+    }
     let outer2: Vec<Point2> = loops[0]
         .iter()
         .map(|v| to2(body.point(*v).expect("v")))

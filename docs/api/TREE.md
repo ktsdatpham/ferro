@@ -373,13 +373,21 @@ Temporary polygon helpers used by the v0.1 prototype model. Replaced by the full
 Exact geometric predicates (D-53). Every topological decision (left / right, inside / outside) goes through these, never through raw `f64` comparisons.
 
 - fn `orient2d` — Sign of the orientation of `(a, b, c)`: `> 0` counter-clockwise (c left of
+- fn `orient3d` — Sign of the orientation of `d` relative to the plane through `a, b, c`:
+- fn `segments_intersect` — Exact: do the closed segments `a b` and `c d` share at least one point
+- fn `polygon_is_simple` — Exact: is the closed polygon `poly` simple (D-53)? Non-adjacent edges
+- fn `points_are_collinear` — Exact: are all points on one line (or all coincident)? Such an outline
+- fn `polygons_touch` — Exact: do two closed polygons share at least one point (an edge of one
+- fn `polygons_touch_boundary` — Exact: does an edge of closed polygon `a` touch an edge of closed
+- fn `triangle_is_degenerate` — Exact: is the triangle degenerate (its three points collinear or
+- fn `triangles_intersect` — Exact triangle–triangle intersection test (D-53): `true` when the two
 - fn `point_in_polygon` — Exact point-in-polygon (crossing number with exact orientation tests).
 - fn `signed_area2` — Twice the signed area of a 2D polygon (positive = counter-clockwise).
 
 ### `ferro_core::geom::profile`
 
 - struct `Profile` — One outer loop (counter-clockwise about the plane normal) and zero or more
-- fn `Profile::from_loops` — Normalises orientation and validates coplanarity and hole containment.
+- fn `Profile::from_loops` — Normalises orientation and validates the loops with exact predicates
 - fn `Profile::from_outer` — Profile from a single outer loop on its own best-fit plane, with the
 - fn `Profile::plane`
 - fn `Profile::outer`

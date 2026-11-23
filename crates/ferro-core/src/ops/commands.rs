@@ -205,6 +205,17 @@ impl Command for CreatePolygon {
                 "points are not coplanar",
             ));
         }
+        // Exact simple-polygon test (D-53): no bow-ties, no repeated points.
+        let local: Vec<crate::math::Point2> = pts.iter().map(|p| plane.to_local(*p)).collect();
+        if crate::geom::predicates::points_are_collinear(&local) {
+            return Err(CommandError::new(
+                "ferro.geom.degenerate",
+                "points are collinear",
+            ));
+        }
+        if !crate::geom::predicates::polygon_is_simple(&local) {
+            return Err(crate::geom::GeomError::SelfIntersecting.into());
+        }
         let idx: Vec<usize> = (0..pts.len()).collect();
         let (body, faces) = Body::from_polygons(&pts, &[idx])?;
         let id = tx.create(
