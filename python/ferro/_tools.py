@@ -2315,7 +2315,12 @@ def export_ifc(*, path: str) -> Dict[str, Any]:
     return _call("export_ifc", {"path": path})
 
 
-def run_python(*, code: str, timeout_s: Optional[float] = None) -> Dict[str, Any]:
+def run_python(
+    *,
+    code: str,
+    in_design_option: Optional[int] = None,
+    timeout_s: Optional[float] = None,
+) -> Dict[str, Any]:
     """Run a Python script against the open document in ONE step: all its changes are
     one transaction group (all or nothing, one undo step; for agents one proposal the
     user accepts or rejects). Use it instead of many single tool calls. The script runs
@@ -2325,18 +2330,25 @@ def run_python(*, code: str, timeout_s: Optional[float] = None) -> Dict[str, Any
     height="3m")`. Set a variable `result` to return JSON data. An uncaught exception or
     a non-zero exit rolls everything back (ferro.python.failed, traceback in stderr);
     running past timeout_s kills it and rolls back (ferro.python.timeout). `with
-    doc.transaction("name"):` makes a block all or nothing inside the script. Returns
-    {ok, stdout, stderr (64 KB each at most), result, changed: [element ids], failures}.
+    doc.transaction("name"):` makes a block all or nothing inside the script. With
+    in_design_option the changes go into that design option, not the shared model.
+    Returns {ok, stdout, stderr (64 KB each at most), result, changed: [element ids],
+    failures}.
 
     Args:
         code: Python 3 source. `doc`, `tools` and `ferro` are predefined; lengths in mm
             or strings with units ("3m").
+        in_design_option: Optional design option id: every change the script makes goes
+            into that option's layer (a call may still name its own in_design_option).
+            In the app, defaults to the option the user is editing. Optional.
         timeout_s: Time limit in seconds (default 30, at most 300). Optional.
 
     Returns:
         The tool's JSON body. Raises FerroError on failure.
     """
     args: Dict[str, Any] = {"code": code}
+    if in_design_option is not None:
+        args["in_design_option"] = in_design_option
     if timeout_s is not None:
         args["timeout_s"] = timeout_s
     return _call("run_python", args)

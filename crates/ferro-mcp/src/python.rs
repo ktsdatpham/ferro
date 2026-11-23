@@ -19,7 +19,7 @@
 //! [`RunEnd`] → [`PythonRun::finish`] (commits or rolls back, reports).
 
 use ferro_core::ops::{Actor, ActorKind, DocumentChanged, ExecContext, SubTransaction};
-use ferro_core::{Document, Session};
+use ferro_core::{Document, ElementId, Session};
 use ferro_tools::link::{self as proto, LinkRequest, LinkResponse};
 use serde_json::{json, Value};
 use std::io::{Read, Write};
@@ -104,12 +104,13 @@ sys.exit(_run.main())\n";
 pub fn tool() -> Value {
     json!({
         "name": TOOL,
-        "description": "Run a Python script against the open document in ONE step: all its changes are one transaction group (all or nothing, one undo step; for agents one proposal the user accepts or rejects). Use it instead of many single tool calls. The script runs in the user's python3 with the `ferro` SDK: `doc` (ferro.Document) and `tools` (one function per Ferro tool, same names and arguments) are predefined, e.g. `walls = doc.create_walls([(0, 0), (\"8m\", 0), (\"8m\", \"6m\"), (0, \"6m\")], closed=True, height=\"3m\")`. Set a variable `result` to return JSON data. An uncaught exception or a non-zero exit rolls everything back (ferro.python.failed, traceback in stderr); running past timeout_s kills it and rolls back (ferro.python.timeout). `with doc.transaction(\"name\"):` makes a block all or nothing inside the script. Returns {ok, stdout, stderr (64 KB each at most), result, changed: [element ids], failures}.",
+        "description": "Run a Python script against the open document in ONE step: all its changes are one transaction group (all or nothing, one undo step; for agents one proposal the user accepts or rejects). Use it instead of many single tool calls. The script runs in the user's python3 with the `ferro` SDK: `doc` (ferro.Document) and `tools` (one function per Ferro tool, same names and arguments) are predefined, e.g. `walls = doc.create_walls([(0, 0), (\"8m\", 0), (\"8m\", \"6m\"), (0, \"6m\")], closed=True, height=\"3m\")`. Set a variable `result` to return JSON data. An uncaught exception or a non-zero exit rolls everything back (ferro.python.failed, traceback in stderr); running past timeout_s kills it and rolls back (ferro.python.timeout). `with doc.transaction(\"name\"):` makes a block all or nothing inside the script. With in_design_option the changes go into that design option, not the shared model. Returns {ok, stdout, stderr (64 KB each at most), result, changed: [element ids], failures}.",
         "inputSchema": {
             "type": "object",
             "properties": {
                 "code": {"type": "string", "description": "Python 3 source. `doc`, `tools` and `ferro` are predefined; lengths in mm or strings with units (\"3m\")."},
-                "timeout_s": {"type": "number", "description": "Time limit in seconds (default 30, at most 300)."}
+                "timeout_s": {"type": "number", "description": "Time limit in seconds (default 30, at most 300)."},
+                "in_design_option": {"type": "integer", "description": "Optional design option id: every change the script makes goes into that option's layer (a call may still name its own in_design_option). In the app, defaults to the option the user is editing."}
             },
             "required": ["code"]
         }
@@ -132,12 +133,15 @@ pub struct RunArgs {
     pub code: String,
     /// Time limit.
     pub timeout: Duration,
+    /// Design option every command of the script runs in (ADR 0006), unless
+    /// a call names its own; `None` = the shared model.
+    pub in_design_option: Option<ElementId>,
 }
 
 impl RunArgs {
-    /// Read `{code, timeout_s?}`. Fails (a tool error body) when `code` is
-    /// missing or not a string, or `timeout_s` is not a number in
-    /// (0, [`MAX_TIMEOUT_S`]].
+    /// Read `{code, timeout_s?, in_design_option?}`. Fails (a tool error
+    /// body) when `code` is missing or not a string, `timeout_s` is not a
+    /// number in (0, [`MAX_TIMEOUT_S`]], or `in_design_option` is not an id.
     pub fn from_tool(args: &Value) -> Result<RunArgs, Value> {
         let Some(code) = args.get("code").and_then(Value::as_str) else {
             return Err(json!({"error": "missing code (a string of Python source)"}));
@@ -153,9 +157,17 @@ impl RunArgs {
                 }
             },
         };
+        let in_design_option = match args.get("in_design_option") {
+            None | Some(Value::Null) => None,
+            Some(v) => match v.as_u64() {
+                Some(n) => Some(ElementId(n)),
+                None => return Err(json!({"error": "in_design_option must be an option id"})),
+            },
+        };
         Ok(RunArgs {
             code: code.to_string(),
             timeout: Duration::from_secs_f64(secs),
+            in_design_option,
         })
     }
 }
@@ -248,7 +260,7 @@ enum Hold {
     Group,
     /// A group was already open (an agent's Proposal, `ferro-cli --atomic`):
     /// the run is a savepoint in it.
-    Sub(SubTransaction),
+    Sub(Box<SubTransaction>),
 }
 
 /// Captured output of one pipe: the first [`OUTPUT_CAP`] bytes and the total.
@@ -302,6 +314,7 @@ fn capture(mut pipe: impl Read + Send + 'static) -> Arc<Mutex<Capture>> {
 pub struct PythonRun {
     token: String,
     ctx: ExecContext,
+    in_design_option: Option<ElementId>,
     hold: Option<Hold>,
     blocks: Vec<SubTransaction>,
     before: Document,
@@ -429,7 +442,7 @@ impl PythonRun {
         };
         let before = session.doc().clone();
         let hold = match session.begin_sub_transaction() {
-            Some(sub) => Hold::Sub(sub),
+            Some(sub) => Hold::Sub(Box::new(sub)),
             None => {
                 session.begin_group(group_name, ctx.clone());
                 Hold::Group
@@ -439,6 +452,7 @@ impl PythonRun {
         Ok(PythonRun {
             token,
             ctx,
+            in_design_option: args.in_design_option,
             hold: Some(hold),
             blocks: Vec::new(),
             before,
@@ -468,7 +482,10 @@ impl PythonRun {
     /// answer itself (app-only tools such as `get_selection`); a host refuses
     /// anything else it does not know.
     ///
-    /// Commands run inside the run's group with the caller's context.
+    /// Commands run inside the run's group with the caller's context, and
+    /// inside the run's design option (`in_design_option`) when it has one
+    /// and the call names none (`Session::execute_in_option`, which commits
+    /// through the group like any command).
     /// Refused here: `run_python` ([`NESTED`]), `undo` / `redo` (raise an
     /// exception to roll back instead). Savepoint requests
     /// ([`BEGIN_TRANSACTION`] and friends) map onto
@@ -510,7 +527,20 @@ impl PythonRun {
                 },
                 None => Err(json!({"error": "no open transaction to roll back"})),
             },
-            _ => ferro_tools::call(session, &self.ctx, tool, args)?,
+            _ => match self.in_design_option {
+                // The run's option, unless the call names its own.
+                Some(o)
+                    if ferro_tools::runs_in_design_option(tool)
+                        && args.get("in_design_option").is_none_or(Value::is_null) =>
+                {
+                    let mut args = args.clone();
+                    if let Some(m) = args.as_object_mut() {
+                        m.insert("in_design_option".into(), json!(o.0));
+                    }
+                    ferro_tools::call(session, &self.ctx, tool, &args)?
+                }
+                _ => ferro_tools::call(session, &self.ctx, tool, args)?,
+            },
         };
         if let Err(body) = &r {
             if let Some(f) = body.get("failures").and_then(Value::as_array) {
@@ -600,7 +630,7 @@ impl PythonRun {
                     session.cancel_group();
                 }
                 Some(Hold::Sub(sub)) => {
-                    session.rollback_sub_transaction(sub);
+                    session.rollback_sub_transaction(*sub);
                 }
                 None => {}
             }
@@ -1079,6 +1109,57 @@ mod tests {
             vec![BOX.to_string()],
             "the failed script is not recorded"
         );
+    }
+
+    #[test]
+    fn a_run_in_a_design_option_changes_only_its_layer() {
+        let Some(mut s) = server() else { return };
+        let set = s
+            .call("create_option_set", &json!({"name": "Roof"}))
+            .unwrap()["result"]["element"]
+            .as_u64()
+            .unwrap();
+        s.call("create_design_option", &json!({"set": set}))
+            .unwrap();
+        let b = s
+            .call("create_design_option", &json!({"set": set}))
+            .unwrap()["result"]["element"]
+            .as_u64()
+            .unwrap();
+        let shared = s.session.doc().len();
+        let undo_steps = s.session.journal().len();
+        let code = format!("{BOX}{BOX}");
+        let r = s
+            .call(TOOL, &json!({"code": code, "in_design_option": b}))
+            .unwrap_or_else(|e| panic!("{e}"));
+        assert_eq!(s.session.doc().len(), shared, "shared model untouched");
+        assert_eq!(r["changed"], json!([b]), "only the option's layer changed");
+        let l = s.call("list_design_options", &json!({})).unwrap();
+        assert_eq!(l["sets"][0]["options"][2]["added"], 2, "{l}");
+        assert_eq!(s.session.journal().len(), undo_steps + 1, "one step");
+        // A failing script leaves the layer as it was.
+        let r = s
+            .call(
+                TOOL,
+                &json!({"code": format!("{BOX}raise ValueError()"), "in_design_option": b}),
+            )
+            .unwrap_err();
+        assert_eq!(r["failures"][0]["code"], FAILED);
+        let l = s.call("list_design_options", &json!({})).unwrap();
+        assert_eq!(l["sets"][0]["options"][2]["added"], 2, "{l}");
+        // One undo removes both boxes from the option.
+        s.call("undo", &json!({})).unwrap();
+        let l = s.call("list_design_options", &json!({})).unwrap();
+        assert_eq!(l["sets"][0]["options"][2]["added"], 0, "{l}");
+        // An id that is no option: the first command fails, nothing changes.
+        let r = s
+            .call(TOOL, &json!({"code": BOX, "in_design_option": 9999}))
+            .unwrap_err();
+        assert_eq!(
+            r["failures"][1]["code"], "ferro.model.not_a_design_option",
+            "{r}"
+        );
+        assert!(RunArgs::from_tool(&json!({"code": "", "in_design_option": "x"})).is_err());
     }
 
     #[test]

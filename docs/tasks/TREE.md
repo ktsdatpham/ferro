@@ -176,12 +176,17 @@ Legend: `[ ]` open · `[~]` in progress · `[x]` done · `✓` verified ·
     - accept: `python3 scripts/gen_python.py --check` exits 0 and `python3 scripts/lint.py` prints `lint: ok`; editing `python/ferro/tools.json` makes both fail ✓ verified @lead
   - [x] M5-14.3 Ferro Link client and object layer (`connect`, `Document`, element wrappers, `transaction`), tests against a fake link server @agent-python
     - accept: `python3 -m unittest discover -s python/tests` passes (14 tests) on Python ≥ 3.9 with no third-party packages ✓ verified @lead (14 OK; also live: created 4 walls in the running app, read volumes, error code mapping)
-  - [~] M5-14.4 `run_python` MCP tool (ADR 0005 part 2, approved 2026-11-24) @agent-python · branch `m5/run-python`
-    - [~] M5-14.4.1 Session: `SubTransaction` savepoints inside an open group; scripts recorded on the group's journal entry @agent-python
-    - [ ] M5-14.4.2 Host (`ferro-mcp`, headless, `ferro-cli`): `run_python` spawns `python3 -I`, one-time token, time limit, capped output, one group, nested / busy refusals
-    - [ ] M5-14.4.3 App: `run_python` over Ferro Link without blocking the UI; agents get one Proposal; other clients refused while a script runs
-    - [ ] M5-14.4.4 SDK: run bootstrap, `connect()` inside a run, `doc.transaction(name)` as a savepoint of the run's group
-    - [ ] M5-14.4.5 Spec: tool in §6.2, `ferro.python.*` codes in §4.5, ADR 0005 implementation note
+  - [x] M5-14.4 `run_python` MCP tool (ADR 0005 part 2, approved 2026-11-24) @agent-python · branch `m5/run-python`
+    - [x] M5-14.4.1 Session: `SubTransaction` savepoints inside an open group; scripts recorded on the group's journal entry @agent-python
+      - accept: `cargo test -p ferro-core sub_transaction scripts_reach_the_journal` passes (nested savepoints roll back inside the group and keep earlier work, one undo step / journal entry; a savepoint of a closed group changes nothing; `scripts` serialised only when present, old entries load, a no-op group records nothing)
+    - [x] M5-14.4.2 Host (`ferro-mcp`, headless, `ferro-cli`): `run_python` spawns `python3 -I`, one-time token, time limit, capped output, one group, nested / busy refusals @agent-python
+      - accept: `cargo test -p ferro-mcp python` passes (14 tests: commit = one undo step with `result` / `changed` / journal script; exception → rollback and nothing changed; `timeout_s` 1.5 + `while True: pass` → `ferro.python.timeout`, grandchild process killed; missing interpreter → `ferro.python.unavailable`; 1 MB stdout capped at 64 KB; nested → `ferro.python.nested`; run inside an open group is a savepoint; token refused after the run; plugin → `ferro.python.not_allowed`; `in_design_option` changes only that option's layer, one undo step, rolled back on failure); `cargo test -p ferro-cli --test cli run_python` passes; tests skip with a message where no python3 ≥ 3.9 exists
+    - [x] M5-14.4.3 App: `run_python` over Ferro Link without blocking the UI; agents get one Proposal; other clients refused while a script runs @agent-python
+      - accept: `cargo test -p ferro-app` passes (`the_run_token_is_accepted_only_while_set`, `other_clients_wait_only_for_changes`); on screen: with "Propose" autonomy an agent's `run_python` creating walls shows one proposal bar ("proposes 1 change(s)"), Reject removes all of them; a script with `while True: pass` and `timeout_s: 3` leaves the viewport responsive and ends with `ferro.python.timeout`
+    - [x] M5-14.4.4 SDK: run bootstrap, `connect()` inside a run, `doc.transaction(name)` as a savepoint of the run's group @agent-python
+      - accept: `python3 -m unittest discover -s python/tests` passes (22 tests, 8 in `test_run.py`: result file, traceback from `<run_python>`, exit statuses, `connect()` inside a run, begin / commit / rollback requests, no group requests outside a run)
+    - [x] M5-14.4.5 Spec: tool in §6.2, `ferro.python.*` codes in §4.5, ADR 0005 implementation note @agent-python
+      - accept: `docs/foundation/04-operations.md` §4.5 lists the six `ferro.python.*` codes matching `crates/ferro-mcp/src/python.rs`; §6.2 describes `run_python`; ADR 0005 has the implementation note (process, grouping, security, busy policy)
   - [x] M5-14.5 Register the SDK's client error codes (`ferro.link.not_open`, `unreachable`, `invalid_token`, `timeout`, `protocol`, `ferro.tool.failed`) in the spec's failure-code list @lead
     - accept: `docs/foundation/04-operations.md` §4.5 lists the six client codes, matching the constants in `python/ferro/link.py`
   - [x] M5-14.6 `get_element` summary with a body kind field, so the SDK picks wrappers without guessing and `get(id)` needs one call @lead

@@ -3649,12 +3649,16 @@
       "name": "export_ifc"
     },
     {
-      "description": "Run a Python script against the open document in ONE step: all its changes are one transaction group (all or nothing, one undo step; for agents one proposal the user accepts or rejects). Use it instead of many single tool calls. The script runs in the user's python3 with the `ferro` SDK: `doc` (ferro.Document) and `tools` (one function per Ferro tool, same names and arguments) are predefined, e.g. `walls = doc.create_walls([(0, 0), (\"8m\", 0), (\"8m\", \"6m\"), (0, \"6m\")], closed=True, height=\"3m\")`. Set a variable `result` to return JSON data. An uncaught exception or a non-zero exit rolls everything back (ferro.python.failed, traceback in stderr); running past timeout_s kills it and rolls back (ferro.python.timeout). `with doc.transaction(\"name\"):` makes a block all or nothing inside the script. Returns {ok, stdout, stderr (64 KB each at most), result, changed: [element ids], failures}.",
+      "description": "Run a Python script against the open document in ONE step: all its changes are one transaction group (all or nothing, one undo step; for agents one proposal the user accepts or rejects). Use it instead of many single tool calls. The script runs in the user's python3 with the `ferro` SDK: `doc` (ferro.Document) and `tools` (one function per Ferro tool, same names and arguments) are predefined, e.g. `walls = doc.create_walls([(0, 0), (\"8m\", 0), (\"8m\", \"6m\"), (0, \"6m\")], closed=True, height=\"3m\")`. Set a variable `result` to return JSON data. An uncaught exception or a non-zero exit rolls everything back (ferro.python.failed, traceback in stderr); running past timeout_s kills it and rolls back (ferro.python.timeout). `with doc.transaction(\"name\"):` makes a block all or nothing inside the script. With in_design_option the changes go into that design option, not the shared model. Returns {ok, stdout, stderr (64 KB each at most), result, changed: [element ids], failures}.",
       "inputSchema": {
         "properties": {
           "code": {
             "description": "Python 3 source. `doc`, `tools` and `ferro` are predefined; lengths in mm or strings with units (\"3m\").",
             "type": "string"
+          },
+          "in_design_option": {
+            "description": "Optional design option id: every change the script makes goes into that option's layer (a call may still name its own in_design_option). In the app, defaults to the option the user is editing.",
+            "type": "integer"
           },
           "timeout_s": {
             "description": "Time limit in seconds (default 30, at most 300).",

@@ -315,6 +315,12 @@ fn with_option_argument(mut t: Value) -> Value {
     t
 }
 
+/// Whether the command tool `name` takes `in_design_option` (every command
+/// except those on option sets themselves).
+pub fn runs_in_design_option(name: &str) -> bool {
+    AnyCommand::NAMES.contains(&name) && !DESIGN_OPTION_COMMANDS.contains(&name)
+}
+
 /// Commands on option sets themselves, which cannot run inside an option.
 const DESIGN_OPTION_COMMANDS: [&str; 8] = [
     "create_option_set",

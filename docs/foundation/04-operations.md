@@ -119,6 +119,24 @@ when the problem is in reaching Ferro, not in a command. They are stable too:
 
 `get_element` on a missing id fails with `ferro.model.not_found`.
 
+Script codes. `run_python` (ADR 0005 part 2, §6.2) reports these as the
+first failure; failures of the script's last failed tool call follow:
+
+| Code | Meaning |
+|---|---|
+| `ferro.python.unavailable` | No Python 3.9+ could be started (not installed, wrong `FERRO_PYTHON`, too old) |
+| `ferro.python.timeout` | The script ran past `timeout_s`; its process tree was killed, nothing changed |
+| `ferro.python.failed` | Uncaught exception or non-zero exit; nothing changed, traceback in `stderr` |
+| `ferro.python.nested` | A script tried to start `run_python` itself |
+| `ferro.python.busy` | Another script is running; changes from other clients wait (read-only tools work) |
+| `ferro.python.not_allowed` | The caller may not start scripts (plugins, D-51) |
+
+A script's changes are one `TransactionGroup` (§4.3, `Session` groups):
+commit = one undo step and one journal entry naming the script; failure =
+the whole group rolls back. When a group is already open (an agent's
+Proposal), the script is a `SubTransaction` savepoint in it, and its
+`doc.transaction(name)` blocks are nested savepoints.
+
 ## 4.6 Events
 
 After a successful commit the document emits:

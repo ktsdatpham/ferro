@@ -43,6 +43,21 @@ Rules:
 - Results return `uid`s alongside `id`s, plus any `Failure`s.
 - Tool descriptions are written for an AI reader: purpose, units, preconditions,
   example.
+- **`run_python { code, timeout_s? }`** (ADR 0005 part 2) is a host tool, not a
+  command: it runs a Python script, written against the generated SDK
+  (`doc`, `tools`, `ferro` predefined), as one transaction group: all or
+  nothing, one undo step, one Proposal for agents without raised autonomy.
+  Returns `{ok, stdout, stderr, result, changed, failures}`: output capped at
+  64 KB per stream (`*_truncated: true` when cut), `result` = the script's
+  `result` variable as JSON, `changed` = sorted ids of elements the script
+  added, modified or deleted. Time limit 30 s by default, 300 s at most.
+  Failure codes `ferro.python.*` (§4.5). Served by the app and by headless
+  `ferro-mcp` / `ferro-cli` (same code, `ferro_mcp::python`); the journal
+  entry of the group carries the script text (`scripts`, D-29).
+  `in_design_option` (optional) sends every command of the script into that
+  design option's layer (ADR 0006, `Session::execute_in_option`) unless a
+  call names its own; in the app it defaults to the option the user is
+  editing. The shared model is then untouched and `changed` names the option.
 
 ## 6.3 Revit mapping
 

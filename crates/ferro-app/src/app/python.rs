@@ -86,10 +86,15 @@ impl FerroApp {
                 "a Python script is already running",
             ));
         }
-        let args = match RunArgs::from_tool(&req.args) {
+        let mut args = match RunArgs::from_tool(&req.args) {
             Ok(a) => a,
             Err(body) => return refuse(body),
         };
+        // While the user edits a design option, a script lands in it (as the
+        // user's own commands do), unless the caller named an option.
+        if args.in_design_option.is_none() {
+            args.in_design_option = self.editing_option();
+        }
         let mode = match python::decide(&ctx.actor, self.autonomy == Autonomy::Propose) {
             Ok(m) => m,
             Err(body) => return refuse(body),

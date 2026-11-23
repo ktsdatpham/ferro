@@ -52,6 +52,11 @@ Phases in the app (ADR 0006, M5-23): the active view's phase and phase filter (s
 - struct `PhaseState` — Phase view state of the app: a working copy of the active view's
 - fn `phase_display` — Phase display of `doc` in view phase `view` under `filter`: pure, used
 
+### `ferro_app::app::python`
+
+`run_python` in the app (ADR 0005 §5): the script runs out of process and calls back over Ferro Link with its one-time token; its calls are answered on the UI thread, inside the run's group, between frames. Nothing here waits for the script: [`FerroApp::poll_python`] checks it once per frame.
+
+
 ### `ferro_app::app::views`
 
 Views in the app (D-33, M5-22): the screen shows the *active view*, an element of category `Views`; the Views panel creates, renames, switches and deletes views.
@@ -110,9 +115,10 @@ Ferro Link server (D-65): agents (ferro-mcp, the in-app chat) send tool calls; t
 - fn `LinkServer::start` — Start listening on `127.0.0.1` (random port) and publish `link.json`.
 - fn `LinkServer::sender` — Queue for in-process clients (the chat panel).
 - fn `LinkServer::port` — Port, when listening.
+- fn `LinkServer::set_run_token` — Accept `token` (a running script's one-time token) until called with
 - fn `LinkServer::drain` — Calls waiting for the UI thread.
 - fn `LinkServer::set_project` — Keep `link.json` in sync with the open project's name.
-- fn `ask_ui` — Hand a request to the UI thread and wait for its answer.
+- fn `ask_ui` — Hand a request to the UI thread and wait for its answer (120 s, or the
 
 ### `ferro_app::material_editor`
 
@@ -1062,6 +1068,7 @@ Commands on the relationship table (ADR 0004 §5, M5-5.1).
 - struct `ExecContext` — Context recorded with each transaction. The caller supplies the time so
 - fn `ExecContext::user`
 - struct `JournalEntry` — One journal entry per committed transaction or group (D-29).
+- struct `SubTransaction` — A savepoint inside an open transaction group (`SubTransaction`, chapter 4
 - struct `Outcome` — Result of a successful command.
 - struct `Session` — Owns the current document, undo / redo, transaction groups and the journal.
 - fn `Session::new`
@@ -1077,6 +1084,9 @@ Commands on the relationship table (ADR 0004 §5, M5-5.1).
 - fn `Session::preview` — Evaluate a command on a copy without changing the session (tool
 - fn `Session::preview_on` — [`Session::preview`] on any document, e.g. one resolved for a
 - fn `Session::begin_group` — Start a group: following commands become one undo step (a gesture,
+- fn `Session::add_group_script` — Record a script's source text on the open group, so its journal entry
+- fn `Session::begin_sub_transaction` — A savepoint in the open group (`SubTransaction`), or `None` when no
+- fn `Session::rollback_sub_transaction` — Discard everything the open group did since `sub` was made (document,
 - fn `Session::end_group` — Commit the group as one undo step.
 - fn `Session::cancel_group` — Discard everything done since `begin_group`.
 - fn `Session::in_group`
@@ -1241,13 +1251,58 @@ File format versions and migrations (D-21, M5-21).
 
 ### `ferro_mcp`
 
-ferro-mcp library: the MCP tool host (a headless [`tools::Server`] with file tools, forwarding to the open app over Ferro Link when linked). The `ferro-mcp` binary serves it over stdio; `ferro-cli` reuses it so scripts run exactly the same dispatch as agents (D-44).
+ferro-mcp library: the MCP tool host (a headless [`tools::Server`] with file tools, forwarding to the open app over Ferro Link when linked). The `ferro-mcp` binary serves it over stdio; `ferro-cli` reuses it so scripts run exactly the same dispatch as agents (D-44). [`python`] runs `run_python` scripts for this host and for the app.
 
 
 ### `ferro_mcp`
 
 ferro-mcp: lets any MCP client (Claude Desktop, Claude Code, Cursor, ...) model in Ferro. Transport: newline-delimited JSON-RPC 2.0 over stdio.
 
+
+### `ferro_mcp::python`
+
+`run_python` (ADR 0005 §5): run a Python script against the open document as one transaction group — all or nothing, one undo step, and (for agents without raised autonomy) one Proposal.
+
+- const `TOOL` — Tool name (MCP and Ferro Link).
+- const `UNAVAILABLE` — No Python interpreter could be started (not installed, wrong path, or
+- const `TIMEOUT` — The script ran past its time limit; it was killed and rolled back.
+- const `FAILED` — The script raised an exception or exited with a non-zero status; rolled
+- const `NESTED` — A script tried to start `run_python` itself.
+- const `BUSY` — Another script is running; the call was refused (retry when it is done).
+- const `NOT_ALLOWED` — The caller may not start scripts (plugins: D-51 keeps them in WASM).
+- const `DEFAULT_TIMEOUT_S` — Time limit when the caller gives none (seconds).
+- const `MAX_TIMEOUT_S` — Longest time limit a caller may ask for (seconds).
+- const `OUTPUT_CAP` — Bytes of `stdout` / `stderr` kept each; the rest is counted and dropped.
+- const `RESULT_CAP` — Largest `result` (JSON bytes) returned to the caller.
+- const `EXIT_UNSUPPORTED` — Exit status the bootstrap uses when the interpreter is too old. A script
+- const `BEGIN_TRANSACTION` — Ferro Link requests a running script may send besides tools: savepoints
+- const `COMMIT_TRANSACTION` — Keep the changes since the innermost `begin_transaction`.
+- const `ROLLBACK_TRANSACTION` — Discard the changes since the innermost `begin_transaction`.
+- fn `tool` — The MCP / Ferro Link schema of `run_python`.
+- fn `failure` — A failure body like the tools return: `{error, failures: [{severity, code, message, elements}]}`.
+- struct `RunArgs` — Arguments of one `run_python` call.
+- fn `RunArgs::from_tool` — Read `{code, timeout_s?, in_design_option?}`. Fails (a tool error
+- fn `answer_timeout` — How long a Ferro Link client should wait for the answer to `tool`: the
+- enum `RunMode` — What becomes of a script's changes.
+- fn `decide` — Who may start a script, and how its changes land (ADR 0005 implementation
+- struct `PythonConfig` — Which interpreter to start and where the SDK comes from.
+- fn `PythonConfig::from_env` — From the environment (`FERRO_PYTHON`, `FERRO_PYTHON_SDK`).
+- enum `RunEnd` — How a script ended, as seen by [`PythonRun::poll`].
+- struct `PythonRun` — One running script: its process, its token and the group it holds open.
+- fn `PythonRun::start` — Spawn the interpreter for `args.code` and open the run's group.
+- fn `PythonRun::token` — The one-time Ferro Link token of this run. It is valid only while the
+- fn `PythonRun::ctx` — The caller that started the run (its actor goes on the journal).
+- fn `PythonRun::handle` — Answer one request from the script. `None` for tools the host must
+- fn `PythonRun::poll` — Check the process without blocking. Returns how it ended once it has
+- fn `PythonRun::finish` — Commit or roll back, then report. `Ok` when the script exited with
+- struct `ScriptCall` — A tool call from a script, waiting for the host thread.
+- struct `ScriptLink` — A Ferro Link listener for one headless run (the app uses its own link
+- fn `ScriptLink::bind` — Listen on `127.0.0.1` (random port). Each call waits at most
+- fn `ScriptLink::port` — Port to pass to [`PythonRun::start`].
+- fn `ScriptLink::set_token` — Accept requests carrying `token` (empty: refuse all).
+- fn `ScriptLink::next` — The next script call, waiting at most `wait`.
+- fn `run_blocking` — Run a script to the end on this thread (headless hosts: `ferro-mcp`
+- fn `interpreter_works` — Whether `path` names an interpreter that starts (used by tests to skip
 
 ### `ferro_mcp::tools`
 
@@ -1381,6 +1436,7 @@ Inference engine (D-60): finds the point the user means under the cursor.
 Shared tool surface (D-17, D-44) for MCP and Ferro Link: every kernel command is a tool with the same name, plus read-only tools. Descriptions are written for an AI reader. User units are converted here, at the edge (D-01, D-02): lengths accept numbers (mm) or strings ("3m", "300cm", "10'"), angles are in degrees, points are [x, y, z] in mm.
 
 - fn `list` — Tool definitions (name, description, JSON schema) for commands and the
+- fn `runs_in_design_option` — Whether the command tool `name` takes `in_design_option` (every command
 - fn `normalize` — Convert agent-friendly arguments to kernel units.
 - fn `failures_json` — Failures as JSON for tool results.
 - fn `summary` — Model summary (`list_elements`).
