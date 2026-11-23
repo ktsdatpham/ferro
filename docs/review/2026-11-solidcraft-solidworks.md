@@ -63,3 +63,60 @@ SolidWorks là phần mềm thương mại đóng (Dassault), không có mã ngu
 - [solidcore (GitHub)](https://github.com/tangency-labs/solidcore): README
 - [Hackaday: SolidCraft](https://hackaday.com/2026/10/17/SolidCraft-is-parametric-automation-friendly-cad-for-desktop-and-browser/)
 - [The Menon Lab: SolidCraft và MCP agents](https://themenonlab.blog/blog/solidcraft-open-source-fusion-360-rust-mcp-agents)
+
+## 6. Kết luận chi tiết (bổ sung sau khi đọc sâu)
+
+### 6.1 Từ SolidCraft: 7 bài học kỹ thuật
+
+1. **Kernel.** truck không đủ cho CAD thật; họ đã chuyển hẳn sang SMLib/solidcore. Ferro nên chờ báo cáo M5-9.2, nhưng solidcore là ứng viên số 1.
+2. **Tên bền vững đi theo lịch sử của kernel, không đoán bằng hình học** (`docs/book/src/dev/naming.md`):
+   - Mỗi phép toán báo mặt và cạnh mới sinh ra từ đâu.
+   - Mặt được đặt tên theo vai trò (`F2:side:l4`, `top`, `blend(edge)`).
+   - Mảnh của một mặt bị cắt được phân biệt bằng các mặt bao quanh nó.
+   - Cạnh được gọi bằng tên hai mặt nó chia.
+   - Tên không chắc chắn bị đánh dấu `unverified`.
+   - **Không bao giờ tự gắn lại sang mặt khác mà không báo** ("the worst thing a CAD tool can do").
+
+   Ferro đã có id topo cộng lineage (D-25) đúng hướng này. Cần thêm hai thứ: cờ `exact / unverified`, và luật "tham chiếu mất thì báo lỗi, không đoán".
+3. **Kiểm thử theo "oracle"** (`docs/oracle.md`):
+   - Mỗi ca kiểm có đáp án tính tay (thể tích, diện tích, trọng tâm) hoặc lấy từ một kernel độc lập (FreeCAD chạy như chương trình ngoài).
+   - Không ca nào lấy đáp án từ phần mềm thương mại.
+4. **Fuzz độ bền** (`docs/robustness.md`):
+   - Sinh ngẫu nhiên các thiết kế "giống thật": đặt theo lưới 2,5 mm để mặt trùng nhau và tiếp xúc xảy ra thường xuyên.
+   - Kiểm sau mỗi bước: khối kín, thể tích đi đúng chiều.
+   - Kiểm hằng đẳng thức boolean: V(A∪B) + V(A∩B) = V(A) + V(B).
+   - Mỗi seed chạy trong tiến trình riêng có giới hạn thời gian; ca lỗi được rút gọn tự động.
+5. **File dạng container:** `document.json` có phiên bản, cộng các blob đặt tên theo SHA-256 (mesh, STEP, ảnh) và một **model cache** của B-rep. Nhờ vậy mở file không phải dựng lại từ đầu.
+6. **Configurations:** bảng biến thể (tham số, ẩn/hiện feature, vật liệu, vẻ ngoài). Có cờ `matches` báo khi thiết kế đã lệch khỏi dòng đang chọn.
+7. **Mọi thứ là lệnh, và tài liệu sinh từ registry lệnh.** MCP chạy được hai kiểu: không giao diện, hoặc nối vào app đang mở. Có công cụ `view.pick` bắn tia để agent "nhìn" mô hình; render chạy dạng job bất đồng bộ.
+
+### 6.2 Từ SolidWorks: 12 khái niệm đáng lấy (và cách Ferro làm)
+
+| SolidWorks | Ý nghĩa | Ferro nên làm |
+|---|---|---|
+| **FeatureManager tree + rollback bar** | Cây lịch sử; kéo thanh rollback để chèn feature vào giữa | Không áp lịch sử cho cả mô hình (D-38, Revit cũng không). Dùng **Project Browser** (level → category → element, type, vật liệu, option) làm cây chính; lịch sử feature chỉ có trong **family editor / component** |
+| **Parent/child + "What's Wrong?"** | Biết feature nào phụ thuộc feature nào; danh sách lỗi và cảnh báo của lần rebuild, chỉ thẳng chỗ hỏng | **Bảng Problems** liệt kê cảnh báo regenerate và tham chiếu hỏng, bấm vào thì chọn đối tượng, kèm gợi ý sửa; xem quan hệ của một đối tượng |
+| **Configurations + Design Tables** | Một chi tiết nhiều biến thể; bảng Excel điều khiển kích thước và ẩn/hiện feature | FamilyType = configuration; **Type Catalog dạng bảng**, nhập/xuất CSV; AI điền bảng. Design Options (D-32) = configuration ở cấp dự án |
+| **Equations / Global Variables** | Kích thước liên kết bằng công thức | **Công thức tham số có đơn vị** (dựa trên QuantitySpec vừa làm), bắt buộc cho family |
+| **Sketch relations + Fully Defined** | Sketch báo đủ, thiếu hay thừa ràng buộc bằng màu | Bộ giải ràng buộc (D-54) báo số bậc tự do còn lại; cân nhắc lấy crate `sketch` của SolidCraft (MIT) |
+| **Instant3D** | Kéo mặt hay kích thước trực tiếp trong 3D, có thước | Push-pull đã có; thêm **kích thước tạm** khi chọn đối tượng (Revit), gõ số để sửa |
+| **Hole Wizard / Toolbox / Library Features** | Feature thông minh theo tiêu chuẩn (lỗ, bu lông) | **Trình hướng dẫn theo catalog**: cửa và cửa sổ theo TCVN, cầu thang theo quy chuẩn, dựa trên các construction-system pack (D-67) |
+| **Weldments** | Thanh kết cấu quét theo đường, có thư viện tiết diện, cắt góc, **cut list** ghi chiều dài | **Structural member**: thép nhẹ, gỗ, lan can, khung vách kính quét profile theo đường, kèm bảng cắt. Rất hợp pack thép tiền chế và khung nhẹ |
+| **Lightweight components / SpeedPak / Large Assembly Mode** | Chỉ nạp phần hiển thị, khi cần mới nạp đủ; bản rút gọn giữ lại mặt cần cho mate | Lưu **model cache hiển thị** trong `.fro`; mô hình liên kết (D-37) chỉ nạp mesh và các mặt cần để bắt điểm và host; nạp đủ khi bắt đầu sửa |
+| **Document Manager API** | Đọc file (thuộc tính, BOM) mà không cần mở SolidWorks | `ferro-cli info` và đọc `.fro` bằng Python không cần app |
+| **API cây đối tượng + xCAD** (MIT) | `ISldWorks → IModelDoc2 → FeatureManager`; xCAD sinh property page từ mô hình dữ liệu, "macro feature" là tham số vào, hình ra | Bản đồ API và Python SDK đã đi hướng này. Thêm: **bảng thuộc tính của công cụ sinh tự động từ schema lệnh**; plugin dạng "tham số vào, hình ra" cho element tham số |
+| **PDM, eDrawings, Costing, Sustainability, Simulation** | Quản lý phiên bản và vòng đời, trình xem nhẹ có markup, ước tính chi phí và carbon tức thì, mô phỏng trên cùng mô hình | Nhánh và đề xuất (D-55) cộng trạng thái vòng đời; trình xem web + BCF; **dự toán và carbon tức thì** từ vật liệu (M5-4) × khối lượng (M5-2); phân tích là biểu diễn dẫn xuất (F9) |
+
+### 6.3 Thay đổi vào cây việc
+
+- M5-17 mở rộng: corpus mô hình **cộng oracle tính tay cộng fuzz hằng đẳng thức boolean**.
+- M5-19 (mới): **bảng Problems** kiểu "What's Wrong"; tham chiếu có cờ exact/unverified, mất thì báo, không đoán.
+- M5-20 (mới): **model cache** trong `.fro` (mesh hiển thị và B-rep) để mở nhanh và nạp nhẹ mô hình liên kết.
+- M6 thêm: kích thước tạm, Type Catalog dạng bảng + CSV, công thức tham số, structural member + cut list, trình hướng dẫn theo catalog, dự toán và carbon tức thì, bảng thuộc tính sinh từ schema lệnh.
+
+### Nguồn bổ sung
+
+- [SolidWorks Help: FeatureManager Design Tree](https://help.solidworks.com/2020/English/SolidWorks/sldworks/c_featuremanager_design_tree_overview.htm), [Rollback bar](https://help.solidworks.com/2015/ENGLISH/SolidWorks/sldworks/c_rollback_bar.htm), [What's Wrong?](https://help.solidworks.com/2019/english/SolidWorks/sldworks/hidd_new_whats_wrong.htm)
+- [SolidWorks Help: Lightweight Components](https://help.solidworks.com/2023/English/SolidWorks/Sldworks/c_Lightweight_Components_SWassy.htm), [SpeedPak](https://help.solidworks.com/2025/English/SolidWorks/sldworks/c_speedpak_oh.htm), [Large assembly tips](https://blogs.solidworks.com/tech/2017/04/large-assembly-tips-tricks.html)
+- [xCAD.NET (MIT)](https://github.com/xarial/xcad), [CodeStack SOLIDWORKS API examples](https://github.com/xarial/codestack)
+- SolidCraft: `docs/book/src/dev/naming.md`, `docs/oracle.md`, `docs/robustness.md`, `docs/design-container.md`, `docs/configurations.md`, `docs/mcp.md`

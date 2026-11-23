@@ -89,7 +89,9 @@ Legend: `[ ]` open · `[~]` in progress · `[x]` done · `✓` verified ·
 - [ ] **M5-13 Code layout by discipline** (after M5-3 / M5-4 land): `model::bim` split into `model::architecture::{wall, floor, opening, …}`, room for `structure`, `mep`, `analysis`, `site`, like Revit's `DB.Architecture` / `DB.Structure`
 
 - [ ] **M5-16 Kernel seam crate `ferro-kernel`**: every Form geometry operation goes through one crate so the kernel can change without touching what is above (lesson from SolidCraft, `docs/review/2026-11-solidcraft-solidworks.md`)
-- [ ] **M5-17 Model corpus**: sample models rebuilt in CI, checking topology ids, lineage, volumes and areas after every kernel change (SolidCraft's naming corpus)
+- [ ] **M5-17 Model corpus**: sample models rebuilt in CI, checking topology ids, lineage, volumes and areas after every kernel change (SolidCraft's naming corpus), plus hand-computed oracle cases and a robustness fuzz with boolean identities
+- [ ] **M5-19 Problems panel** ("What's Wrong"): regeneration warnings and broken references listed, click selects, fix hints; references carry `exact` / `unverified`, and a lost reference is reported, never silently re-attached
+- [ ] **M5-20 Model cache in `.fro`**: display meshes (and B-rep) cached so files open without regenerating; linked models load light (mesh + faces needed to snap / host) and resolve on edit
 - [ ] **M5-18 `ferro-cli`**: run commands and scripts without the UI (agents, CI, benchmarks)
 - [ ] **M5-14 Python SDK** (ADR 0005)
   - [x] M5-14.1 `ferro-mcp --tools-json` prints the tool list (schemas) for generators @agent-python
@@ -110,6 +112,13 @@ Legend: `[ ]` open · `[~]` in progress · `[x]` done · `✓` verified ·
 - [ ] M6-4 Components (Form types with instances, D-71)
 - [ ] M6-5 Zoom window, Shift+Z
 - [ ] M6-6 Section fill (cut faces filled)
+- [ ] M6-7 Temporary dimensions on selection, type to change (Revit / SolidWorks Instant3D)
+- [ ] M6-8 Type catalog as a table, CSV import / export (SolidWorks design tables)
+- [ ] M6-9 Parameter formulas with units (SolidWorks equations, Revit family formulas)
+- [ ] M6-10 Structural members: profile swept along a path, corner trims, cut list (SolidWorks weldments)
+- [ ] M6-11 Catalog wizards: doors / windows by TCVN sizes, stairs by code (Hole Wizard idea)
+- [ ] M6-12 Instant cost and carbon estimate from material assets × quantities
+- [ ] M6-13 Tool property panels generated from the command schema (xCAD property pages)
 
 ## Later (from the foundation review)
 
