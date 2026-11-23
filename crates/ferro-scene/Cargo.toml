@@ -1,0 +1,13 @@
+[package]
+name = "ferro-scene"
+description = "Display scene derived from a Document snapshot (ADR 0004 §6): per-element draw records, meshes shared between translated copies, incremental sync."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+ferro-core = { path = "../ferro-core" }
+
+[dev-dependencies]
+serde_json.workspace = true

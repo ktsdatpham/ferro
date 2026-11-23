@@ -4,6 +4,7 @@ members = [
     "crates/ferro-core",
     "crates/ferro-io",
     "crates/ferro-snap",
+    "crates/ferro-scene",
     "crates/ferro-tools",
     "crates/ferro-revit",
     "crates/ferro-mcp",

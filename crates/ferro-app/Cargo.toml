@@ -14,6 +14,7 @@ path = "src/main.rs"
 ferro-core = { path = "../ferro-core" }
 ferro-io = { path = "../ferro-io" }
 ferro-snap = { path = "../ferro-snap" }
+ferro-scene = { path = "../ferro-scene" }
 ferro-tools = { path = "../ferro-tools" }
 eframe = { version = "0.37", default-features = false, features = ["wgpu", "default_fonts", "x11", "wayland"] }
 rfd = "0.18"

@@ -50,6 +50,7 @@ for the same concept.
 | `LocationLine` | Which line of a wall its curve follows | Justification, Alignment |
 | Ferro Link | Local protocol for agents to drive the open app | Bridge, Socket API |
 | Proposal | Agent changes awaiting the user's accept / reject | Draft, Suggestion (for this) |
+| `DisplayScene` / `DrawRecord` | Display data derived from a `Document` snapshot (`ferro-scene`, ADR 0004 §6) / what to draw for one element; never saved | Scene (alone, as a type), Render model, Node |
 
 Adding a term requires adding it here first.
 

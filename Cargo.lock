@@ -744,6 +744,7 @@ dependencies = [
  "eframe",
  "ferro-core",
  "ferro-io",
+ "ferro-scene",
  "ferro-snap",
  "ferro-tools",
  "glam",
@@ -814,6 +815,14 @@ version = "0.2.0"
 dependencies = [
  "ferro-core",
  "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "ferro-scene"
+version = "0.2.0"
+dependencies = [
+ "ferro-core",
  "serde_json",
 ]
 
