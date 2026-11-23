@@ -2,7 +2,7 @@
 //! rotated by 30° / 45° and 5 km from the origin. Bodies are validated after
 //! every step and volumes are checked against hand calculations.
 
-use super::scenario_support::*;
+use super::scenario_common_tests::*;
 use super::Session;
 use crate::math::{Point3, Vec3};
 use crate::model::ElementId;

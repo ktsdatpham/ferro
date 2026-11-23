@@ -35,7 +35,7 @@ mod geometry_source_tests;
 #[cfg(test)]
 mod material_tests;
 #[cfg(test)]
-mod scenario_support;
+mod scenario_common_tests;
 #[cfg(test)]
 mod scenario_tests;
 #[cfg(test)]

@@ -2,9 +2,9 @@
 //! generator: random rectangles, circles, offsets, push / pull distances,
 //! stretches, moves, rotations, erasing and undo on boxes. Every step either
 //! commits a valid document or fails cleanly with a `ferro.*` code and
-//! changes nothing (see `scenario_support::checked`).
+//! changes nothing (see `scenario_common_tests::checked`).
 
-use super::scenario_support::*;
+use super::scenario_common_tests::*;
 use super::Session;
 use crate::math::{Point3, Vec3};
 use crate::model::ElementId;

@@ -8,7 +8,7 @@ use crate::model::{Document, ElementBody, ElementId};
 use crate::topo::{Body, FaceId};
 use serde_json::{json, Value};
 
-pub fn session() -> Session {
+pub(super) fn session() -> Session {
     Session::new(
         Document::new("Scenario"),
         Box::new(SequentialIds::new(1_764_000_000_000)),
@@ -16,42 +16,42 @@ pub fn session() -> Session {
 }
 
 /// A point as tool JSON.
-pub fn p(x: f64, y: f64, z: f64) -> Value {
+pub(super) fn p(x: f64, y: f64, z: f64) -> Value {
     json!({"x": x, "y": y, "z": z})
 }
 
-pub fn try_run(s: &mut Session, tool: &str, args: Value) -> Result<Outcome, Vec<Failure>> {
+pub(super) fn try_run(s: &mut Session, tool: &str, args: Value) -> Result<Outcome, Vec<Failure>> {
     match AnyCommand::from_tool(tool, &args) {
         Ok(cmd) => s.execute(cmd, &ExecContext::user()),
         Err(m) => panic!("{tool}: arguments rejected: {m} ({args})"),
     }
 }
 
-pub fn run(s: &mut Session, tool: &str, args: Value) -> Outcome {
+pub(super) fn run(s: &mut Session, tool: &str, args: Value) -> Outcome {
     match try_run(s, tool, args.clone()) {
         Ok(o) => o,
         Err(f) => panic!("{tool} {args} failed: {f:?}"),
     }
 }
 
-pub fn id(o: &Outcome) -> ElementId {
+pub(super) fn id(o: &Outcome) -> ElementId {
     serde_json::from_value(o.output["element"].clone()).expect("element in output")
 }
 
-pub fn face_of(o: &Outcome) -> FaceId {
+pub(super) fn face_of(o: &Outcome) -> FaceId {
     serde_json::from_value(o.output["face"].clone()).expect("face in output")
 }
 
-pub fn new_face(o: &Outcome) -> FaceId {
+pub(super) fn new_face(o: &Outcome) -> FaceId {
     serde_json::from_value(o.output["new_faces"][0].clone()).expect("new face in output")
 }
 
 /// The document as JSON text: exact comparison of two versions.
-pub fn snapshot(s: &Session) -> String {
+pub(super) fn snapshot(s: &Session) -> String {
     serde_json::to_string(s.doc()).expect("document serialises")
 }
 
-pub fn geometry(s: &Session, e: ElementId) -> Body {
+pub(super) fn geometry(s: &Session, e: ElementId) -> Body {
     s.doc()
         .get(e)
         .and_then(|x| x.geometry())
@@ -61,7 +61,7 @@ pub fn geometry(s: &Session, e: ElementId) -> Body {
 
 /// Face whose normal is closest to `dir`; ties broken by the largest
 /// centroid coordinate along `dir`.
-pub fn face_towards(b: &Body, dir: Vec3) -> FaceId {
+pub(super) fn face_towards(b: &Body, dir: Vec3) -> FaceId {
     let mut best: Option<(f64, FaceId)> = None;
     for f in b.face_ids() {
         let n = b.face_normal(f).expect("normal").as_vec();
@@ -75,7 +75,7 @@ pub fn face_towards(b: &Body, dir: Vec3) -> FaceId {
 }
 
 /// Shortest edge of a body (mm).
-pub fn min_edge(b: &Body) -> f64 {
+pub(super) fn min_edge(b: &Body) -> f64 {
     b.edges()
         .map(|(_, a, c)| a.distance_to(c))
         .fold(f64::INFINITY, f64::min)
@@ -85,7 +85,7 @@ pub fn min_edge(b: &Body) -> f64 {
 /// valid, closed bodies are outward-facing solids, no edge is shorter than
 /// `SHORT_CURVE_TOL` (D-06 rule 3) and all geometry is inside the 10 km
 /// extent (D-05).
-pub fn check_document(doc: &Document) -> Result<(), String> {
+pub(super) fn check_document(doc: &Document) -> Result<(), String> {
     for e in doc.elements() {
         let Some(b) = e.geometry() else { continue };
         if b.face_count() == 0 {
@@ -123,7 +123,7 @@ pub fn check_document(doc: &Document) -> Result<(), String> {
 /// Execute `tool` and check the outcome contract: success keeps the
 /// document invariants; failure returns `ferro.*` error codes and leaves the
 /// document, undo stack and journal exactly as they were.
-pub fn checked(s: &mut Session, tool: &str, args: Value) -> Result<Outcome, Vec<Failure>> {
+pub(super) fn checked(s: &mut Session, tool: &str, args: Value) -> Result<Outcome, Vec<Failure>> {
     let before = snapshot(s);
     let journal = s.journal().len();
     let undo = s.undo_name().map(str::to_string);
@@ -161,7 +161,7 @@ pub fn checked(s: &mut Session, tool: &str, args: Value) -> Result<Outcome, Vec<
 }
 
 /// Execute and expect a failure with `code` (rollback checked).
-pub fn expect_code(s: &mut Session, tool: &str, args: Value, code: &str) {
+pub(super) fn expect_code(s: &mut Session, tool: &str, args: Value, code: &str) {
     match checked(s, tool, args.clone()) {
         Ok(_) => panic!("{tool} {args}: expected {code}, it succeeded"),
         Err(f) => assert_eq!(f[0].code, code, "{tool} {args}: {f:?}"),
@@ -169,7 +169,7 @@ pub fn expect_code(s: &mut Session, tool: &str, args: Value, code: &str) {
 }
 
 /// Execute and expect success (invariants checked).
-pub fn expect_ok(s: &mut Session, tool: &str, args: Value) -> Outcome {
+pub(super) fn expect_ok(s: &mut Session, tool: &str, args: Value) -> Outcome {
     match checked(s, tool, args.clone()) {
         Ok(o) => o,
         Err(f) => panic!("{tool} {args}: expected success, got {f:?}"),
@@ -177,7 +177,7 @@ pub fn expect_ok(s: &mut Session, tool: &str, args: Value) -> Outcome {
 }
 
 /// Box `w × d × h` with its corner at `(x, y, z)`.
-pub fn boxed(s: &mut Session, o: [f64; 3], w: f64, d: f64, h: f64) -> ElementId {
+pub(super) fn boxed(s: &mut Session, o: [f64; 3], w: f64, d: f64, h: f64) -> ElementId {
     id(&run(
         s,
         "create_box",
@@ -186,10 +186,10 @@ pub fn boxed(s: &mut Session, o: [f64; 3], w: f64, d: f64, h: f64) -> ElementId 
 }
 
 /// Tiny deterministic generator (xorshift64*), no dependencies.
-pub struct XorShift(pub u64);
+pub(super) struct XorShift(pub(super) u64);
 
 impl XorShift {
-    pub fn next_u64(&mut self) -> u64 {
+    pub(super) fn next_u64(&mut self) -> u64 {
         let mut x = self.0;
         x ^= x >> 12;
         x ^= x << 25;
@@ -198,11 +198,11 @@ impl XorShift {
         x.wrapping_mul(0x2545_F491_4F6C_DD1D)
     }
     /// Uniform in `[lo, hi)`.
-    pub fn range(&mut self, lo: f64, hi: f64) -> f64 {
+    pub(super) fn range(&mut self, lo: f64, hi: f64) -> f64 {
         let u = (self.next_u64() >> 11) as f64 / (1u64 << 53) as f64;
         lo + (hi - lo) * u
     }
-    pub fn pick(&mut self, n: usize) -> usize {
+    pub(super) fn pick(&mut self, n: usize) -> usize {
         (self.next_u64() % n.max(1) as u64) as usize
     }
 }

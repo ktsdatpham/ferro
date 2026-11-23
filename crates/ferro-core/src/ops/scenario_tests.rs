@@ -2,7 +2,7 @@
 //! and tolerance-edge cases through the tool path (`from_tool` + `execute`),
 //! rollback on failure, and exact undo / redo.
 
-use super::scenario_support::*;
+use super::scenario_common_tests::*;
 use super::*;
 use crate::math::Vec3;
 use crate::model::{ElementId, GeometrySource};
