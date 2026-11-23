@@ -187,8 +187,9 @@ a command. Geometry is derived from location + parameters + type.
 
 ## 3.9 Out of scope for v1 (but reserved)
 
-Design options, worksets, views and sheets are Revit concepts Ferro will
-need for collaboration and documentation (phases landed, §3.10). They are **reserved names**: do not use
+Worksets, views and sheets are Revit concepts Ferro will
+need for collaboration and documentation (phases and design options landed,
+§3.10, §3.11). They are **reserved names**: do not use
 them for anything else. Documentation (views, sheets, annotation) is
 intentionally left to Revit.
 
@@ -253,3 +254,62 @@ per category and shown status, count, volume of closed bodies and area
 cannot create them) and *Phase Created* / *Phase Demolished* are set by name.
 
 Phased cuts (ADR 0006 §5) wait for the relationship table (M5-5).
+
+## 3.11 Design options (ADR 0006, D-32)
+
+An `OptionSet` and its `DesignOption`s are elements of category
+`DesignOptions` (Revit: `OST_DesignOptions`). An option's set is its
+`host_id`, so deleting a set deletes its options. Sets are ordered by
+`order`; options within a set too. `create_option_set` makes the set with
+its first option "Option 1", primary.
+
+**Option layer.** An option holds a list of `Change`s in the change format
+(M5-26): paths `/elements/<uid>...` and `/relationships/<uid>...` (a join
+or cut that exists only in that option). A whole new element adds it, a
+`remove` of `/elements/<uid>` hides a shared element in that option, a
+property path overrides it (e.g. `/elements/<uid>/body/top/height`). Shared
+elements are never copied. A layer never touches the project, option sets /
+options or the `design_option` field, and stores no derived data
+(regenerated geometry `body/geometry`, read-only computed parameters).
+Layers are checked against the shared model on write
+(`ferro.model.invalid_option_layer`).
+
+**Status.** `open`; `accepted` (its layer was merged); `archived` (another
+option of its set was accepted). Only open options are shown, edited or
+primary; every set with open options has exactly one primary
+(`ferro.model.invalid_design_options` otherwise). The primary option cannot
+be deleted (`ferro.model.option_is_primary`).
+
+**Combination.** One open option per set; sets not named show their primary;
+sets without open options show nothing. `resolve(doc, combination)` (pure,
+`ops::design_option_commands`) applies the chosen option layers in set order
+and regenerates. Two option layers that touch the same property (or one removes
+what another changes, `model::change::conflicts`) are reported as
+`ferro.model.option_conflict`, never merged. In a resolved document every
+option carries an empty layer (resolving again changes nothing) and each
+element added by an option layer has `design_option` = that option. In the shared
+model `design_option` is always `None`.
+
+**Editing in an option.** `Session::execute_in_option(option, combination,
+command)` runs any command on the document seen in the combination and
+stores `diff(seen without this option, edited)` (minus derived data) as the
+option layer, through one `set_design_option` (one undo step). Editing an
+element that only another set's option adds fails with
+`ferro.model.invalid_option_layer`. MCP: every command tool takes an
+optional `in_design_option`.
+
+**Accept** (`accept_design_option`): the option layer is applied to the shared model;
+the option becomes `accepted`, the other open options of its set
+`archived` (kept with their layers).
+
+**Stale option layers.** A shared change that makes an open option layer fail (e.g.
+deleting an element the option overrides) commits with a
+`ferro.model.option_layer_stale` warning on the option; the option layer is kept and
+`resolve` reports `ferro.model.invalid_option_layer` for it.
+`model::change::partition_applicable` splits the edits that still apply,
+for an explicit repair with `set_design_option`.
+
+**Interop.** IFC exports the primary combination (the app: the
+combination shown). Revit gets the primary combination, with a `warning`
+operation when other open options exist (Revit design options are a later
+step).

@@ -56,6 +56,12 @@ for the same concept.
 | `PhaseQuantities` | Volumes and areas per category split by `PhaseStatus` in one phase | Phase schedule, Demolition list |
 | `Relationship` | A row of the document's relationship table: a `Uid`, a `RelationshipKind` and the linked elements in kind order (ADR 0004 §5) | Link, Association, Connection (alone), Constraint |
 | `RelationshipKind` | `join`, `cut`, `host`, `attach`, `bounds`, `connect`, `aggregate` | RelationType, LinkType |
+| `OptionSet` | A set of mutually exclusive design alternatives (Revit *Option Set*), an element of category `DesignOptions`; ordered | Option group, Variant set |
+| `DesignOption` | One alternative of an `OptionSet` (Revit `DesignOption`): an **option layer** over the shared model; hosted by its set; one open option per set is primary | Variant, Alternative (as a type), Branch |
+| Option layer | The list of `Change`s a `DesignOption` holds (add elements, remove shared elements, override properties); always qualified ("option layer"), never "layer" alone | Overlay, Patch, Delta |
+| `OptionStatus` | `open` / `accepted` (merged into the shared model) / `archived` (another option of the set was accepted; kept) | Option state, Lifecycle |
+| `Combination` | One design option per option set, primary by default (ArchiCAD design option combination); what a view shows | Configuration, Scenario, Variant |
+| `Change` | One edit in the change format (M5-26): set or remove the value at a uid-keyed JSON-pointer path | Patch, Delta, Diff (for one edit) |
 | `DisplayScene` / `DrawRecord` | Display data derived from a `Document` snapshot (`ferro-scene`, ADR 0004 §6) / what to draw for one element; never saved | Scene (alone, as a type), Render model, Node |
 
 Adding a term requires adding it here first.
@@ -108,6 +114,10 @@ an edge (FFI, MCP JSON, file), the name carries the unit: `height_mm`,
   `array`, `set`, `get`, `list`, `join`, `unjoin`, `host`, `classify`, `convert`,
   `import`, `export`, plus geometric verbs (`push_pull`, `offset`, `split`,
   `extrude`). New verbs need a glossary entry.
+- Verbs of the change format and design options (ADR 0006): `accept`
+  (merge a proposal or a design option into the shared model:
+  `accept_design_option`), `apply` (replay a change list: `apply_changes`),
+  `diff` (compute a change list between two documents: `diff_documents`).
 - Plural noun when the command takes many ids (`delete_elements`).
 
 ## 5.6 Parameters and failure codes
