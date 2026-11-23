@@ -24,6 +24,10 @@ struct Globals {
     light_dir: [f32; 4],
     /// Camera position relative to the render origin.
     eye: [f32; 4],
+    /// Section plane (normal, offset): fragments with n·p > offset are cut.
+    clip: [f32; 4],
+    /// x: 1 for flat white faces (Hidden line style).
+    style: [f32; 4],
 }
 
 /// Geometry for one frame. `scene_*` change rarely (keyed by `scene_version`);
@@ -38,6 +42,10 @@ pub struct FrameData<'a> {
     pub overlay_tris: &'a [Vertex],
     /// Scene faces do not hide edges behind them.
     pub xray: bool,
+    /// Section plane for scene geometry (normal, offset), relative coords.
+    pub clip: Option<[f32; 4]>,
+    /// Hidden line style.
+    pub hidden_line: bool,
     pub overlay_lines: &'a [Vertex],
     pub clear: [f64; 3],
 }
@@ -58,6 +66,9 @@ pub struct Renderer {
     line_pipeline: wgpu::RenderPipeline,
     globals: wgpu::Buffer,
     bind_group: wgpu::BindGroup,
+    /// Globals for overlays: never cut by the section plane.
+    overlay_globals: wgpu::Buffer,
+    overlay_bind_group: wgpu::BindGroup,
     scene_version: Option<u64>,
     scene_tris: Option<(wgpu::Buffer, u32)>,
     scene_lines: Option<(wgpu::Buffer, u32)>,
@@ -90,14 +101,24 @@ impl Renderer {
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
-        let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("globals"),
-            layout: &bgl,
-            entries: &[wgpu::BindGroupEntry {
-                binding: 0,
-                resource: globals.as_entire_binding(),
-            }],
+        let bind = |buf: &wgpu::Buffer| {
+            device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("globals"),
+                layout: &bgl,
+                entries: &[wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: buf.as_entire_binding(),
+                }],
+            })
+        };
+        let bind_group = bind(&globals);
+        let overlay_globals = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("overlay globals"),
+            size: std::mem::size_of::<Globals>() as u64,
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
         });
+        let overlay_bind_group = bind(&overlay_globals);
         let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("ferro layout"),
             bind_group_layouts: &[Some(&bgl)],
@@ -181,6 +202,8 @@ impl Renderer {
             ),
             globals,
             bind_group,
+            overlay_globals,
+            overlay_bind_group,
             scene_version: None,
             scene_tris: None,
             scene_lines: None,
@@ -262,8 +285,17 @@ impl Renderer {
             view_proj: f.view_proj.to_cols_array_2d(),
             light_dir: [0.35, -0.55, 0.75, 0.0],
             eye: [f.eye[0], f.eye[1], f.eye[2], 1.0],
+            // n = 0, offset 1: nothing is cut.
+            clip: f.clip.unwrap_or([0.0, 0.0, 0.0, 1.0]),
+            style: [if f.hidden_line { 1.0 } else { 0.0 }, 0.0, 0.0, 0.0],
         };
         queue.write_buffer(&self.globals, 0, bytemuck::bytes_of(&g));
+        let og = Globals {
+            clip: [0.0, 0.0, 0.0, 1.0],
+            style: [0.0; 4],
+            ..g
+        };
+        queue.write_buffer(&self.overlay_globals, 0, bytemuck::bytes_of(&og));
 
         let t = self.targets.as_ref().expect("ensured");
         let mut enc = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
@@ -308,13 +340,19 @@ impl Renderer {
                 pass.set_vertex_buffer(0, buf.slice(..));
                 pass.draw(0..*n, 0..1);
             }
+            pass.set_pipeline(&self.line_pipeline);
+            if let Some((buf, n)) = &self.scene_lines {
+                pass.set_vertex_buffer(0, buf.slice(..));
+                pass.draw(0..*n, 0..1);
+            }
+            pass.set_bind_group(0, &self.overlay_bind_group, &[]);
             pass.set_pipeline(&self.mesh_pipeline);
             if let Some((buf, n)) = &overlay_tris {
                 pass.set_vertex_buffer(0, buf.slice(..));
                 pass.draw(0..*n, 0..1);
             }
             pass.set_pipeline(&self.line_pipeline);
-            for (buf, n) in [&self.scene_lines, &overlay_lines].into_iter().flatten() {
+            if let Some((buf, n)) = &overlay_lines {
                 pass.set_vertex_buffer(0, buf.slice(..));
                 pass.draw(0..*n, 0..1);
             }

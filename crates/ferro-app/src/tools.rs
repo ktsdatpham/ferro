@@ -33,6 +33,7 @@ pub enum ToolKind {
     Eraser,
     Paint,
     Tape,
+    Section,
     Wall,
     Floor,
     Door,
@@ -40,7 +41,7 @@ pub enum ToolKind {
 }
 
 impl ToolKind {
-    pub const ALL: [ToolKind; 18] = [
+    pub const ALL: [ToolKind; 19] = [
         ToolKind::Select,
         ToolKind::Line,
         ToolKind::Rectangle,
@@ -55,6 +56,7 @@ impl ToolKind {
         ToolKind::Eraser,
         ToolKind::Paint,
         ToolKind::Tape,
+        ToolKind::Section,
         ToolKind::Wall,
         ToolKind::Floor,
         ToolKind::Door,
@@ -81,6 +83,7 @@ impl ToolKind {
             ToolKind::Circle => "Circle",
             ToolKind::Arc => "Arc",
             ToolKind::Tape => "Tape Measure",
+            ToolKind::Section => "Section Plane",
             ToolKind::Polygon => "Polygon",
             ToolKind::PushPull => "Push/Pull",
             ToolKind::Offset => "Offset",
@@ -104,6 +107,7 @@ impl ToolKind {
             ToolKind::Circle => "C",
             ToolKind::Arc => "A",
             ToolKind::Tape => "T",
+            ToolKind::Section => "J",
             ToolKind::Polygon => "G",
             ToolKind::PushPull => "P",
             ToolKind::Offset => "F",
@@ -183,8 +187,32 @@ pub enum ToolEvent {
     None,
     /// Show a message (measurements).
     Message(String),
+    /// Cut the view with a section plane: geometry on the side `normal`
+    /// points to is not drawn (view state, not a document change).
+    Section(SectionPlane),
     Commit(AnyCommand),
     Select(SelectOp),
+}
+
+/// A section plane: a point on it and the normal of the side cut away.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct SectionPlane {
+    pub point: Point3,
+    pub normal: UnitVec3,
+}
+
+/// Parameter along the line `start + t·dir` of the point closest to `ray`.
+/// `None` when the ray runs along the line.
+fn line_param(start: Point3, dir: UnitVec3, ray: &Ray) -> Option<f64> {
+    let u = dir.as_vec();
+    let r = ray.dir.as_vec();
+    let w = ray.origin - start;
+    let (ur, rr, uw, rw) = (u.dot(r), r.dot(r), u.dot(w), r.dot(w));
+    let den = rr - ur * ur;
+    if den.abs() < 1e-9 {
+        return None;
+    }
+    Some((rr * uw - ur * rw) / den)
 }
 
 /// A plane to draw on, with an in-plane frame.
@@ -296,6 +324,8 @@ pub struct ToolState {
     arc: Vec<Point3>,
     /// Tape measure start.
     tape: Option<Point3>,
+    /// Section Plane: the clicked face (point and outward normal).
+    section: Option<SectionPlane>,
 }
 
 fn is_point_snap(k: SnapKind) -> bool {
@@ -476,6 +506,7 @@ impl ToolState {
             geom: None,
             arc: Vec::new(),
             tape: None,
+            section: None,
         }
     }
 
@@ -484,6 +515,7 @@ impl ToolState {
             || self.circle_center.is_some()
             || !self.arc.is_empty()
             || self.tape.is_some()
+            || self.section.is_some()
             || !self.poly.is_empty()
             || self.drag.is_some()
             || self.offset.is_some()
@@ -632,15 +664,18 @@ impl ToolState {
     fn pp_distance(&self, ctx: &ToolCtx) -> Option<f64> {
         let d = self.drag.as_ref()?;
         // Closest point on the normal line through `start` to the cursor ray.
-        let u = d.normal.as_vec();
-        let r = ctx.ray.dir.as_vec();
-        let w = ctx.ray.origin - d.start;
-        let (ur, rr, uw, rw) = (u.dot(r), r.dot(r), u.dot(w), r.dot(w));
-        let den = rr - ur * ur;
-        if den.abs() < 1e-9 {
-            return None;
-        }
-        Some((rr * uw - ur * rw) / den)
+        line_param(d.start, d.normal, &ctx.ray)
+    }
+
+    /// Section being placed: the clicked face's plane moved to the cursor
+    /// along its normal (the outside of the face is cut away).
+    pub fn section_preview(&self, ctx: &ToolCtx) -> Option<SectionPlane> {
+        let s = self.section?;
+        let t = line_param(s.point, s.normal, &ctx.ray)?;
+        Some(SectionPlane {
+            point: s.point + s.normal.as_vec() * t,
+            normal: s.normal,
+        })
     }
 
     fn move_target(&self, ctx: &ToolCtx) -> Option<Point3> {
@@ -909,6 +944,11 @@ impl ToolState {
                 Some(m(ctx.snap?.point.distance_to(a)))
             })()
             .unwrap_or_default(),
+            ToolKind::Section => (|| {
+                let s = self.section?;
+                Some(m(-line_param(s.point, s.normal, &ctx.ray)?))
+            })()
+            .unwrap_or_default(),
             ToolKind::Circle => (|| {
                 let p = on_plane(ctx, &self.plane?)?;
                 Some(m(p.distance_to(self.circle_center?)))
@@ -948,6 +988,7 @@ impl ToolState {
             ToolKind::Rectangle => "Dimensions",
             ToolKind::Circle => "Radius",
             ToolKind::Tape => "Length",
+            ToolKind::Section => "Depth",
             k if k.is_chain() => "Length",
             ToolKind::PushPull | ToolKind::Move | ToolKind::Offset => "Distance",
             ToolKind::Rotate => "Angle",
@@ -958,7 +999,7 @@ impl ToolState {
 
     pub fn hint(&self) -> &'static str {
         match self.kind {
-            ToolKind::Select => "Click to select. Drag left→right for a window, right→left for a crossing. Shift adds / removes.",
+            ToolKind::Select => "Click to select. Drag left to right for a window, right to left for a crossing. Shift adds / removes.",
             ToolKind::Line if self.poly.is_empty() => "Click the start point. Start on a face to split it.",
             ToolKind::Line => "Click the next point or type a length. Ending on the face's edge splits it; click the first point to close.",
             ToolKind::Rectangle if self.rect_first.is_none() => "Click the first corner (on a face to draw on it).",
@@ -983,6 +1024,8 @@ impl ToolState {
             ToolKind::Arc if self.arc.is_empty() => "Click the start of the arc (on a face's edge to round a corner).",
             ToolKind::Arc if self.arc.len() == 1 => "Click the end of the arc.",
             ToolKind::Arc => "Move to set the bulge and click.",
+            ToolKind::Section if self.section.is_none() => "Click a face: the section plane starts on it and cuts away what is in front.",
+            ToolKind::Section => "Move into the model and click, or type the depth behind the face.",
             ToolKind::Tape if self.tape.is_none() => "Click the first point to measure from.",
             ToolKind::Tape => "Click the second point: the distance shows in the status bar.",
             ToolKind::Paint => "Click an element to paint it with the current material (pick one in the Materials panel).",
@@ -1042,6 +1085,24 @@ impl ToolState {
                     .into(),
                 ),
                 _ => ToolEvent::None,
+            },
+            ToolKind::Section => match self.section {
+                None => {
+                    if let (SnapKind::OnFace, Some(normal)) = (s.kind, s.normal) {
+                        self.section = Some(SectionPlane {
+                            point: s.point,
+                            normal,
+                        });
+                    }
+                    ToolEvent::None
+                }
+                Some(_) => match self.section_preview(ctx) {
+                    Some(p) => {
+                        self.section = None;
+                        ToolEvent::Section(p)
+                    }
+                    None => ToolEvent::None,
+                },
             },
             ToolKind::Tape => match self.tape {
                 None => {
@@ -1499,6 +1560,13 @@ impl ToolState {
                     .ok_or("move the cursor to set a direction")?;
                 self.poly.push(last + dir * vals[0]);
                 Ok(ToolEvent::None)
+            }
+            ToolKind::Section => {
+                let s = self.section.take().ok_or("click a face first")?;
+                Ok(ToolEvent::Section(SectionPlane {
+                    point: s.point - s.normal.as_vec() * vals[0],
+                    normal: s.normal,
+                }))
             }
             ToolKind::PushPull => {
                 let d = self.drag.take().ok_or("click a face first")?;

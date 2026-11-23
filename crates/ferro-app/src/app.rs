@@ -6,7 +6,9 @@ use crate::camera::{FrameCamera, OrbitCamera};
 use crate::link::{self, LinkServer};
 use crate::render::{FrameData, Renderer, Vertex};
 use crate::scene::{self, line_vertex, SceneCache};
-use crate::tools::{pick_sub, SelectOp, SubPick, ToolCtx, ToolEvent, ToolKind, ToolState};
+use crate::tools::{
+    pick_sub, SectionPlane, SelectOp, SubPick, ToolCtx, ToolEvent, ToolKind, ToolState,
+};
 use eframe::egui::{self, Color32, Key, PointerButton, Pos2, Rect, RichText, Sense, Vec2};
 use eframe::wgpu;
 use ferro_core::model::{keys, Category, ElementBody};
@@ -146,6 +148,10 @@ pub struct FerroApp {
     hidden_tags: HashSet<String>,
     /// Tag name typed in the Tags panel.
     new_tag: String,
+    /// Section plane cutting the view (view state, not saved).
+    section: Option<SectionPlane>,
+    /// Hidden line style: white faces, black edges.
+    hidden_line: bool,
     /// Form being edited (double-click, SketchUp group editing).
     editing: Option<ElementId>,
     /// Faces / edges / vertices picked inside it.
@@ -209,6 +215,8 @@ impl FerroApp {
             hidden: HashSet::new(),
             hidden_tags: HashSet::new(),
             new_tag: String::new(),
+            section: None,
+            hidden_line: false,
             editing: None,
             sub_sel: Vec::new(),
             axis_lock: None,
@@ -364,6 +372,22 @@ impl FerroApp {
             }
         }
         h
+    }
+
+    fn set_section(&mut self, p: Option<SectionPlane>) {
+        self.section = p;
+        if p.is_some() {
+            self.say("Section plane set. View > Clear section removes it.", false);
+        }
+    }
+
+    /// Horizontal plan cut 1.2 m above the active level, looking down.
+    fn plan_section(&mut self) {
+        let z = self.level_info().map(|l| l.1).unwrap_or(0.0) + 1200.0;
+        self.set_section(Some(SectionPlane {
+            point: Point3::new(self.camera.target.x, self.camera.target.y, z),
+            normal: ferro_core::UnitVec3::Z,
+        }));
     }
 
     fn hide_selection(&mut self) {
@@ -889,6 +913,7 @@ impl FerroApp {
                 (Key::C, ToolKind::Circle),
                 (Key::A, ToolKind::Arc),
                 (Key::T, ToolKind::Tape),
+                (Key::J, ToolKind::Section),
                 (Key::G, ToolKind::Polygon),
                 (Key::P, ToolKind::PushPull),
                 (Key::F, ToolKind::Offset),
@@ -1035,6 +1060,26 @@ impl FerroApp {
                 ui.checkbox(&mut self.camera.parallel, "Parallel projection");
                 ui.checkbox(&mut self.scene.xray, "X-ray");
                 ui.checkbox(&mut self.scene.wireframe, "Wireframe");
+                ui.checkbox(&mut self.hidden_line, "Hidden line");
+                ui.separator();
+                if ui.button("Plan section (1.2 m above level)").clicked() {
+                    self.plan_section();
+                    ui.close();
+                }
+                if ui
+                    .add_enabled(self.section.is_some(), egui::Button::new("Flip section"))
+                    .clicked()
+                {
+                    if let Some(p) = &mut self.section {
+                        p.normal = -p.normal;
+                    }
+                }
+                if ui
+                    .add_enabled(self.section.is_some(), egui::Button::new("Clear section"))
+                    .clicked()
+                {
+                    self.section = None;
+                }
             });
             ui.menu_button("AI", |ui| {
                 if ui.button("AI chat…").clicked() {
@@ -1517,6 +1562,7 @@ impl FerroApp {
             Ok(ToolEvent::Commit(c)) => {
                 self.run(c);
             }
+            Ok(ToolEvent::Section(p)) => self.set_section(Some(p)),
             Ok(_) => {}
             Err(e) => self.say(e, true),
         }
@@ -1755,7 +1801,7 @@ impl FerroApp {
         let mut event = ToolEvent::None;
         let (mut enter_edit, mut exit_edit) = (None, false);
         let (mut sub_set, mut sub_toggle) = (None, None);
-        let (preview_cmd, hover_face, rubber) = {
+        let (preview_cmd, hover_face, rubber, section_live) = {
             let tctx = ToolCtx {
                 doc: self.session.doc(),
                 snap: snap_res,
@@ -1801,6 +1847,7 @@ impl FerroApp {
                 self.tool.preview(&tctx),
                 self.tool.hover_face(&tctx),
                 self.tool.rubber_band(&tctx),
+                self.tool.section_preview(&tctx),
             )
         };
         if self.tool.is_active() && self.vcb.is_empty() {
@@ -1849,6 +1896,7 @@ impl FerroApp {
                 SelectOp::Clear => self.selection.clear(),
             },
             ToolEvent::Message(m) => self.say(m, false),
+            ToolEvent::Section(p) => self.set_section(Some(p)),
             ToolEvent::None => {}
         }
 
@@ -1861,6 +1909,8 @@ impl FerroApp {
                 Err(f) => preview_err = Some(failure_text(&f)),
             }
         }
+        self.scene.section = section_live.or(self.section).map(|p| (p.point, p.normal));
+        self.scene.hidden_line = self.hidden_line;
         self.scene.update(&display, origin, &self.selection);
 
         // Overlays: hovered face, rubber band, snap marker, grid.
@@ -1874,14 +1924,15 @@ impl FerroApp {
             .normalize()
             .map(|u| u.as_vec())
             .unwrap_or(ferro_core::Vec3::Y);
-        let mut olines: Vec<Vertex> = scene::grid_lines(
+        let mut olines: Vec<Vertex> = self.scene.cut.clone();
+        olines.extend(scene::grid_lines(
             origin,
             self.camera.target,
             (self.camera.distance * 1.2).clamp(10_000.0, 500_000.0),
             eye,
             forward,
             (self.camera.distance * 0.01).max(50.0),
-        );
+        ));
         if let Some((e, f)) = hover_face {
             if let Some(m) = self.scene.mesh(e) {
                 for t in scene::face_triangles(m, f) {
@@ -1961,6 +2012,11 @@ impl FerroApp {
                     scene_lines: &self.scene.lines,
                     overlay_tris: &otris,
                     xray: self.scene.xray,
+                    clip: self.scene.section.map(|(p, n)| {
+                        let n = n.as_vec();
+                        [n.x as f32, n.y as f32, n.z as f32, n.dot(p - origin) as f32]
+                    }),
+                    hidden_line: self.hidden_line,
                     overlay_lines: &olines,
                     clear: [0.93, 0.94, 0.96],
                 },
