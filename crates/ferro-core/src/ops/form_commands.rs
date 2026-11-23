@@ -458,6 +458,39 @@ impl Command for EraseEdges {
     }
 }
 
+/// Erase faces of a Form (the Form becomes open, like deleting a face in
+/// SketchUp). Erasing every face deletes the Form.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct EraseFaces {
+    pub element: ElementId,
+    pub faces: Vec<FaceId>,
+}
+
+impl Command for EraseFaces {
+    const NAME: &'static str = "erase_faces";
+    fn execute(&self, tx: &mut Transaction) -> Result<CommandOutput, CommandError> {
+        let mut body = form_body(tx, self.element)?;
+        for f in &self.faces {
+            body.face(*f)
+                .map_err(|e| CommandError::from(e).on(self.element))?;
+        }
+        let specs: Vec<FaceSpec> = body
+            .face_specs()
+            .into_iter()
+            .filter(|s| s.id.is_none_or(|id| !self.faces.contains(&id)))
+            .collect();
+        if specs.is_empty() {
+            tx.delete(self.element)?;
+            return Ok(json!({"element": self.element, "deleted": true}));
+        }
+        let verts = body.vertex_map();
+        body.rebuild(verts, specs)
+            .map_err(|e| CommandError::from(e).on(self.element))?;
+        store(tx, self.element, body)?;
+        Ok(json!({"element": self.element, "erased": self.faces.len()}))
+    }
+}
+
 fn same_plane(body: &Body, a: &FaceSpec, b: &FaceSpec) -> bool {
     let pa: Vec<Point3> = a.outer.iter().filter_map(|v| body.point(*v)).collect();
     let pb: Vec<Point3> = b.outer.iter().filter_map(|v| body.point(*v)).collect();

@@ -636,6 +636,7 @@ any_command!(
     MoveGeometry,
     ScaleElements,
     EraseEdges,
+    EraseFaces,
 );
 
 impl AnyCommand {

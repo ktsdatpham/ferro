@@ -12,7 +12,7 @@ use ferro_core::model::{keys, Document, ElementId, ParamValue};
 use ferro_core::ops::bim_commands::*;
 use ferro_core::ops::commands::*;
 use ferro_core::ops::form_commands::*;
-use ferro_core::topo::FaceId;
+use ferro_core::topo::{EdgeId, FaceId, VertexId};
 use ferro_core::{Angle, AnyCommand, Length, Point2, Point3, UnitVec3, Vec3};
 use ferro_snap::{Ray, SnapKind, SnapResult};
 use std::collections::HashSet;
@@ -129,6 +129,40 @@ pub struct ToolCtx<'a> {
     pub near_first_px: Option<f32>,
     /// Material the Paint tool applies.
     pub material: Option<ElementId>,
+    /// The Form being edited (double-clicked), and its picked parts.
+    pub editing: Option<ElementId>,
+    pub sub: &'a [SubPick],
+}
+
+/// Part of a Form picked while editing it (SketchUp group editing).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum SubPick {
+    Face(FaceId),
+    Edge(EdgeId),
+    Vertex(VertexId),
+}
+
+/// The vertex, edge or face of `element` under the snap.
+pub fn pick_sub(doc: &Document, element: ElementId, s: &SnapResult) -> Option<SubPick> {
+    if s.element != Some(element) {
+        return None;
+    }
+    let body = doc.get(element)?.geometry()?;
+    match s.kind {
+        SnapKind::Endpoint => body
+            .vertices()
+            .find(|(_, p)| p.distance_to(s.point) <= 0.5)
+            .map(|(v, _)| SubPick::Vertex(v)),
+        SnapKind::OnEdge | SnapKind::Midpoint => body
+            .edges()
+            .find(|(_, a, b)| {
+                let ab = *b - *a;
+                let t = ((s.point - *a).dot(ab) / ab.length_squared().max(1e-12)).clamp(0.0, 1.0);
+                (*a + ab * t).distance_to(s.point) <= 0.5
+            })
+            .map(|(e, _, _)| SubPick::Edge(e)),
+        _ => s.face.map(SubPick::Face),
+    }
 }
 
 pub enum SelectOp {
@@ -246,6 +280,8 @@ pub struct ToolState {
     /// The chain started on an edge or corner of this Form: its plane is
     /// decided by the second point.
     pending_face_of: Option<ElementId>,
+    /// Move of parts of a Form (stretch) instead of whole elements.
+    geom: Option<(ElementId, Vec<SubPick>)>,
 }
 
 fn is_point_snap(k: SnapKind) -> bool {
@@ -376,6 +412,7 @@ impl ToolState {
             last_push: None,
             paste: false,
             pending_face_of: None,
+            geom: None,
         }
     }
 
@@ -542,6 +579,23 @@ impl ToolState {
     }
 
     fn move_cmd(&self, ctx: &ToolCtx, v: Vec3) -> AnyCommand {
+        if let Some((element, parts)) = &self.geom {
+            let mut cmd = MoveGeometry {
+                element: *element,
+                vertices: vec![],
+                edges: vec![],
+                faces: vec![],
+                vector: v,
+            };
+            for p in parts {
+                match p {
+                    SubPick::Vertex(x) => cmd.vertices.push(*x),
+                    SubPick::Edge(x) => cmd.edges.push(*x),
+                    SubPick::Face(x) => cmd.faces.push(*x),
+                }
+            }
+            return cmd.into();
+        }
         if ctx.copy || self.paste {
             CopyElements {
                 elements: self.move_elems.clone(),
@@ -1014,6 +1068,20 @@ impl ToolState {
                 },
             },
             ToolKind::Move => match self.move_base {
+                None if ctx.editing.is_some() => {
+                    let e = ctx.editing.expect("editing");
+                    let parts: Vec<SubPick> = if ctx.sub.is_empty() {
+                        pick_sub(ctx.doc, e, &s).into_iter().collect()
+                    } else {
+                        ctx.sub.to_vec()
+                    };
+                    if parts.is_empty() {
+                        return ToolEvent::None;
+                    }
+                    self.geom = Some((e, parts));
+                    self.move_base = Some(s.point);
+                    ToolEvent::None
+                }
                 None => {
                     let elems = self.targets(ctx, &s, false);
                     if elems.is_empty() {
@@ -1027,6 +1095,7 @@ impl ToolState {
                     Some(c) => {
                         self.move_base = None;
                         self.paste = false;
+                        self.geom = None;
                         ToolEvent::Commit(c)
                     }
                     None => ToolEvent::None,
@@ -1287,8 +1356,10 @@ impl ToolState {
                 let dir = (t - base)
                     .normalize()
                     .ok_or("move the cursor to set a direction")?;
+                let cmd = self.move_cmd(ctx, dir * vals[0]);
                 self.move_base = None;
-                Ok(ToolEvent::Commit(self.move_cmd(ctx, dir * vals[0])))
+                self.geom = None;
+                Ok(ToolEvent::Commit(cmd))
             }
             _ => Ok(ToolEvent::None),
         }

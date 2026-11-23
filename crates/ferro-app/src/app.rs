@@ -6,7 +6,7 @@ use crate::camera::{FrameCamera, OrbitCamera};
 use crate::link::{self, LinkServer};
 use crate::render::{FrameData, Renderer, Vertex};
 use crate::scene::{self, line_vertex, SceneCache};
-use crate::tools::{SelectOp, ToolCtx, ToolEvent, ToolKind, ToolState};
+use crate::tools::{pick_sub, SelectOp, SubPick, ToolCtx, ToolEvent, ToolKind, ToolState};
 use eframe::egui::{self, Color32, Key, PointerButton, Pos2, Rect, RichText, Sense, Vec2};
 use eframe::wgpu;
 use ferro_core::model::{keys, Category, ElementBody};
@@ -140,6 +140,10 @@ pub struct FerroApp {
     last_copy: Option<CopyElements>,
     /// Screen position where a selection window drag started.
     select_drag: Option<Pos2>,
+    /// Form being edited (double-click, SketchUp group editing).
+    editing: Option<ElementId>,
+    /// Faces / edges / vertices picked inside it.
+    sub_sel: Vec<SubPick>,
     /// Axis locked with the arrow keys (→ red X, ← green Y, ↑ blue Z).
     axis_lock: Option<ferro_snap::Axis>,
     /// Axis locked while Shift is held over an axis inference.
@@ -193,6 +197,8 @@ impl FerroApp {
             clipboard: Vec::new(),
             last_copy: None,
             select_drag: None,
+            editing: None,
+            sub_sel: Vec::new(),
             axis_lock: None,
             shift_lock: None,
             autonomy: Autonomy::Propose,
@@ -241,6 +247,7 @@ impl FerroApp {
         if self.proposal.is_some() {
             self.accept_proposal();
         }
+        self.sub_sel.clear();
         self.last_copy = match &cmd {
             AnyCommand::CopyElements(c) => Some(c.clone()),
             _ => None,
@@ -318,6 +325,33 @@ impl FerroApp {
     }
 
     fn delete_selection(&mut self) {
+        if let (Some(e), false) = (self.editing, self.sub_sel.is_empty()) {
+            let edges: Vec<_> = self
+                .sub_sel
+                .iter()
+                .filter_map(|p| match p {
+                    SubPick::Edge(x) => Some(*x),
+                    _ => None,
+                })
+                .collect();
+            let faces: Vec<_> = self
+                .sub_sel
+                .iter()
+                .filter_map(|p| match p {
+                    SubPick::Face(x) => Some(*x),
+                    _ => None,
+                })
+                .collect();
+            if !edges.is_empty() {
+                self.run(ferro_core::ops::form_commands::EraseEdges { element: e, edges }.into());
+            } else if !faces.is_empty() {
+                self.run(ferro_core::ops::form_commands::EraseFaces { element: e, faces }.into());
+            }
+            if !self.session.doc().contains(e) {
+                self.editing = None;
+            }
+            return;
+        }
         if self.selection.is_empty() {
             return;
         }
@@ -672,6 +706,12 @@ impl FerroApp {
             if self.tool.is_active() || !self.vcb.is_empty() {
                 self.tool.cancel();
                 self.vcb.clear();
+            } else if self.editing.is_some() {
+                if self.sub_sel.is_empty() {
+                    self.editing = None;
+                } else {
+                    self.sub_sel.clear();
+                }
             } else {
                 self.selection.clear();
             }
@@ -1287,6 +1327,8 @@ impl FerroApp {
                 copy: false,
                 near_first_px: None,
                 material: self.material,
+                editing: self.editing,
+                sub: &self.sub_sel,
             };
             self.tool.typed(&text, &ctx)
         };
@@ -1503,6 +1545,8 @@ impl FerroApp {
         let shift = ctx.input(|i| i.modifiers.shift);
         let copy = ctx.input(|i| i.modifiers.ctrl || i.modifiers.mac_cmd);
         let mut event = ToolEvent::None;
+        let (mut enter_edit, mut exit_edit) = (None, false);
+        let (mut sub_set, mut sub_toggle) = (None, None);
         let (preview_cmd, hover_face, rubber) = {
             let tctx = ToolCtx {
                 doc: self.session.doc(),
@@ -1513,9 +1557,32 @@ impl FerroApp {
                 copy,
                 near_first_px: near_first,
                 material: self.material,
+                editing: self.editing,
+                sub: &self.sub_sel,
             };
-            if resp.double_clicked_by(PointerButton::Primary) {
+            let form_under = snap_res.and_then(|s| s.element).filter(|e| {
+                self.session
+                    .doc()
+                    .get(*e)
+                    .is_some_and(|x| x.as_form().is_some())
+            });
+            if self.tool.kind == ToolKind::Select && resp.double_clicked_by(PointerButton::Primary)
+            {
+                if let Some(e) = form_under {
+                    enter_edit = Some(e);
+                }
+            } else if resp.double_clicked_by(PointerButton::Primary) {
                 event = self.tool.double_click(&tctx);
+            } else if self.tool.kind == ToolKind::Select
+                && self.editing.is_some()
+                && resp.clicked_by(PointerButton::Primary)
+            {
+                let e = self.editing.expect("editing");
+                match snap_res.and_then(|s| pick_sub(self.session.doc(), e, &s)) {
+                    Some(p) if shift => sub_toggle = Some(p),
+                    Some(p) => sub_set = Some(p),
+                    None => exit_edit = true,
+                }
             } else if resp.clicked_by(PointerButton::Primary) && !ctx.input(|i| i.modifiers.alt) {
                 event = self.tool.click(&tctx, shift);
             }
@@ -1539,6 +1606,26 @@ impl FerroApp {
         }
         if !matches!(event, ToolEvent::None) || resp.clicked_by(PointerButton::Primary) {
             self.axis_lock = None;
+        }
+        if let Some(e) = enter_edit {
+            self.editing = Some(e);
+            self.sub_sel.clear();
+            self.selection.clear();
+            self.say("Editing the Form: click faces, edges or corners; Move stretches them; Esc to finish", false);
+        }
+        if exit_edit {
+            self.editing = None;
+            self.sub_sel.clear();
+        }
+        if let Some(p) = sub_set {
+            self.sub_sel = vec![p];
+        }
+        if let Some(p) = sub_toggle {
+            if let Some(i) = self.sub_sel.iter().position(|x| *x == p) {
+                self.sub_sel.remove(i);
+            } else {
+                self.sub_sel.push(p);
+            }
         }
         match event {
             ToolEvent::Commit(c) => {
@@ -1601,6 +1688,40 @@ impl FerroApp {
                             normal: [n.x as f32, n.y as f32, n.z as f32],
                             color: [0.20, 0.45, 0.95, 0.35],
                         });
+                    }
+                }
+            }
+        }
+        if let Some(e) = self.editing {
+            let sel = [0.18f32, 0.45, 0.95];
+            if let Some(g) = display.get(e).and_then(|x| x.geometry()) {
+                for p in &self.sub_sel {
+                    match p {
+                        SubPick::Face(f) => {
+                            if let Some(m) = self.scene.mesh(e) {
+                                for t in scene::face_triangles(m, *f) {
+                                    let n = (t[1] - t[0])
+                                        .cross(t[2] - t[0])
+                                        .normalize()
+                                        .map(|u| u.as_vec())
+                                        .unwrap_or_default();
+                                    for q in t {
+                                        otris.push(Vertex {
+                                            pos: rel(q + n * 2.0),
+                                            normal: [n.x as f32, n.y as f32, n.z as f32],
+                                            color: [sel[0], sel[1], sel[2], 0.45],
+                                        });
+                                    }
+                                }
+                            }
+                        }
+                        SubPick::Edge(x) => {
+                            if let Some((_, a, b)) = g.edges().find(|(id, _, _)| id == x) {
+                                olines.push(line_vertex(rel(a), [sel[0], sel[1], sel[2], 1.0]));
+                                olines.push(line_vertex(rel(b), [sel[0], sel[1], sel[2], 1.0]));
+                            }
+                        }
+                        SubPick::Vertex(_) => {}
                     }
                 }
             }
@@ -1749,6 +1870,8 @@ impl FerroApp {
                     copy,
                     near_first_px: near_first,
                     material: self.material,
+                    editing: self.editing,
+                    sub: &self.sub_sel,
                 };
                 self.tool.measurement(&tctx)
             };
@@ -1775,6 +1898,35 @@ impl FerroApp {
                 egui::FontId::proportional(13.0),
                 Color32::from_rgb(200, 40, 40),
             );
+        }
+        if let Some(e) = self.editing {
+            painter.text(
+                rect.left_top() + Vec2::new(10.0, 10.0),
+                egui::Align2::LEFT_TOP,
+                format!(
+                    "Editing {}  ·  Esc to finish",
+                    self.session
+                        .doc()
+                        .get(e)
+                        .map(|x| x.label())
+                        .unwrap_or_default()
+                ),
+                egui::FontId::proportional(13.0),
+                Color32::from_rgb(40, 90, 220),
+            );
+            if let Some(g) = self.session.doc().get(e).and_then(|x| x.geometry()) {
+                for p in &self.sub_sel {
+                    if let SubPick::Vertex(v) = p {
+                        if let Some(q) = g.point(*v).and_then(|q| fc.project(q)) {
+                            painter.circle_filled(
+                                Pos2::new(q[0], q[1]),
+                                4.0,
+                                Color32::from_rgb(40, 90, 220),
+                            );
+                        }
+                    }
+                }
+            }
         }
         // Axis gizmo label.
         painter.text(

@@ -234,3 +234,19 @@ fn scale_and_erase_edges() {
     assert_eq!(o.output["removed_faces"], 2);
     assert!(!body(&s, e).is_closed());
 }
+
+#[test]
+fn erase_faces_opens_the_form_then_deletes_it() {
+    let mut s = session();
+    let e = boxed(&mut s);
+    let top = face_towards(&body(&s, e), [0.0, 0.0, 1.0]);
+    run(&mut s, "erase_faces", json!({"element": e, "faces": [top]})).unwrap();
+    let b = body(&s, e);
+    assert_eq!(b.face_count(), 5);
+    assert!(!b.is_closed());
+    let all: Vec<FaceId> = b.face_ids().collect();
+    let o = run(&mut s, "erase_faces", json!({"element": e, "faces": all})).unwrap();
+    assert_eq!(o.output["deleted"], true);
+    assert!(s.doc().get(e).is_none());
+    assert!(run(&mut s, "erase_faces", json!({"element": e, "faces": [1]})).is_err());
+}

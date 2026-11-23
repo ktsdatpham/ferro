@@ -128,6 +128,8 @@ pub fn list() -> Vec<Value> {
             json!({"elements": ids("Form ids"), "center": point("Centre"), "factor": {"type":"number"}, "factors": {"type":"array","items":{"type":"number"},"minItems":3,"maxItems":3}}), &["elements", "center"]),
         tool("erase_edges", "Erase edges of a Form: an edge between faces in one plane merges them; other edges remove their faces.",
             json!({"element": id("Form id"), "edges": ids("Edge ids")}), &["element", "edges"]),
+        tool("erase_faces", "Erase faces of a Form (it becomes open); erasing all faces deletes it.",
+            json!({"element": id("Form id"), "faces": ids("Face ids")}), &["element", "faces"]),
         // App-only (needs the Ferro app open, through Ferro Link).
         tool("get_selection", "Elements the user has selected in the Ferro app, with their summaries. Use it for requests like \"make the selected wall taller\".", json!({}), &[]),
         tool("select_elements", "Select elements in the Ferro app so the user sees what you mean.", json!({"elements": ids("Element ids (empty clears)")}), &["elements"]),
