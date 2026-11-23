@@ -2305,6 +2305,157 @@
       "name": "erase_faces"
     },
     {
+      "description": "Create a construction phase (Revit Phase), appended at the end or inserted before `before`. Phases are ordered; elements are created / demolished in phases. Dates are YYYY-MM-DD. Returns {element, phases}.",
+      "inputSchema": {
+        "properties": {
+          "before": {
+            "description": "Optional phase to insert before",
+            "type": "integer"
+          },
+          "end_date": {
+            "description": "YYYY-MM-DD",
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "start_date": {
+            "description": "YYYY-MM-DD",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "type": "object"
+      },
+      "name": "create_phase"
+    },
+    {
+      "description": "Rename a phase, move it to `position` (0 = first) or change its dates (\"\" clears a date). Fails with ferro.model.invalid_phase_order if some element would be demolished before it is created.",
+      "inputSchema": {
+        "properties": {
+          "end_date": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "phase": {
+            "description": "Phase id",
+            "type": "integer"
+          },
+          "position": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "start_date": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "phase"
+        ],
+        "type": "object"
+      },
+      "name": "set_phase"
+    },
+    {
+      "description": "Delete a phase. A phase used by elements needs `merge_into`: the phase just before or after it, which its elements then use (Revit: combine with previous / next).",
+      "inputSchema": {
+        "properties": {
+          "merge_into": {
+            "description": "Neighbouring phase that takes over its elements",
+            "type": "integer"
+          },
+          "phase": {
+            "description": "Phase id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "phase"
+        ],
+        "type": "object"
+      },
+      "name": "delete_phase"
+    },
+    {
+      "description": "Set the phase elements are created in and / or demolished in (Revit Phase Created / Phase Demolished). Omit a field to keep it, null clears it. Demolished must be the same phase as created or later. Elements without a created phase count as existing in every phase.",
+      "inputSchema": {
+        "properties": {
+          "created": {
+            "description": "Phase id",
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "demolished": {
+            "description": "Phase id",
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "elements": {
+            "description": "Element ids (walls, floors, doors, windows, Forms)",
+            "items": {
+              "type": "integer"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "elements"
+        ],
+        "type": "object"
+      },
+      "name": "set_element_phase"
+    },
+    {
+      "description": "Simple renovation mode (ArchiCAD-like): mark elements existing, to be demolished, or new. Uses the first and last phase; creates \"Existing\" and \"New Construction\" if the project has fewer than two phases.",
+      "inputSchema": {
+        "properties": {
+          "elements": {
+            "description": "Element ids",
+            "items": {
+              "type": "integer"
+            },
+            "type": "array"
+          },
+          "status": {
+            "enum": [
+              "existing",
+              "demolish",
+              "new"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "elements",
+          "status"
+        ],
+        "type": "object"
+      },
+      "name": "set_renovation_status"
+    },
+    {
+      "description": "Quantities in the view of a phase, per category split by status (existing / new / demolished / temporary): count, volume (m³) and area (m²; floors plan area, walls gross length × height). The basis for demolition and new-build costs. `phase` defaults to the last phase.",
+      "inputSchema": {
+        "properties": {
+          "phase": {
+            "description": "Phase id (default: last phase)",
+            "type": "integer"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "name": "get_phase_quantities"
+    },
+    {
       "description": "Elements the user has selected in the Ferro app, with their summaries. Use it for requests like \"make the selected wall taller\".",
       "inputSchema": {
         "properties": {},

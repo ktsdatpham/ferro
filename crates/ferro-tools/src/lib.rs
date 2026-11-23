@@ -224,6 +224,19 @@ pub fn list() -> Vec<Value> {
             json!({"element": id("Form id"), "edges": ids("Edge ids")}), &["element", "edges"]),
         tool("erase_faces", "Erase faces of a Form (it becomes open); erasing all faces deletes it.",
             json!({"element": id("Form id"), "faces": ids("Face ids")}), &["element", "faces"]),
+        // Phases (ADR 0006).
+        tool("create_phase", "Create a construction phase (Revit Phase), appended at the end or inserted before `before`. Phases are ordered; elements are created / demolished in phases. Dates are YYYY-MM-DD. Returns {element, phases}.",
+            json!({"name": {"type":"string"}, "before": id("Optional phase to insert before"), "start_date": {"type":"string","description":"YYYY-MM-DD"}, "end_date": {"type":"string","description":"YYYY-MM-DD"}}), &["name"]),
+        tool("set_phase", "Rename a phase, move it to `position` (0 = first) or change its dates (\"\" clears a date). Fails with ferro.model.invalid_phase_order if some element would be demolished before it is created.",
+            json!({"phase": id("Phase id"), "name": {"type":"string"}, "position": {"type":"integer","minimum":0}, "start_date": {"type":"string"}, "end_date": {"type":"string"}}), &["phase"]),
+        tool("delete_phase", "Delete a phase. A phase used by elements needs `merge_into`: the phase just before or after it, which its elements then use (Revit: combine with previous / next).",
+            json!({"phase": id("Phase id"), "merge_into": id("Neighbouring phase that takes over its elements")}), &["phase"]),
+        tool("set_element_phase", "Set the phase elements are created in and / or demolished in (Revit Phase Created / Phase Demolished). Omit a field to keep it, null clears it. Demolished must be the same phase as created or later. Elements without a created phase count as existing in every phase.",
+            json!({"elements": ids("Element ids (walls, floors, doors, windows, Forms)"), "created": {"type":["integer","null"],"description":"Phase id"}, "demolished": {"type":["integer","null"],"description":"Phase id"}}), &["elements"]),
+        tool("set_renovation_status", "Simple renovation mode (ArchiCAD-like): mark elements existing, to be demolished, or new. Uses the first and last phase; creates \"Existing\" and \"New Construction\" if the project has fewer than two phases.",
+            json!({"elements": ids("Element ids"), "status": {"type":"string","enum":["existing","demolish","new"]}}), &["elements", "status"]),
+        tool("get_phase_quantities", "Quantities in the view of a phase, per category split by status (existing / new / demolished / temporary): count, volume (m³) and area (m²; floors plan area, walls gross length × height). The basis for demolition and new-build costs. `phase` defaults to the last phase.",
+            json!({"phase": id("Phase id (default: last phase)")}), &[]),
         // App-only (needs the Ferro app open, through Ferro Link).
         tool("get_selection", "Elements the user has selected in the Ferro app, with their summaries. Use it for requests like \"make the selected wall taller\".", json!({}), &[]),
         tool("select_elements", "Select elements in the Ferro app so the user sees what you mean.", json!({"elements": ids("Element ids (empty clears)")}), &["elements"]),
@@ -360,6 +373,10 @@ pub fn summary_of(doc: &Document, category: Option<&str>, only: Option<&[Element
             m.insert("name".into(), json!(e.name));
             m.insert("category".into(), json!(e.category));
             m.insert("level".into(), json!(e.level_id));
+            if e.phase_created.is_some() || e.phase_demolished.is_some() {
+                m.insert("phase_created".into(), json!(e.phase_created));
+                m.insert("phase_demolished".into(), json!(e.phase_demolished));
+            }
             match &e.body {
                 ElementBody::Level(l) => {
                     m.insert("elevation_mm".into(), json!(l.elevation.mm()));
@@ -413,6 +430,11 @@ pub fn summary_of(doc: &Document, category: Option<&str>, only: Option<&[Element
                     m.insert("outline_mm".into(), json!(f.outer));
                     m.insert("offset_mm".into(), json!(f.offset.mm()));
                     bim_dims(e, &mut m);
+                }
+                ElementBody::Phase(p) => {
+                    m.insert("order".into(), json!(doc.phase_index(e.id)));
+                    m.insert("start_date".into(), json!(p.start_date));
+                    m.insert("end_date".into(), json!(p.end_date));
                 }
                 ElementBody::Opening(o) => {
                     m.insert("host".into(), json!(e.host_id));
@@ -514,6 +536,40 @@ pub fn detail(doc: &Document, id: ElementId) -> Result<Value, String> {
     Ok(v)
 }
 
+/// `get_phase_quantities`: [`PhaseQuantities`] in m³ / m², keyed by category
+/// then status. `phase` defaults to the last phase.
+///
+/// [`PhaseQuantities`]: ferro_core::model::PhaseQuantities
+pub fn phase_quantities(doc: &Document, args: &Value) -> Result<Value, String> {
+    let phase = match args.get("phase").and_then(Value::as_u64) {
+        Some(p) => ElementId(p),
+        None => doc
+            .phases()
+            .last()
+            .map(|p| p.id)
+            .ok_or("the project has no phases yet")?,
+    };
+    let q = ferro_core::model::PhaseQuantities::from_document(doc, phase)
+        .ok_or_else(|| format!("{phase} is not a phase"))?;
+    let totals = |t: &ferro_core::model::phase_quantities::StatusTotals| {
+        json!({"count": t.count, "volume_m3": (t.volume_mm3 / 1e9 * 1000.0).round() / 1000.0, "area_m2": (t.area_mm2 / 1e6 * 1000.0).round() / 1000.0})
+    };
+    let mut cats = Map::new();
+    for (c, by) in &q.categories {
+        let mut m = Map::new();
+        for (st, t) in by {
+            m.insert(st.as_str().into(), totals(t));
+        }
+        cats.insert(c.to_string(), Value::Object(m));
+    }
+    let mut total = Map::new();
+    for st in ferro_core::model::PhaseStatus::ALL.iter().filter(|s| s.is_shown()) {
+        total.insert(st.as_str().into(), totals(&q.total(*st)));
+    }
+    let name = doc.get(phase).map(|e| e.label());
+    Ok(json!({"phase": phase, "phase_name": name, "categories": cats, "total": total}))
+}
+
 fn summary_one(e: &ferro_core::Element) -> Value {
     json!({"id": e.id, "uid": e.uid.to_string(), "name": e.name, "category": e.category, "level": e.level_id})
 }
@@ -572,6 +628,7 @@ pub fn call(
             Some(id) => detail(session.doc(), ElementId(id)).or_else(err),
             None => err("missing element".into()),
         },
+        "get_phase_quantities" => phase_quantities(session.doc(), args).or_else(err),
         "undo" => match session.undo() {
             Some(c) => Ok(json!({"changed": c})),
             None => err("nothing to undo".into()),
@@ -671,6 +728,53 @@ mod tests {
         call(s, &ExecContext::user(), name, &args)
             .expect("handled")
             .unwrap_or_else(|e| panic!("{name}: {e}"))
+    }
+
+    #[test]
+    fn phase_tools_have_schemas_and_quantities_in_metres() {
+        let tools = list();
+        for name in [
+            "create_phase",
+            "set_phase",
+            "delete_phase",
+            "set_element_phase",
+            "set_renovation_status",
+            "get_phase_quantities",
+        ] {
+            let t = tools.iter().find(|t| t["name"] == name).expect(name);
+            assert_eq!(t["inputSchema"]["type"], "object", "{name}");
+        }
+        let t = tools
+            .iter()
+            .find(|t| t["name"] == "set_renovation_status")
+            .unwrap();
+        assert_eq!(
+            t["inputSchema"]["properties"]["status"]["enum"],
+            json!(["existing", "demolish", "new"])
+        );
+        let mut s = session();
+        let r = call(&mut s, &ExecContext::user(), "get_phase_quantities", &json!({}))
+            .expect("handled")
+            .unwrap_err();
+        assert!(r["error"].as_str().unwrap().contains("no phases"), "{r}");
+        let b = ok(
+            &mut s,
+            "create_box",
+            json!({"origin": [0, 0, 0], "width": "1m", "depth": "2m", "height": "1m"}),
+        )["result"]["element"]
+            .as_u64()
+            .unwrap();
+        ok(
+            &mut s,
+            "set_renovation_status",
+            json!({"elements": [b], "status": "demolish"}),
+        );
+        let q = ok(&mut s, "get_phase_quantities", json!({}));
+        assert_eq!(q["phase_name"], "New Construction");
+        assert_eq!(q["categories"]["forms"]["demolished"]["volume_m3"], 2.0);
+        assert_eq!(q["total"]["demolished"]["count"], 1);
+        let d = detail(s.doc(), ElementId(b)).unwrap();
+        assert!(d["phase_demolished"].is_u64(), "{d}");
     }
 
     #[test]

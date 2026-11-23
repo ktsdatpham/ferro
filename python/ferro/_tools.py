@@ -1227,6 +1227,152 @@ def erase_faces(*, element: ElementId, faces: Sequence[int]) -> Dict[str, Any]:
     return _call("erase_faces", {"element": element, "faces": faces})
 
 
+def create_phase(
+    *,
+    name: str,
+    before: Optional[int] = None,
+    end_date: Optional[str] = None,
+    start_date: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Create a construction phase (Revit Phase), appended at the end or inserted before
+    `before`. Phases are ordered; elements are created / demolished in phases. Dates are
+    YYYY-MM-DD. Returns {element, phases}.
+
+    Args:
+        name: Text.
+        before: Optional phase to insert before. Optional.
+        end_date: YYYY-MM-DD. Optional.
+        start_date: YYYY-MM-DD. Optional.
+
+    Returns:
+        The tool's JSON body. Raises FerroError on failure.
+    """
+    args: Dict[str, Any] = {"name": name}
+    if before is not None:
+        args["before"] = before
+    if end_date is not None:
+        args["end_date"] = end_date
+    if start_date is not None:
+        args["start_date"] = start_date
+    return _call("create_phase", args)
+
+
+def set_phase(
+    *,
+    phase: ElementId,
+    end_date: Optional[str] = None,
+    name: Optional[str] = None,
+    position: Optional[int] = None,
+    start_date: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Rename a phase, move it to `position` (0 = first) or change its dates ("" clears
+    a date). Fails with ferro.model.invalid_phase_order if some element would be
+    demolished before it is created.
+
+    Args:
+        phase: Phase id.
+        end_date: Text. Optional.
+        name: Text. Optional.
+        position: minimum=0. Optional.
+        start_date: Text. Optional.
+
+    Returns:
+        The tool's JSON body. Raises FerroError on failure.
+    """
+    args: Dict[str, Any] = {"phase": phase}
+    if end_date is not None:
+        args["end_date"] = end_date
+    if name is not None:
+        args["name"] = name
+    if position is not None:
+        args["position"] = position
+    if start_date is not None:
+        args["start_date"] = start_date
+    return _call("set_phase", args)
+
+
+def delete_phase(*, phase: ElementId, merge_into: Optional[int] = None) -> Dict[str, Any]:
+    """Delete a phase. A phase used by elements needs `merge_into`: the phase just
+    before or after it, which its elements then use (Revit: combine with previous /
+    next).
+
+    Args:
+        phase: Phase id.
+        merge_into: Neighbouring phase that takes over its elements. Optional.
+
+    Returns:
+        The tool's JSON body. Raises FerroError on failure.
+    """
+    args: Dict[str, Any] = {"phase": phase}
+    if merge_into is not None:
+        args["merge_into"] = merge_into
+    return _call("delete_phase", args)
+
+
+def set_element_phase(
+    *,
+    elements: Sequence[ElementId],
+    created: Optional[ElementId] = None,
+    demolished: Optional[ElementId] = None,
+) -> Dict[str, Any]:
+    """Set the phase elements are created in and / or demolished in (Revit Phase Created
+    / Phase Demolished). Omit a field to keep it, null clears it. Demolished must be the
+    same phase as created or later. Elements without a created phase count as existing
+    in every phase.
+
+    Args:
+        elements: Element ids (walls, floors, doors, windows, Forms).
+        created: Phase id. Optional.
+        demolished: Phase id. Optional.
+
+    Returns:
+        The tool's JSON body. Raises FerroError on failure.
+    """
+    args: Dict[str, Any] = {"elements": elements}
+    if created is not None:
+        args["created"] = created
+    if demolished is not None:
+        args["demolished"] = demolished
+    return _call("set_element_phase", args)
+
+
+def set_renovation_status(
+    *,
+    elements: Sequence[ElementId],
+    status: Literal["existing", "demolish", "new"],
+) -> Dict[str, Any]:
+    """Simple renovation mode (ArchiCAD-like): mark elements existing, to be demolished,
+    or new. Uses the first and last phase; creates "Existing" and "New Construction" if
+    the project has fewer than two phases.
+
+    Args:
+        elements: Element ids.
+        status: One of: existing, demolish, new.
+
+    Returns:
+        The tool's JSON body. Raises FerroError on failure.
+    """
+    return _call("set_renovation_status", {"elements": elements, "status": status})
+
+
+def get_phase_quantities(*, phase: Optional[int] = None) -> Dict[str, Any]:
+    """Quantities in the view of a phase, per category split by status (existing / new /
+    demolished / temporary): count, volume (m³) and area (m²; floors plan area, walls
+    gross length × height). The basis for demolition and new-build costs. `phase`
+    defaults to the last phase.
+
+    Args:
+        phase: Phase id (default: last phase). Optional.
+
+    Returns:
+        The tool's JSON body. Raises FerroError on failure.
+    """
+    args: Dict[str, Any] = {}
+    if phase is not None:
+        args["phase"] = phase
+    return _call("get_phase_quantities", args)
+
+
 def get_selection() -> Dict[str, Any]:
     """Elements the user has selected in the Ferro app, with their summaries. Use it for
     requests like "make the selected wall taller".
@@ -1483,6 +1629,12 @@ TOOL_NAMES = (
     "scale_elements",
     "erase_edges",
     "erase_faces",
+    "create_phase",
+    "set_phase",
+    "delete_phase",
+    "set_element_phase",
+    "set_renovation_status",
+    "get_phase_quantities",
     "get_selection",
     "select_elements",
     "get_document_version",
