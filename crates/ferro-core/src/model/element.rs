@@ -48,6 +48,25 @@ pub enum ElementBody {
     Phase(super::phase::Phase),
 }
 
+impl ElementBody {
+    /// Stable name of the body kind, as written in files (the `kind` tag):
+    /// `level`, `form`, `material`, `wall_type`, `floor_type`, `wall`,
+    /// `floor`, `opening`, `phase`.
+    pub fn kind(&self) -> &'static str {
+        match self {
+            ElementBody::Level(_) => "level",
+            ElementBody::Form(_) => "form",
+            ElementBody::Material(_) => "material",
+            ElementBody::WallType(_) => "wall_type",
+            ElementBody::FloorType(_) => "floor_type",
+            ElementBody::Wall(_) => "wall",
+            ElementBody::Floor(_) => "floor",
+            ElementBody::Opening(_) => "opening",
+            ElementBody::Phase(_) => "phase",
+        }
+    }
+}
+
 /// Anything in the document with identity (Foundation Spec §3.2).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Element {

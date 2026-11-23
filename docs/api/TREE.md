@@ -648,6 +648,7 @@ The change format (M5-26, F10 of the foundation review, D-34, D-55, ADR 0006): e
 - struct `Form` — Free-form geometry edited directly (D-12, D-38). Geometry is stored in
 - enum `GeometrySource` — Where an element's geometry comes from (ADR 0004 §1). The geometric
 - enum `ElementBody` — Category-specific data of an element.
+- fn `ElementBody::kind` — Stable name of the body kind, as written in files (the `kind` tag):
 - struct `Element` — Anything in the document with identity (Foundation Spec §3.2).
 - fn `Element::as_form`
 - fn `Element::as_level`

@@ -154,8 +154,10 @@ Legend: `[ ]` open · `[~]` in progress · `[x]` done · `✓` verified ·
   - [x] M5-14.3 Ferro Link client and object layer (`connect`, `Document`, element wrappers, `transaction`), tests against a fake link server @agent-python
     - accept: `python3 -m unittest discover -s python/tests` passes (14 tests) on Python ≥ 3.9 with no third-party packages ✓ verified @lead (14 OK; also live: created 4 walls in the running app, read volumes, error code mapping)
   - [ ] M5-14.4 `run_python` MCP tool (waits for ADR 0005 approval)
-  - [ ] M5-14.5 Register the SDK's client error codes (`ferro.link.not_open`, `unreachable`, `invalid_token`, `timeout`, `protocol`, `ferro.tool.failed`) in the spec's failure-code list
-  - [ ] M5-14.6 `get_element` summary with a body kind field, so the SDK picks wrappers without guessing and `get(id)` needs one call
+  - [x] M5-14.5 Register the SDK's client error codes (`ferro.link.not_open`, `unreachable`, `invalid_token`, `timeout`, `protocol`, `ferro.tool.failed`) in the spec's failure-code list @lead
+    - accept: `docs/foundation/04-operations.md` §4.5 lists the six client codes, matching the constants in `python/ferro/link.py`
+  - [x] M5-14.6 `get_element` summary with a body kind field, so the SDK picks wrappers without guessing and `get(id)` needs one call @lead
+    - accept: `cargo test -p ferro-tools summaries_name_the_body_kind_and_missing_elements_have_a_code` (every `list_elements` / `get_element` row has `body` = the file tag from `ElementBody::kind`; a missing element fails with `ferro.model.not_found`); `python3 -m unittest discover -s python/tests` (14 OK: `get(id)` is one `get_element` call, wrapper from `body`, fallback to the summary shape for older apps)
 
 - [~] **M5-15 Scenario test audit** @agent-tests
   - [x] M5-15.1 Every command through `from_tool` + `execute`: basic, degenerate, missing / wrong-kind ids, tolerance edges, rollback with the documented code, bad JSON arguments; fixes: offset past the middle → `offset_too_large`, no edge below `SHORT_CURVE_TOL` from any Form command @agent-tests

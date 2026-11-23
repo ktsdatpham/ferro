@@ -265,8 +265,17 @@ class Material(Element):
     """A material."""
 
 
+_BY_BODY: Dict[str, Type[Element]] = {}
+
+
 def _wrapper_for(data: Dict[str, Any]) -> Type[Element]:
-    # Chosen from the summary shape list_elements returns per element body.
+    # Ferro names the body kind ("wall", "floor_type", ...); older apps did
+    # not, so fall back to the summary shape.
+    by_body = _BY_BODY.get(str(data.get("body", "")))
+    if by_body is not None:
+        return by_body
+    if "body" in data:
+        return Element
     cat = data.get("category")
     if "curve" in data:
         return Wall
@@ -281,6 +290,17 @@ def _wrapper_for(data: Dict[str, Any]) -> Type[Element]:
     if cat == "materials":
         return Material
     return Element
+
+
+_BY_BODY.update({
+    "wall": Wall,
+    "floor": Floor,
+    "opening": Opening,
+    "wall_type": WallType,
+    "floor_type": FloorType,
+    "level": Level,
+    "material": Material,
+})
 
 
 def _infer_type(value: Any) -> str:
@@ -431,12 +451,14 @@ class Document:
 
     # -- internals --------------------------------------------------------
     def _summary(self, id: int) -> Dict[str, Any]:
-        with _runtime.bound(self.link):
-            body = tools.list_elements()
-        for d in body.get("elements", []):
-            if d.get("id") == id:
-                return d
-        raise FerroError("ferro.model.not_found", f"element {id} not found")
+        """One call (``get_element``). Raises ``ferro.model.not_found``."""
+        try:
+            with _runtime.bound(self.link):
+                return tools.get_element(element=id)
+        except FerroError as e:
+            if e.code == "ferro.model.not_found" or "not found" in e.message:
+                raise FerroError("ferro.model.not_found", f"element {id} not found") from e
+            raise
 
     def _wrap(self, data: Dict[str, Any]) -> Element:
         return _wrapper_for(data)(self, data)

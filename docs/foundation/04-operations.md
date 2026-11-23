@@ -105,6 +105,20 @@ Rules:
    are for broken invariants only.
 2. Failure codes are stable and documented; agents rely on them.
 
+Client codes. Clients of Ferro Link (the Python SDK, ADR 0005) raise these
+when the problem is in reaching Ferro, not in a command. They are stable too:
+
+| Code | Meaning |
+|---|---|
+| `ferro.link.not_open` | No link file: the app is not running |
+| `ferro.link.unreachable` | The link file exists but nobody answers on its port |
+| `ferro.link.invalid_token` | The app refused the token |
+| `ferro.link.timeout` | No answer within the timeout |
+| `ferro.link.protocol` | The answer was not one JSON line `{ok, body}` |
+| `ferro.tool.failed` | The tool refused without a failure code of its own |
+
+`get_element` on a missing id fails with `ferro.model.not_found`.
+
 ## 4.6 Events
 
 After a successful commit the document emits:

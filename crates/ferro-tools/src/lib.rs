@@ -379,6 +379,7 @@ pub fn summary_of(doc: &Document, category: Option<&str>, only: Option<&[Element
             m.insert("uid".into(), json!(e.uid.to_string()));
             m.insert("name".into(), json!(e.name));
             m.insert("category".into(), json!(e.category));
+            m.insert("body".into(), json!(e.body.kind()));
             m.insert("level".into(), json!(e.level_id));
             if e.phase_created.is_some() || e.phase_demolished.is_some() {
                 m.insert("phase_created".into(), json!(e.phase_created));
@@ -593,7 +594,7 @@ pub fn phase_quantities(doc: &Document, args: &Value) -> Result<Value, String> {
 }
 
 fn summary_one(e: &ferro_core::Element) -> Value {
-    json!({"id": e.id, "uid": e.uid.to_string(), "name": e.name, "category": e.category, "level": e.level_id})
+    json!({"id": e.id, "uid": e.uid.to_string(), "name": e.name, "category": e.category, "body": e.body.kind(), "level": e.level_id})
 }
 
 fn round(x: f64) -> f64 {
@@ -647,7 +648,9 @@ pub fn call(
             args.get("category").and_then(Value::as_str),
         )),
         "get_element" => match args.get("element").and_then(Value::as_u64) {
-            Some(id) => detail(session.doc(), ElementId(id)).or_else(err),
+            Some(id) => detail(session.doc(), ElementId(id)).map_err(|m| {
+                json!({"error": m, "failures": [{"severity": "error", "code": "ferro.model.not_found", "message": m, "elements": [id]}]})
+            }),
             None => err("missing element".into()),
         },
         "get_phase_quantities" => phase_quantities(session.doc(), args).or_else(err),
@@ -751,6 +754,49 @@ mod tests {
         call(s, &ExecContext::user(), name, &args)
             .expect("handled")
             .unwrap_or_else(|e| panic!("{name}: {e}"))
+    }
+
+    #[test]
+    fn summaries_name_the_body_kind_and_missing_elements_have_a_code() {
+        let mut s = session();
+        ok(
+            &mut s,
+            "create_level",
+            json!({"name": "L1", "elevation": 0}),
+        );
+        ok(
+            &mut s,
+            "create_walls",
+            json!({"points": [[0, 0], ["4m", 0]]}),
+        );
+        ok(
+            &mut s,
+            "create_box",
+            json!({"origin": [0, "9m", 0], "width": "1m", "depth": "1m", "height": "1m"}),
+        );
+        let all = ok(&mut s, "list_elements", json!({}));
+        let kinds: std::collections::BTreeSet<&str> = all["elements"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|e| e["body"].as_str().expect("every row has a body kind"))
+            .collect();
+        for k in ["level", "wall", "wall_type", "form"] {
+            assert!(kinds.contains(k), "{k} in {kinds:?}");
+        }
+        for e in all["elements"].as_array().unwrap() {
+            let d = ok(&mut s, "get_element", json!({"element": e["id"]}));
+            assert_eq!(d["body"], e["body"]);
+        }
+        let r = call(
+            &mut s,
+            &ExecContext::user(),
+            "get_element",
+            &json!({"element": 999}),
+        )
+        .expect("handled")
+        .unwrap_err();
+        assert_eq!(r["failures"][0]["code"], "ferro.model.not_found");
     }
 
     #[test]

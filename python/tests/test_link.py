@@ -68,7 +68,9 @@ class FakeFerro:
                     if isinstance(a, tuple):
                         resp = {"ok": False, "body": a[1]}
                     elif callable(a):
-                        resp = {"ok": True, "body": a(req["args"])}
+                        b = a(req["args"])
+                        resp = ({"ok": False, "body": b[1]} if isinstance(b, tuple)
+                                else {"ok": True, "body": b})
                     elif "error" in a:
                         resp = {"ok": False, "body": a}
                     else:
@@ -166,7 +168,22 @@ class SdkTest(unittest.TestCase):
         self.assertEqual(walls[0].uid, "u3")
         self.assertEqual(f.requests[-1]["tool"], "list_elements")
         self.assertEqual(f.requests[-1]["args"], {"category": "walls"})
+        # get(id) is one get_element call; the body kind picks the wrapper,
+        # and rows without it (older apps) fall back to the summary shape.
+        rows = {2: {"id": 2, "uid": "u2", "category": "walls", "body": "wall_type", "layers": []},
+                4: {"id": 4, "uid": "u4", "category": "floors", "body": "floor_type"},
+                5: {"id": 5, "uid": "u5", "category": "forms", "body": "form"},
+                6: {"id": 6, "uid": "u6", "category": "walls", "thickness_mm": 200.0, "layers": []}}
+        missing = {"error": "element 99 not found", "failures": [{
+            "severity": "error", "code": "ferro.model.not_found",
+            "message": "element 99 not found", "elements": [99]}]}
+        f.answers["get_element"] = lambda args: rows.get(args["element"]) or ("error", missing)
+        n = len(f.requests)
         self.assertIsInstance(doc.get(2), ferro.WallType)
+        self.assertEqual([r["tool"] for r in f.requests[n:]], ["get_element"])
+        self.assertIsInstance(doc.get(4), ferro.FloorType, "no shape hint needed")
+        self.assertIs(type(doc.get(5)), ferro.Element)
+        self.assertIsInstance(doc.get(6), ferro.WallType, "fallback without body")
         with self.assertRaises(ferro.FerroError) as cm:
             doc.get(99)
         self.assertEqual(cm.exception.code, "ferro.model.not_found")
@@ -218,6 +235,9 @@ class SdkTest(unittest.TestCase):
             "list_elements": {"project": "T", "elements": [
                 {"id": 5, "uid": "u5", "category": "walls", "curve": {}},
                 {"id": 7, "uid": "u7", "category": "doors", "host": 5, "kind": "door"}]},
+            "get_element": lambda args: {
+                7: {"id": 7, "uid": "u7", "category": "doors", "body": "opening", "host": 5, "kind": "door"},
+            }.get(args["element"], {"id": args["element"]}),
             "create_opening": {"result": {"element": 7}},
             "set_parameter": {"changed": [5]},
             "set_name": {"changed": [5]},
