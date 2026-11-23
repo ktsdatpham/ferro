@@ -1,0 +1,4 @@
+# Generated files are compared byte for byte in tests and lints.
+python/ferro/tools.json text eol=lf
+python/ferro/_tools.py text eol=lf
+docs/api/TREE.md text eol=lf
