@@ -1,6 +1,6 @@
 # Kernel spike: truck, monstertruck, solidcore vs OCCT (M5-9.2)
 
-- **Status:** Evaluation report, 2026-11-24. The recommendation in §7 needs the owner's approval
+- **Status:** Evaluation report, 2026-11-24. Recommendation (a) approved by the owner the same day: ADR 0007
   (it amends D-30 / D-39 via ADR 0004 §4).
 - **Question:** which library should give Ferro curved surfaces (NURBS, fillets) and robust
   booleans, behind Ferro's own APIs, while `ferro-core` keeps building for

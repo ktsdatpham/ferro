@@ -1,8 +1,7 @@
 # 0005. Python SDK over the same API as MCP
 
-- **Status:** Proposed (2026-11-23). Part 1 (generated client) is within
-  D-44 / D-51 / D-65 and proceeds; part 2 (`run_python` in the app) waits for
-  the owner's approval because it embeds an interpreter.
+- **Status:** Accepted (2026-11-24, owner approval, both parts). Part 1
+  (generated client) is built; part 2 (`run_python`) is M5-14.4.
 - **Affects:** D-44, D-46, D-51, D-65; chapter 7
 
 ## Context
@@ -26,7 +25,7 @@ short script that calls the same tools does the job in one step.
 3. **Transport: Ferro Link** (ADR 0001) to the open app; changes become a
    Proposal (D-26) unless the user raised autonomy.
 4. Geometry queries can return numpy arrays when numpy is installed.
-5. **(Needs approval)** An MCP tool `run_python { code }` runs a script
+5. **(Approved 2026-11-24)** An MCP tool `run_python { code }` runs a script
    against the open document inside one transaction group: all or nothing,
    one Proposal, journal records the script (D-29). The interpreter runs out
    of process (a `python3` the user has, or a bundled one), talking Ferro
