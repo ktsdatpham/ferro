@@ -220,7 +220,11 @@ mod tests {
             (Some(2), Some(2), Future),
         ];
         for (c, d, want) in cases {
-            assert_eq!(phase_status(*c, *d, 1), *want, "created {c:?} demolished {d:?}");
+            assert_eq!(
+                phase_status(*c, *d, 1),
+                *want,
+                "created {c:?} demolished {d:?}"
+            );
         }
     }
 

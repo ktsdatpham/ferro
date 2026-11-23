@@ -72,7 +72,11 @@ fn new_documents_have_no_phases_until_the_simple_mode_is_used() {
 #[test]
 fn simple_mode_maps_to_the_first_and_last_phase() {
     let mut s = session();
-    let (a, b, c) = (cube(&mut s, 0.0), cube(&mut s, 2000.0), cube(&mut s, 4000.0));
+    let (a, b, c) = (
+        cube(&mut s, 0.0),
+        cube(&mut s, 2000.0),
+        cube(&mut s, 4000.0),
+    );
     for (e, st) in [(a, "existing"), (b, "demolish"), (c, "new")] {
         run(
             &mut s,
@@ -336,7 +340,11 @@ fn used_phases_are_deleted_only_by_merging_into_a_neighbour() {
         "ferro.model.not_a_phase",
     );
     let before = s.doc().clone();
-    run(&mut s, "delete_phase", json!({"phase": p2, "merge_into": p3}));
+    run(
+        &mut s,
+        "delete_phase",
+        json!({"phase": p2, "merge_into": p3}),
+    );
     let e = s.doc().get(a).unwrap();
     assert_eq!((e.phase_created, e.phase_demolished), (Some(p1), Some(p3)));
     assert_eq!(names(&s), ["1", "3"]);
@@ -345,7 +353,11 @@ fn used_phases_are_deleted_only_by_merging_into_a_neighbour() {
     assert_eq!(s.doc(), &before);
     // Merging the first into the second: created and demolished in one
     // phase (temporary).
-    run(&mut s, "delete_phase", json!({"phase": p1, "merge_into": p2}));
+    run(
+        &mut s,
+        "delete_phase",
+        json!({"phase": p1, "merge_into": p2}),
+    );
     let e = s.doc().get(a).unwrap();
     assert_eq!((e.phase_created, e.phase_demolished), (Some(p2), Some(p2)));
     // An unused phase is deleted plainly, also through delete_elements.
@@ -369,7 +381,11 @@ fn phases_cannot_be_moved_or_classified() {
 #[test]
 fn quantities_are_split_by_status() {
     let mut s = session();
-    let (a, b, c) = (cube(&mut s, 0.0), cube(&mut s, 2000.0), cube(&mut s, 4000.0));
+    let (a, b, c) = (
+        cube(&mut s, 0.0),
+        cube(&mut s, 2000.0),
+        cube(&mut s, 4000.0),
+    );
     let l = id(&run(
         &mut s,
         "create_level",
@@ -405,7 +421,11 @@ fn quantities_are_split_by_status() {
     assert_eq!(q.total(PhaseStatus::Demolished).count, 2);
     // In the Existing phase the new cube is future: not counted.
     let q0 = PhaseQuantities::from_document(s.doc(), ph[0]).unwrap();
-    assert_eq!(q0.total(PhaseStatus::New).count, 2, "a and w built in phase 0");
+    assert_eq!(
+        q0.total(PhaseStatus::New).count,
+        2,
+        "a and w built in phase 0"
+    );
     assert_eq!(q0.total(PhaseStatus::Existing).count, 1, "c only");
     assert!(PhaseQuantities::from_document(s.doc(), c).is_none());
     // Deterministic JSON.

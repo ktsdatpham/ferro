@@ -162,7 +162,69 @@ a command. Geometry is derived from location + parameters + type.
 
 ## 3.9 Out of scope for v1 (but reserved)
 
-Phases, design options, worksets, views and sheets are Revit concepts Ferro will
-need for collaboration and documentation. They are **reserved names**: do not use
+Design options, worksets, views and sheets are Revit concepts Ferro will
+need for collaboration and documentation (phases landed, §3.10). They are **reserved names**: do not use
 them for anything else. Documentation (views, sheets, annotation) is
 intentionally left to Revit.
+
+## 3.10 Phases (ADR 0006, D-77)
+
+A `Phase` is an element of category `Phases` (Revit: `Phase`, `OST_Phases`)
+with an `order` and optional ISO dates (`YYYY-MM-DD`, information only). The
+project's phases are ordered by `order` (then id); commands keep `order`
+equal to the position. New documents have **no** phases; the first time the
+simple mode (`set_renovation_status`) is used, "Existing" and "New
+Construction" are created (if one phase exists it plays "Existing" and only
+"New Construction" is added). `create_phase` on an empty list creates only
+the phase asked for.
+
+Elements placed in the model (Forms, walls, floors, doors, windows) carry
+`phase_created` and `phase_demolished` (Revit: *Phase Created*, *Phase
+Demolished*); both must be phases and demolished must not be earlier than
+created (`ferro.model.invalid_phase_order`). Levels, types, materials and
+phases have no phases (`ferro.model.not_phased`) and are in every phase.
+
+**Missing fields.** No `phase_created` means "created before every phase":
+the element is *existing* in every phase until it is demolished. This is the
+state of unphased data (imports, models drawn before phasing was used, scan
+results — ADR 0006 §7 asks for the first phase, which shows the same). Revit
+instead assigns the view's phase on creation; the app does the same while
+phasing is used (new elements get the view's phase in the same undo step),
+but the kernel commands never guess a phase.
+
+**`PhaseStatus`** of an element in a view of phase *v* (pure function
+`model::phase::phase_status`):
+
+| Created | Demolished | Status | Shown |
+|---|---|---|---|
+| after *v* | any | `future` | no |
+| any | before *v* | `past` (gone) | no |
+| *v* | *v* | `temporary` | yes |
+| before *v* / none | *v* | `demolished` | yes |
+| *v* | after *v* / none | `new` | yes |
+| before *v* / none | after *v* / none | `existing` | yes |
+
+`past` is not in ADR 0006 §3 (which lists five); it names elements already
+demolished in an earlier phase, which Revit does not show either.
+
+Deleting a phase used by elements fails with `ferro.model.phase_in_use`;
+`delete_phase` with `merge_into` (the phase just before or after,
+`ferro.model.phase_not_adjacent` otherwise) moves its elements to that phase
+first (Revit: combine with previous / next).
+
+**Simple mode** (`set_renovation_status`, ADR 0006 §4) maps to the first and
+last phase: `existing` = created first; `demolish` = created first,
+demolished last; `new` = created last.
+
+**Quantities by status** (`PhaseQuantities`, MCP `get_phase_quantities`):
+per category and shown status, count, volume of closed bodies and area
+(floors: plan area; walls: gross length × height; others: the
+`ferro.dimensions.area` parameter).
+
+**Interop.** Phases are not IFC products: IFC export shows the export phase
+(the last by default), leaves out future / past elements and writes
+`Pset_<Class>Common.Status` = `NEW` / `EXISTING` / `DEMOLISH` / `TEMPORARY`
+(`PEnum_ElementStatus`). Revit: phases are looked up by name (the Revit API
+cannot create them) and *Phase Created* / *Phase Demolished* are set by name.
+
+Phased cuts (ADR 0006 §5) wait for the relationship table (M5-5).

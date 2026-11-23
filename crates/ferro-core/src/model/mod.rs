@@ -24,9 +24,9 @@ pub use document::{Document, ProjectInfo, ProjectOrigins, EXTENT_LIMIT_MM};
 pub use element::{Element, ElementBody, Form, GeometrySource, Level};
 pub use ids::{ElementId, Uid};
 pub use parameter::{keys, ParamValue};
-pub use phase::{Phase, PhaseStatus};
-pub use phase_quantities::PhaseQuantities;
 pub use parameter_definition::{
     builtin_definition, builtin_definitions, IfcPropertyMapping, ParameterBinding,
     ParameterDataType, ParameterDefinition, ParameterGroup,
 };
+pub use phase::{Phase, PhaseStatus};
+pub use phase_quantities::PhaseQuantities;

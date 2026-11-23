@@ -551,9 +551,7 @@ pub fn phase_quantities(doc: &Document, args: &Value) -> Result<Value, String> {
     };
     let q = ferro_core::model::PhaseQuantities::from_document(doc, phase)
         .ok_or_else(|| format!("{phase} is not a phase"))?;
-    let totals = |t: &ferro_core::model::phase_quantities::StatusTotals| {
-        json!({"count": t.count, "volume_m3": (t.volume_mm3 / 1e9 * 1000.0).round() / 1000.0, "area_m2": (t.area_mm2 / 1e6 * 1000.0).round() / 1000.0})
-    };
+    let totals = |t: &ferro_core::model::phase_quantities::StatusTotals| json!({"count": t.count, "volume_m3": (t.volume_mm3 / 1e9 * 1000.0).round() / 1000.0, "area_m2": (t.area_mm2 / 1e6 * 1000.0).round() / 1000.0});
     let mut cats = Map::new();
     for (c, by) in &q.categories {
         let mut m = Map::new();
@@ -563,7 +561,10 @@ pub fn phase_quantities(doc: &Document, args: &Value) -> Result<Value, String> {
         cats.insert(c.to_string(), Value::Object(m));
     }
     let mut total = Map::new();
-    for st in ferro_core::model::PhaseStatus::ALL.iter().filter(|s| s.is_shown()) {
+    for st in ferro_core::model::PhaseStatus::ALL
+        .iter()
+        .filter(|s| s.is_shown())
+    {
         total.insert(st.as_str().into(), totals(&q.total(*st)));
     }
     let name = doc.get(phase).map(|e| e.label());
@@ -753,9 +754,14 @@ mod tests {
             json!(["existing", "demolish", "new"])
         );
         let mut s = session();
-        let r = call(&mut s, &ExecContext::user(), "get_phase_quantities", &json!({}))
-            .expect("handled")
-            .unwrap_err();
+        let r = call(
+            &mut s,
+            &ExecContext::user(),
+            "get_phase_quantities",
+            &json!({}),
+        )
+        .expect("handled")
+        .unwrap_err();
         assert!(r["error"].as_str().unwrap().contains("no phases"), "{r}");
         let b = ok(
             &mut s,

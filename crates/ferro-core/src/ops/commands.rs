@@ -325,13 +325,11 @@ fn transform_elements(
             ElementBody::Material(_)
             | ElementBody::WallType(_)
             | ElementBody::FloorType(_)
-            | ElementBody::Phase(_) => {
-                Err(CommandError::new(
-                    "ferro.model.not_movable",
-                    "types, materials and phases have no location",
-                )
-                .on(e.id))
-            }
+            | ElementBody::Phase(_) => Err(CommandError::new(
+                "ferro.model.not_movable",
+                "types, materials and phases have no location",
+            )
+            .on(e.id)),
             ElementBody::Wall(w) => {
                 w.curve = match w.curve.transformed(t)? {
                     crate::geom::Curve::Line(l) => {

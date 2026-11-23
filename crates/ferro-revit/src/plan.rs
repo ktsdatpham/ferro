@@ -535,10 +535,7 @@ pub fn plan(doc: &Document, state: &RevitState) -> Vec<RevitOp> {
                     uid,
                     signature: String::new(),
                     name: e.label(),
-                    order: doc
-                        .phase_index(e.id)
-                        .map(|i| i as u32)
-                        .unwrap_or(p.order),
+                    order: doc.phase_index(e.id).map(|i| i as u32).unwrap_or(p.order),
                 },
             ),
             ElementBody::Form(f) => {
@@ -688,7 +685,10 @@ mod tests {
             .collect();
         assert_eq!(
             phases,
-            [("Existing".to_string(), 0), ("New Construction".to_string(), 1)]
+            [
+                ("Existing".to_string(), 0),
+                ("New Construction".to_string(), 1)
+            ]
         );
         let uid = s.doc().get(wall).unwrap().uid.to_string();
         let op = ops.iter().find(|o| o.uid() == uid).unwrap();

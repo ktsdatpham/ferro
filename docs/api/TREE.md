@@ -36,6 +36,14 @@ The Ferro window: menus, workspaces, toolbar, viewport, levels and properties pa
 - struct `FerroApp`
 - fn `FerroApp::new`
 
+### `ferro_app::app::phases`
+
+Phases in the app (ADR 0006, M5-23): the view's phase (app state until views become elements, M5-22), the simple renovation buttons, phase pickers in Properties and the per-status graphics handed to the scene.
+
+- struct `PhaseDisplay` — What the view shows for phases: elements to hide and how to draw the
+- struct `PhaseState` — Phase view state of the app (not saved).
+- fn `phase_display` — Phase display of `doc` in view phase `view`: pure, used by the app and
+
 ### `ferro_app::camera`
 
 Orbit camera (Z up). Rendering is camera-relative (D-05): GPU positions are `f32` offsets from `origin`, picking and snapping stay in `f64`.
@@ -133,6 +141,10 @@ Turns the display scene (`ferro-scene`) into GPU vertex lists.
 - const `EDGE`
 - const `SELECT`
 - const `CUT` — Section cut lines.
+- const `DEMOLISHED` — Demolished / temporary faces (translucent) and their dashed edges (M5-23).
+- const `DEMOLISHED_EDGE`
+- const `EXISTING_GREY` — Existing elements: faces blended towards this grey, lighter edges.
+- const `EXISTING_EDGE`
 - struct `SceneCache`
 - fn `SceneCache::update` — Bring the vertex lists up to date with `doc`, the selection and the
 - fn `SceneCache::mesh` — The element's mesh in model coordinates (a copy; instanced meshes
@@ -670,6 +682,34 @@ Parameter definitions (ADR 0004 §2.3, Foundation Spec §3.5): what a parameter 
 - fn `builtin_definitions` — Definitions of every built-in key in [`keys`], sorted by key. Pure and
 - fn `builtin_definition` — The built-in definition of `key`, or `None` if `key` is not built in.
 
+### `ferro_core::model::phase`
+
+Phases (ADR 0006 §Phases, D-77): the project's ordered construction stages and the status an element has in a view's phase.
+
+- const `EXISTING_PHASE_NAME` — Name of the first default phase (created the first time phasing is used).
+- const `NEW_CONSTRUCTION_PHASE_NAME` — Name of the second default phase.
+- struct `Phase` — A construction stage (Revit: `Phase`). Phases are ordered by `order`
+- enum `PhaseStatus` — Status of an element in a view's phase (ADR 0006 §3; Revit phase
+- fn `PhaseStatus::is_shown` — `true` if the element is drawn in a view of this phase (not future,
+- fn `PhaseStatus::as_str` — Stable snake_case name (`"existing"`, `"new"`, ...).
+- fn `PhaseStatus::ifc_status` — IFC4 `Pset_*Common.Status` value (`PEnum_ElementStatus`), or `None`
+- fn `phase_status` — Status of an element in the view phase at position `view`, given the
+- fn `is_phased_category` — `true` for elements that carry phase fields: elements placed in the
+- fn `is_valid_date` — Check an ISO 8601 calendar date `YYYY-MM-DD` (Gregorian, leap years).
+- fn `Element::as_phase` — The phase data, if this element is a phase.
+- fn `Document::phases` — The project's phases in order (by `order`, then id). Empty until
+- fn `Document::phase_index` — Position of a phase in [`Document::phases`]; `None` if `id` is not a
+- fn `Document::phase_status` — Status of element `e` in a view of phase `view_phase` ([`phase_status`]).
+
+### `ferro_core::model::phase_quantities`
+
+Quantities split by phase status (ADR 0006 §6): demolished, new and existing volume and area per category, the basis for demolition and new-build costs and carbon.
+
+- struct `StatusTotals` — Totals of one status within one category. Volumes in mm³, areas in mm².
+- struct `PhaseQuantities` — Quantities of a document in the view of one phase: per category, per
+- fn `PhaseQuantities::from_document` — Quantities of every phased element (Forms, walls, floors, doors,
+- fn `PhaseQuantities::total` — Totals of one status over every category.
+
 ### `ferro_core::model::project_settings`
 
 Project settings (M5-24): display units, site location and currency — one place that the UI, MCP and exports read. Revit: Project Units, `SiteLocation`, Project Information.
@@ -804,6 +844,18 @@ Material commands (ADR 0004 §3): `create_material` and `set_material`. Each `NA
 Commands on parameter definitions (ADR 0004 §2.3). Each `NAME` is also the MCP tool name.
 
 - struct `SetParameterDefinition` — Add or replace a project parameter definition (Revit: create a shared /
+
+### `ferro_core::ops::phase_commands`
+
+Phase commands (ADR 0006 §Phases, M5-23): the phase list and the phase fields of elements. Each `NAME` is also the MCP tool name.
+
+- struct `CreatePhase` — Create a phase named `name` at the end of the list (or before phase
+- fn `ensure_default_phases` — Create the phases "Existing" and "New Construction" if the project has
+- struct `SetPhase` — Rename a phase, move it to `position` (0 = first; past the end = last)
+- struct `DeletePhase` — Delete a phase. A phase used by elements can only be deleted by merging
+- struct `SetElementPhase` — Set the phase an element is created in and / or demolished in (Revit:
+- enum `RenovationStatus` — Renovation status of the simple mode (ADR 0006 §4, ArchiCAD-like).
+- struct `SetRenovationStatus` — Simple mode: mark elements as existing, to be demolished or new. Maps to
 
 ### `ferro_core::ops::project_commands`
 
@@ -960,6 +1012,7 @@ IFC4 export (D-75, milestone 3): STEP physical file (ISO 10303-21), Reference Vi
 
 - fn `ifc_guid` — IFC GlobalId (22 characters) of a 128-bit uid.
 - fn `export_ifc` — Serialise a document as an IFC4 file.
+- fn `export_ifc_phase` — IFC4 export of the document as it is in `phase` (`None` = the last
 
 ### `ferro_io::json`
 
@@ -1124,6 +1177,7 @@ Shared tool surface (D-17, D-44) for MCP and Ferro Link: every kernel command is
 - fn `summary` — Model summary (`list_elements`).
 - fn `summary_of` — Summary restricted to some elements (selection).
 - fn `detail` — Full element detail (`get_element`).
+- fn `phase_quantities` — `get_phase_quantities`: [`PhaseQuantities`] in m³ / m², keyed by category
 - fn `call` — Run a command or read-only tool against a session. Ok = JSON result,
 - fn `file_tools` — File tools offered by a standalone tool host (ferro-mcp without an open app).
 

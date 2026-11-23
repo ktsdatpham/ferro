@@ -923,10 +923,17 @@ mod tests {
         let plain = export_ifc(house().doc()).unwrap();
         assert!(!plain.contains("'Status'"), "no phases, no status");
         let mut s = house();
-        for (els, st) in [(json!([5]), "demolish"), (json!([6]), "new"), (json!([12]), "existing")] {
+        for (els, st) in [
+            (json!([5]), "demolish"),
+            (json!([6]), "new"),
+            (json!([12]), "existing"),
+        ] {
             s.execute(
-                AnyCommand::from_tool("set_renovation_status", &json!({"elements": els, "status": st}))
-                    .unwrap(),
+                AnyCommand::from_tool(
+                    "set_renovation_status",
+                    &json!({"elements": els, "status": st}),
+                )
+                .unwrap(),
                 &ExecContext::user(),
             )
             .unwrap();
@@ -935,7 +942,9 @@ mod tests {
         let ifc = export_ifc(doc).unwrap();
         for v in ["DEMOLISH", "NEW", "EXISTING"] {
             assert!(
-                ifc.contains(&format!("IFCPROPERTYENUMERATEDVALUE('Status',$,(IFCLABEL('{v}')),$)")),
+                ifc.contains(&format!(
+                    "IFCPROPERTYENUMERATEDVALUE('Status',$,(IFCLABEL('{v}')),$)"
+                )),
                 "{v}"
             );
         }

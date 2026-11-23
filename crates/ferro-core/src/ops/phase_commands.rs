@@ -247,8 +247,14 @@ impl Command for SetPhase {
             Some(d) => Some(d.to_string()),
             None => old,
         };
-        let start = pick(&self.start_date, old.as_ref().and_then(|p| p.start_date.clone()));
-        let end = pick(&self.end_date, old.as_ref().and_then(|p| p.end_date.clone()));
+        let start = pick(
+            &self.start_date,
+            old.as_ref().and_then(|p| p.start_date.clone()),
+        );
+        let end = pick(
+            &self.end_date,
+            old.as_ref().and_then(|p| p.end_date.clone()),
+        );
         check_dates(start.as_deref(), end.as_deref())?;
         let name = self.name.clone();
         tx.modify(self.phase, |e| {
@@ -366,7 +372,11 @@ pub struct SetElementPhase {
 impl Command for SetElementPhase {
     const NAME: &'static str = "set_element_phase";
     fn execute(&self, tx: &mut Transaction) -> Result<CommandOutput, CommandError> {
-        for p in [self.created, self.demolished].into_iter().flatten().flatten() {
+        for p in [self.created, self.demolished]
+            .into_iter()
+            .flatten()
+            .flatten()
+        {
             require_phase(tx, p)?;
         }
         set_fields(tx, &self.elements, self.created, self.demolished)?;
