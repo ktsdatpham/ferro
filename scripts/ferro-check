@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+# The one check humans, agents and CI run before a PR (ADR 0003 §5).
+#   scripts/ferro-check          lints + fmt + clippy + tests
+#   scripts/ferro-check --quick  lints + fmt only (seconds)
+# Paste the last lines of its output into the PR description.
+set -euo pipefail
+cd "$(dirname "$0")/.."
+step() { printf '\n== %s\n' "$1"; }
+
+step "structure (glossary, layers, core deps, task tree, API map)"
+python3 scripts/lint.py
+step "format"
+cargo fmt --all -- --check
+if [[ "${1:-}" == "--quick" ]]; then
+  echo; echo "ferro-check: quick checks passed"; exit 0
+fi
+step "clippy"
+cargo clippy --workspace --all-targets -- -D warnings
+step "tests"
+cargo test --workspace -q
+echo; echo "ferro-check: all checks passed ($(git rev-parse --short HEAD 2>/dev/null || echo no-git))"

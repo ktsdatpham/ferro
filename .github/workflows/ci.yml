@@ -6,6 +6,13 @@ on:
   pull_request:
 
 jobs:
+  lint:
+    # Glossary, layers, ferro-core deps, task tree, API map (scripts/lint.py).
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 scripts/lint.py
+
   test:
     strategy:
       fail-fast: false

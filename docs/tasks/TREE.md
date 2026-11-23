@@ -63,9 +63,12 @@ Legend: `[ ]` open · `[~]` in progress · `[x]` done · `✓` verified ·
 - [ ] **M5-10 `ferro-scene`** (ADR 0004 §6)
 - [ ] **M5-11 Commands and keymaps** (SketchUp / Revit / Ferro presets, command palette)
 - [ ] **M5-12 Tooling for many contributors** (ADR 0003)
-  - [ ] M5-12.1 `scripts/ferro-check`: fmt, clippy, tests, glossary lint, layer lint, new-dependency check, task-tree check
-  - [ ] M5-12.2 API map `docs/api/TREE.md`, generated, checked in CI
-  - [ ] M5-12.3 PR template; `AGENTS.md` points to the tree, the map and the check
+  - [x] M5-12.1 `scripts/ferro-check`: fmt, clippy, tests, glossary lint, layer lint, new-dependency check, task-tree check @lead
+    - accept: `python3 scripts/lint.py` prints `lint: ok`; injecting `use crate::model` into `geom/` or a `pub struct WallManager` makes it fail
+  - [x] M5-12.2 API map `docs/api/TREE.md`, generated, checked in CI @lead
+    - accept: `python3 scripts/api_tree.py --check` exits 0; adding a pub item without regenerating fails `lint.py`
+  - [x] M5-12.3 PR template; `AGENTS.md` points to the tree, the map and the check @lead
+    - accept: `.github/pull_request_template.md` exists; `AGENTS.md` step 0 and "Every PR" mention them
   - [ ] M5-12.4 UI languages (`tr!`, `en.ftl`, `vi.ftl`)
   - [ ] M5-12.5 Problem reports (local log, prefilled issue)
 - [ ] **M5-13 Code layout by discipline** (after M5-3 / M5-4 land): `model::bim` split into `model::architecture::{wall, floor, opening, …}`, room for `structure`, `mep`, `analysis`, `site`, like Revit's `DB.Architecture` / `DB.Structure`

@@ -34,6 +34,11 @@ Read it before writing code. These rules are not optional.
 
 ## Every PR
 
+- Run `scripts/ferro-check` (or `--quick` while iterating) and paste its
+  result in the PR; fill in `.github/pull_request_template.md`.
+- If you added or changed public items, regenerate the API map:
+  `python3 scripts/api_tree.py`.
+
 - `cargo fmt --all`, `cargo clippy --workspace --all-targets -- -D warnings`,
   `cargo test --workspace` pass.
 - New algorithms have basic, degenerate and tolerance-edge tests.
