@@ -28,10 +28,13 @@ pub enum Category {
     /// Construction stages (ADR 0006). Not IFC products: a phase maps to
     /// `Pset_*Common.Status` on the exported elements.
     Phases,
+    /// Views (D-33, M5-22): `View3D`, `PlanView`, `SectionView`. Not IFC
+    /// products and not exported.
+    Views,
 }
 
 impl Category {
-    pub const ALL: [Category; 18] = [
+    pub const ALL: [Category; 19] = [
         Category::Levels,
         Category::Grids,
         Category::ReferencePlanes,
@@ -50,6 +53,7 @@ impl Category {
         Category::GenericModels,
         Category::Materials,
         Category::Phases,
+        Category::Views,
     ];
 
     /// Revit `BuiltInCategory` name.
@@ -73,6 +77,7 @@ impl Category {
             Category::GenericModels => "OST_GenericModel",
             Category::Materials => "OST_Materials",
             Category::Phases => "OST_Phases",
+            Category::Views => "OST_Views",
         }
     }
 
@@ -99,6 +104,9 @@ impl Category {
             // Not an IFC product: exported as `Pset_*Common.Status` values
             // (ADR 0006); `IfcWorkSchedule` is not used.
             Category::Phases => "IfcPropertySingleValue",
+            // Not exported: views have no geometry and IFC4 has no view
+            // product. `IfcAnnotation` is the nearest presentation class.
+            Category::Views => "IfcAnnotation",
         }
     }
 
@@ -112,6 +120,7 @@ impl Category {
                 | Category::Rooms
                 | Category::Materials
                 | Category::Phases
+                | Category::Views
         )
     }
 }

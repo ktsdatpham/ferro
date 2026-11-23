@@ -20,6 +20,7 @@ pub mod phase_quantities;
 pub mod project_settings;
 mod relationship;
 pub mod structure_quantities;
+pub mod view;
 
 pub use category::Category;
 pub use document::{Document, ProjectInfo, ProjectOrigins, EXTENT_LIMIT_MM};
@@ -33,3 +34,7 @@ pub use parameter_definition::{
 pub use phase::{Phase, PhaseStatus};
 pub use phase_quantities::PhaseQuantities;
 pub use relationship::{Relationship, RelationshipError, RelationshipKind};
+pub use view::{
+    DisplayStyle, PhaseFilter, PhaseGraphics, Projection, SectionPlane, View, ViewCamera,
+    ViewRange, ViewType,
+};

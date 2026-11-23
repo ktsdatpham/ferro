@@ -46,6 +46,9 @@ pub enum ElementBody {
     Opening(Opening),
     /// A construction stage (category `Phases`, ADR 0006).
     Phase(super::phase::Phase),
+    /// A view: camera, cut, style, hidden elements, phase (category
+    /// `Views`, D-33).
+    View(super::view::View),
 }
 
 impl ElementBody {
@@ -63,6 +66,7 @@ impl ElementBody {
             ElementBody::Floor(_) => "floor",
             ElementBody::Opening(_) => "opening",
             ElementBody::Phase(_) => "phase",
+            ElementBody::View(_) => "view",
         }
     }
 }

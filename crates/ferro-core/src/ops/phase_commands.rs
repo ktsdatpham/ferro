@@ -284,7 +284,9 @@ impl Command for SetPhase {
 
 /// Delete a phase. A phase used by elements can only be deleted by merging
 /// it into the phase just before or after it (`merge_into`; Revit: combine
-/// with previous / next): its elements then use that phase.
+/// with previous / next): its elements and views then use that phase.
+/// Views alone do not keep a phase in use: deleting it without `merge_into`
+/// clears their phase (they show the last phase).
 ///
 /// Fails with `ferro.model.not_a_phase`, `ferro.model.phase_in_use` (used
 /// and no `merge_into`) and `ferro.model.phase_not_adjacent`.
@@ -346,6 +348,21 @@ impl Command for DeletePhase {
             for mut r in rows {
                 r.phase = Some(into);
                 tx.put_relationship(r)?;
+            }
+            // Views of the merged phase show the phase it merged into.
+            let views: Vec<ElementId> = tx
+                .doc()
+                .by_category(Category::Views)
+                .filter(|e| e.as_view().is_some_and(|v| v.phase == Some(gone)))
+                .map(|e| e.id)
+                .collect();
+            for v in views {
+                tx.modify(v, |e| {
+                    if let ElementBody::View(view) = &mut e.body {
+                        view.phase = Some(into);
+                    }
+                    Ok(())
+                })?;
             }
         }
         tx.delete(self.phase)?;

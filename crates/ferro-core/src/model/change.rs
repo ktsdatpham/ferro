@@ -73,7 +73,8 @@ impl Change {
 
 /// Call `f` on every place in an element's JSON that holds an element
 /// reference: the [`REF_FIELDS`], a wall's top level, the materials of a
-/// type's layers, and `element_ref` parameters. Null slots are skipped.
+/// type's layers, a view's phase, hidden elements and design options, and
+/// `element_ref` parameters. Null slots are skipped.
 /// The flag passed to `f` is `true` for `element_ref` parameters: those may
 /// point at an element that was deleted since, and are kept as they are
 /// instead of failing.
@@ -102,6 +103,20 @@ pub fn visit_element_refs<E>(
             for l in layers {
                 if let Some(m) = l.get_mut("material").filter(|m| !m.is_null()) {
                     f(m, false)?;
+                }
+            }
+        }
+        // Views (M5-22): the view phase, hidden elements and the reserved
+        // design-option combination.
+        if body.get("kind").and_then(Value::as_str) == Some("view") {
+            if let Some(v) = body.get_mut("phase").filter(|v| !v.is_null()) {
+                f(v, false)?;
+            }
+            for list in ["hidden_elements", "design_options"] {
+                if let Some(items) = body.get_mut(list).and_then(Value::as_array_mut) {
+                    for v in items.iter_mut().filter(|v| !v.is_null()) {
+                        f(v, false)?;
+                    }
                 }
             }
         }
