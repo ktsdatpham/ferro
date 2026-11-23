@@ -72,7 +72,8 @@ Legend: `[ ]` open · `[~]` in progress · `[x]` done · `✓` verified ·
   - [ ] M5-8.2 Radial-edge topology: loose edges, an edge shared by 3+ faces
 - [ ] **M5-9 Curved geometry**
   - [ ] M5-9.1 Surface / curve types incl. Cone, Sphere, Torus, NURBS in data, file and writers
-  - [ ] M5-9.2 Kernel spike: truck / monstertruck vs OCCT, report with recommendation
+  - [x] M5-9.2 Kernel spike: truck / monstertruck vs OCCT, report with recommendation @agent-kernel · branch `m5/kernel-spike`
+    - accept: `docs/review/kernel-spike.md` has per-experiment results for truck, monstertruck and solidcore (OCCT from docs), health / licence, integration options and a recommendation; `spikes/kernel-eval/` rebuilds and re-runs them
 - [~] **M5-10 `ferro-scene`** (ADR 0004 §6) @agent-scene
   - [x] M5-10.1 Crate `ferro-scene`: `DisplayScene` with per-element `DrawRecord`s (mesh, offset, colour, bounds, revision), incremental `sync` by structural sharing, view state kept out @agent-scene
     - accept: `cargo test -p ferro-scene` passes (box, empty doc, element without geometry, open body, one-element change re-meshes only it, determinism, section cut)
