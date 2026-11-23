@@ -744,6 +744,7 @@ dependencies = [
  "eframe",
  "ferro-core",
  "ferro-io",
+ "ferro-mcp",
  "ferro-scene",
  "ferro-snap",
  "ferro-tools",
@@ -805,8 +806,10 @@ dependencies = [
  "ferro-core",
  "ferro-io",
  "ferro-tools",
+ "libc",
  "serde",
  "serde_json",
+ "uuid",
 ]
 
 [[package]]

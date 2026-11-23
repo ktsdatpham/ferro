@@ -435,19 +435,36 @@ class Document:
 
     @contextlib.contextmanager
     def transaction(self, name: str) -> Iterator["Document"]:
-        """Group a block of changes under a name -- see the limits below.
+        """Group a block of changes under a name.
 
-        The tool set has no grouping tool yet, so this does **not** make the
-        block atomic: each call inside is its own Transaction (one undo step)
-        and an exception does not roll back the calls already made. In the app
-        with the default autonomy, all calls from this client already collect
-        into one Proposal the user accepts or rejects as a whole.
+        **Inside** ``run_python`` (ADR 0005 part 2) the whole script is already
+        one transaction group in Ferro: all or nothing, one undo step, one
+        Proposal for agents. This block is a savepoint of that group
+        (``SubTransaction``): when an exception leaves the block, the changes
+        made in it are rolled back and the exception propagates; catch it to
+        keep the script's other changes. Blocks may nest.
 
-        TODO(M5-14.4): use the transaction group of ``run_python`` (ADR 0005
-        part 5) once approved, to make the block all-or-nothing.
+        **Outside** ``run_python`` (a script connected with
+        :func:`ferro.connect`) there is no group: each call inside is its own
+        Transaction (one undo step) and an exception does not roll back the
+        calls already made. With the app's default autonomy all calls from
+        this client collect into one Proposal the user accepts or rejects.
+        Send the script through ``run_python`` to make it atomic.
+
+        ``name`` documents the block; Ferro does not store it.
         """
-        with _runtime.bound(self.link):
-            yield self
+        if _runtime.run_link() is not self.link:
+            with _runtime.bound(self.link):
+                yield self
+            return
+        self.link.call("begin_transaction", {"name": name})
+        try:
+            with _runtime.bound(self.link):
+                yield self
+        except BaseException:
+            self.link.call("rollback_transaction", {})
+            raise
+        self.link.call("commit_transaction", {})
 
     # -- internals --------------------------------------------------------
     def _summary(self, id: int) -> Dict[str, Any]:

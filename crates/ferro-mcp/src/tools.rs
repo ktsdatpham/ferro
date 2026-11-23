@@ -15,6 +15,7 @@ use std::time::Duration;
 pub fn list() -> Vec<Value> {
     let mut v = ferro_tools::list();
     v.extend(ferro_tools::file_tools());
+    v.push(crate::python::tool());
     v.push(json!({"name": "link_status", "description": "Whether the Ferro app is open and linked. When linked, every tool acts on the model open in the app; changes appear there as a proposal the user accepts or rejects.", "inputSchema": {"type": "object", "properties": {}, "required": []}}));
     v
 }
@@ -37,6 +38,8 @@ pub struct Server {
     /// Forward to a running app when one is linked (off in tests or with
     /// `FERRO_LINK=off`).
     pub use_link: bool,
+    /// Interpreter and SDK for `run_python`.
+    pub python: crate::python::PythonConfig,
 }
 
 impl Server {
@@ -50,6 +53,7 @@ impl Server {
             use_link: std::env::var("FERRO_LINK")
                 .map(|v| v != "off")
                 .unwrap_or(true),
+            python: crate::python::PythonConfig::from_env(),
         }
     }
 
@@ -98,7 +102,8 @@ impl Server {
             agent: Some(self.agent_info()),
             prompt: None,
         };
-        match link::send(&info, &req, Duration::from_secs(120)) {
+        let timeout = crate::python::answer_timeout(name, args);
+        match link::send(&info, &req, timeout) {
             Ok(r) if r.ok => Some(Ok(r.body)),
             Ok(r) => Some(Err(r.body)),
             Err(_) => None, // stale link file: fall back to the local session
@@ -124,6 +129,10 @@ impl Server {
             return r;
         }
         let ctx = self.ctx();
+        if name == crate::python::TOOL {
+            // Headless: no Proposals here, agents edit this session directly.
+            return crate::python::run_blocking(&mut self.session, &self.python, args, ctx, false);
+        }
         if let Some(r) = ferro_tools::call(&mut self.session, &ctx, name, args) {
             return r;
         }

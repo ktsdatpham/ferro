@@ -348,3 +348,43 @@ fn script_from_stdin_and_bench() {
     let o = cli(&["bench", s(&script("failing.json")), "--repeat", "2"]);
     assert_eq!(code(&o), 1);
 }
+
+#[test]
+fn run_python_builds_headless_and_rolls_back_on_failure() {
+    let has_python = Command::new("python3")
+        .args([
+            "-I",
+            "-c",
+            "import sys; sys.exit(sys.version_info < (3, 9))",
+        ])
+        .status()
+        .is_ok_and(|s| s.success());
+    if !has_python {
+        eprintln!("skipped: no python3 (3.9+) on PATH");
+        return;
+    }
+    let d = tmp("python");
+    let fro = d.join("py.fro");
+    let src = "walls = doc.create_walls([(0, 0), ('8m', 0), ('8m', '6m'), (0, '6m')], closed=True, height='3m')\nwalls[0].add_door(position='2m')\nresult = [w.id for w in walls]\n";
+    let args = serde_json::json!({ "code": src }).to_string();
+    let o = cli(&["call", "run_python", &args, "--out", s(&fro)]);
+    assert_eq!(code(&o), 0, "{}", String::from_utf8_lossy(&o.stdout));
+    assert_eq!(
+        lines(&o)[0]["result"]["result"].as_array().unwrap().len(),
+        4
+    );
+    assert_eq!(code(&cli(&["check", s(&fro)])), 0);
+
+    // A failing script leaves nothing behind; the next call still works.
+    let steps = serde_json::json!([
+        {"tool": "run_python", "args": {"code": "doc.create_walls([(0, 0), ('8m', 0)])\n1 / 0\n"}},
+        {"tool": "list_elements", "args": {"category": "walls"}}
+    ]);
+    let file = d.join("steps.json");
+    std::fs::write(&file, steps.to_string()).unwrap();
+    let o = cli(&["run", s(&file), "--keep-going"]);
+    assert_eq!(code(&o), 1);
+    let l = lines(&o);
+    assert_eq!(l[0]["failures"][0]["code"], "ferro.python.failed");
+    assert_eq!(l[1]["result"]["elements"], serde_json::json!([]));
+}

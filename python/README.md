@@ -36,7 +36,20 @@ Changes made through the SDK are Commands like any other: each tool call is
 one Transaction (one undo step), recorded in the journal with the `agent`
 name given to `connect()`. With the app's default autonomy they collect into
 one Proposal the user accepts or rejects. `doc.transaction(name)` does **not**
-make a block atomic yet (no grouping tool exists; see M5-14.4).
+make a block atomic in such a connected script.
+
+## Atomic scripts: `run_python`
+
+Send the script to Ferro instead (MCP tool `run_python {code, timeout_s?}`,
+or `ferro-cli call run_python '{"code": "..."}'`). Ferro runs it in your
+`python3 -I` with this SDK, `doc`, `tools` and `ferro` predefined, as **one
+transaction group**: all or nothing, one undo step, one Proposal for agents.
+Set `result = ...` to return JSON; an uncaught exception or a non-zero exit
+rolls everything back (`ferro.python.failed`, traceback in `stderr`); past
+`timeout_s` (default 30, max 300) the process tree is killed and rolled back
+(`ferro.python.timeout`). Inside it, `ferro.connect()` returns the run's
+document and `with doc.transaction(name):` is a savepoint: an exception
+leaving the block undoes the block. `FERRO_PYTHON` picks the interpreter.
 
 ## Errors
 

@@ -64,7 +64,12 @@ def connect(home: Optional[str] = None, agent: str = "python", timeout: float = 
             ``ferro.link.invalid_token`` when it refuses the token.
 
     The returned document also becomes the default target of ``ferro.tools``.
+    Inside ``run_python`` the arguments are ignored and the script's own
+    document is returned (its calls belong to the run's transaction group).
     """
+    run = _runtime.run_link()
+    if run is not None:
+        return Document(run)
     link = Link.find(home, agent=agent, timeout=timeout)
     link.call("link_status", {})  # check that the app answers and accepts the token
     _runtime.set_default(link)
