@@ -11,6 +11,10 @@
               "string"
             ]
           },
+          "in_design_option": {
+            "description": "Optional design option id: make this change inside that option (its layer), not in the shared model",
+            "type": "integer"
+          },
           "is_building_storey": {
             "description": "Default true.",
             "type": "boolean"
@@ -38,6 +42,10 @@
               "string"
             ]
           },
+          "in_design_option": {
+            "description": "Optional design option id: make this change inside that option (its layer), not in the shared model",
+            "type": "integer"
+          },
           "level": {
             "description": "Level element id",
             "type": "integer"
@@ -61,6 +69,10 @@
               "number",
               "string"
             ]
+          },
+          "in_design_option": {
+            "description": "Optional design option id: make this change inside that option (its layer), not in the shared model",
+            "type": "integer"
           },
           "level": {
             "description": "Optional level id",
@@ -102,6 +114,10 @@
       "description": "Draw a planar polygon face from 3+ points. Returns {element, face}.",
       "inputSchema": {
         "properties": {
+          "in_design_option": {
+            "description": "Optional design option id: make this change inside that option (its layer), not in the shared model",
+            "type": "integer"
+          },
           "level": {
             "description": "Optional level id",
             "type": "integer"
@@ -153,6 +169,10 @@
               "number",
               "string"
             ]
+          },
+          "in_design_option": {
+            "description": "Optional design option id: make this change inside that option (its layer), not in the shared model",
+            "type": "integer"
           },
           "level": {
             "description": "Optional level id",
@@ -209,6 +229,10 @@
           "face": {
             "description": "Face id within the Form",
             "type": "integer"
+          },
+          "in_design_option": {
+            "description": "Optional design option id: make this change inside that option (its layer), not in the shared model",
+            "type": "integer"
           }
         },
         "required": [
@@ -230,6 +254,10 @@
               "type": "integer"
             },
             "type": "array"
+          },
+          "in_design_option": {
+            "description": "Optional design option id: make this change inside that option (its layer), not in the shared model",
+            "type": "integer"
           },
           "vector": {
             "description": "Displacement [x, y, z] (z optional): numbers in millimetres or strings with units (\"3m\"). Z is up, X east, Y north.",
@@ -278,6 +306,10 @@
               "type": "integer"
             },
             "type": "array"
+          },
+          "in_design_option": {
+            "description": "Optional design option id: make this change inside that option (its layer), not in the shared model",
+            "type": "integer"
           }
         },
         "required": [
@@ -304,6 +336,10 @@
               "type": "integer"
             },
             "type": "array"
+          },
+          "in_design_option": {
+            "description": "Optional design option id: make this change inside that option (its layer), not in the shared model",
+            "type": "integer"
           },
           "vector": {
             "description": "Offset per copy [x, y, z] (z optional): numbers in millimetres or strings with units (\"3m\"). Z is up, X east, Y north.",
@@ -336,6 +372,10 @@
               "type": "integer"
             },
             "type": "array"
+          },
+          "in_design_option": {
+            "description": "Optional design option id: make this change inside that option (its layer), not in the shared model",
+            "type": "integer"
           }
         },
         "required": [
@@ -351,6 +391,10 @@
         "properties": {
           "element": {
             "description": "Element id",
+            "type": "integer"
+          },
+          "in_design_option": {
+            "description": "Optional design option id: make this change inside that option (its layer), not in the shared model",
             "type": "integer"
           },
           "name": {
@@ -374,6 +418,10 @@
         "properties": {
           "element": {
             "description": "Element id",
+            "type": "integer"
+          },
+          "in_design_option": {
+            "description": "Optional design option id: make this change inside that option (its layer), not in the shared model",
             "type": "integer"
           },
           "key": {
@@ -446,6 +494,10 @@
             ],
             "type": "object"
           },
+          "in_design_option": {
+            "description": "Optional design option id: make this change inside that option (its layer), not in the shared model",
+            "type": "integer"
+          },
           "key": {
             "type": "string"
           },
@@ -486,6 +538,10 @@
           "element": {
             "description": "Element with direct geometry",
             "type": "integer"
+          },
+          "in_design_option": {
+            "description": "Optional design option id: make this change inside that option (its layer), not in the shared model",
+            "type": "integer"
           }
         },
         "required": [
@@ -502,6 +558,10 @@
         "properties": {
           "element": {
             "description": "Element id",
+            "type": "integer"
+          },
+          "in_design_option": {
+            "description": "Optional design option id: make this change inside that option (its layer), not in the shared model",
             "type": "integer"
           },
           "source": {
@@ -531,6 +591,10 @@
               "integer",
               "null"
             ]
+          },
+          "in_design_option": {
+            "description": "Optional design option id: make this change inside that option (its layer), not in the shared model",
+            "type": "integer"
           },
           "spec": {
             "enum": [
@@ -589,6 +653,10 @@
               "string"
             ]
           },
+          "in_design_option": {
+            "description": "Optional design option id: make this change inside that option (its layer), not in the shared model",
+            "type": "integer"
+          },
           "latitude": {
             "description": "Degrees, -90..90",
             "type": "number"
@@ -621,6 +689,10 @@
               "string",
               "null"
             ]
+          },
+          "in_design_option": {
+            "description": "Optional design option id: make this change inside that option (its layer), not in the shared model",
+            "type": "integer"
           }
         },
         "required": [],
@@ -632,6 +704,10 @@
       "description": "Rename the project.",
       "inputSchema": {
         "properties": {
+          "in_design_option": {
+            "description": "Optional design option id: make this change inside that option (its layer), not in the shared model",
+            "type": "integer"
+          },
           "name": {
             "type": "string"
           }
@@ -856,6 +932,10 @@
               "declared_unit"
             ],
             "type": "object"
+          },
+          "in_design_option": {
+            "description": "Optional design option id: make this change inside that option (its layer), not in the shared model",
+            "type": "integer"
           },
           "name": {
             "type": "string"
@@ -1193,6 +1273,10 @@
             "required": [],
             "type": "object"
           },
+          "in_design_option": {
+            "description": "Optional design option id: make this change inside that option (its layer), not in the shared model",
+            "type": "integer"
+          },
           "material": {
             "description": "Material id",
             "type": "integer"
@@ -1310,6 +1394,10 @@
       "description": "Create a wall type: either one layer of `thickness` (+ optional material id) or `layers` listed from the exterior face to the interior face, each {function: structure|substrate|insulation|finish|membrane, thickness, material?}.",
       "inputSchema": {
         "properties": {
+          "in_design_option": {
+            "description": "Optional design option id: make this change inside that option (its layer), not in the shared model",
+            "type": "integer"
+          },
           "layers": {
             "items": {
               "properties": {
@@ -1369,6 +1457,10 @@
       "description": "Create a floor type (layers from top to bottom), like create_wall_type.",
       "inputSchema": {
         "properties": {
+          "in_design_option": {
+            "description": "Optional design option id: make this change inside that option (its layer), not in the shared model",
+            "type": "integer"
+          },
           "layers": {
             "items": {
               "properties": {
@@ -1454,6 +1546,10 @@
               "string"
             ]
           },
+          "in_design_option": {
+            "description": "Optional design option id: make this change inside that option (its layer), not in the shared model",
+            "type": "integer"
+          },
           "level": {
             "description": "Base level id",
             "type": "integer"
@@ -1526,6 +1622,10 @@
               "number",
               "string"
             ]
+          },
+          "in_design_option": {
+            "description": "Optional design option id: make this change inside that option (its layer), not in the shared model",
+            "type": "integer"
           },
           "level": {
             "description": "Base level id",
@@ -1612,6 +1712,10 @@
               "string"
             ]
           },
+          "in_design_option": {
+            "description": "Optional design option id: make this change inside that option (its layer), not in the shared model",
+            "type": "integer"
+          },
           "level": {
             "description": "Base level id",
             "type": "integer"
@@ -1688,6 +1792,10 @@
               "string"
             ]
           },
+          "in_design_option": {
+            "description": "Optional design option id: make this change inside that option (its layer), not in the shared model",
+            "type": "integer"
+          },
           "wall": {
             "description": "Wall id",
             "type": "integer"
@@ -1711,6 +1819,10 @@
           },
           "element_type": {
             "description": "Type id",
+            "type": "integer"
+          },
+          "in_design_option": {
+            "description": "Optional design option id: make this change inside that option (its layer), not in the shared model",
             "type": "integer"
           }
         },
@@ -1747,6 +1859,10 @@
               "type": "array"
             },
             "type": "array"
+          },
+          "in_design_option": {
+            "description": "Optional design option id: make this change inside that option (its layer), not in the shared model",
+            "type": "integer"
           },
           "level": {
             "description": "Optional level id",
@@ -1796,6 +1912,10 @@
               "number",
               "string"
             ]
+          },
+          "in_design_option": {
+            "description": "Optional design option id: make this change inside that option (its layer), not in the shared model",
+            "type": "integer"
           },
           "kind": {
             "enum": [
@@ -1852,6 +1972,10 @@
               "number",
               "string"
             ]
+          },
+          "in_design_option": {
+            "description": "Optional design option id: make this change inside that option (its layer), not in the shared model",
+            "type": "integer"
           },
           "opening": {
             "description": "Door or window id",
@@ -1915,6 +2039,10 @@
               "number",
               "string"
             ]
+          },
+          "in_design_option": {
+            "description": "Optional design option id: make this change inside that option (its layer), not in the shared model",
+            "type": "integer"
           },
           "location_line": {
             "enum": [
@@ -1998,6 +2126,10 @@
             },
             "type": "array"
           },
+          "in_design_option": {
+            "description": "Optional design option id: make this change inside that option (its layer), not in the shared model",
+            "type": "integer"
+          },
           "offset": {
             "description": "Length: number = millimetres, or a string with units such as \"3m\", \"300cm\", \"10'\".",
             "type": [
@@ -2042,6 +2174,10 @@
           },
           "face": {
             "description": "Face id",
+            "type": "integer"
+          },
+          "in_design_option": {
+            "description": "Optional design option id: make this change inside that option (its layer), not in the shared model",
             "type": "integer"
           },
           "points": {
@@ -2092,6 +2228,10 @@
           },
           "face": {
             "description": "Face id",
+            "type": "integer"
+          },
+          "in_design_option": {
+            "description": "Optional design option id: make this change inside that option (its layer), not in the shared model",
             "type": "integer"
           },
           "level": {
@@ -2152,6 +2292,10 @@
           "face": {
             "description": "Face id",
             "type": "integer"
+          },
+          "in_design_option": {
+            "description": "Optional design option id: make this change inside that option (its layer), not in the shared model",
+            "type": "integer"
           }
         },
         "required": [
@@ -2184,6 +2328,10 @@
               "type": "integer"
             },
             "type": "array"
+          },
+          "in_design_option": {
+            "description": "Optional design option id: make this change inside that option (its layer), not in the shared model",
+            "type": "integer"
           },
           "vector": {
             "description": "Displacement [x, y, z] (z optional): numbers in millimetres or strings with units (\"3m\"). Z is up, X east, Y north.",
@@ -2246,6 +2394,10 @@
             "maxItems": 3,
             "minItems": 3,
             "type": "array"
+          },
+          "in_design_option": {
+            "description": "Optional design option id: make this change inside that option (its layer), not in the shared model",
+            "type": "integer"
           }
         },
         "required": [
@@ -2269,6 +2421,10 @@
           },
           "element": {
             "description": "Form id",
+            "type": "integer"
+          },
+          "in_design_option": {
+            "description": "Optional design option id: make this change inside that option (its layer), not in the shared model",
             "type": "integer"
           }
         },
@@ -2294,6 +2450,10 @@
               "type": "integer"
             },
             "type": "array"
+          },
+          "in_design_option": {
+            "description": "Optional design option id: make this change inside that option (its layer), not in the shared model",
+            "type": "integer"
           }
         },
         "required": [
@@ -2316,6 +2476,10 @@
             "description": "YYYY-MM-DD",
             "type": "string"
           },
+          "in_design_option": {
+            "description": "Optional design option id: make this change inside that option (its layer), not in the shared model",
+            "type": "integer"
+          },
           "name": {
             "type": "string"
           },
@@ -2337,6 +2501,10 @@
         "properties": {
           "end_date": {
             "type": "string"
+          },
+          "in_design_option": {
+            "description": "Optional design option id: make this change inside that option (its layer), not in the shared model",
+            "type": "integer"
           },
           "name": {
             "type": "string"
@@ -2364,6 +2532,10 @@
       "description": "Delete a phase. A phase used by elements needs `merge_into`: the phase just before or after it, which its elements then use (Revit: combine with previous / next).",
       "inputSchema": {
         "properties": {
+          "in_design_option": {
+            "description": "Optional design option id: make this change inside that option (its layer), not in the shared model",
+            "type": "integer"
+          },
           "merge_into": {
             "description": "Neighbouring phase that takes over its elements",
             "type": "integer"
@@ -2404,6 +2576,10 @@
               "type": "integer"
             },
             "type": "array"
+          },
+          "in_design_option": {
+            "description": "Optional design option id: make this change inside that option (its layer), not in the shared model",
+            "type": "integer"
           }
         },
         "required": [
@@ -2423,6 +2599,10 @@
               "type": "integer"
             },
             "type": "array"
+          },
+          "in_design_option": {
+            "description": "Optional design option id: make this change inside that option (its layer), not in the shared model",
+            "type": "integer"
           },
           "status": {
             "enum": [
@@ -2466,6 +2646,10 @@
             },
             "type": "array"
           },
+          "in_design_option": {
+            "description": "Optional design option id: make this change inside that option (its layer), not in the shared model",
+            "type": "integer"
+          },
           "kind": {
             "enum": [
               "join",
@@ -2495,6 +2679,10 @@
       "description": "Remove a relationship row by uid; the elements stay. Deleting an element removes its rows automatically.",
       "inputSchema": {
         "properties": {
+          "in_design_option": {
+            "description": "Optional design option id: make this change inside that option (its layer), not in the shared model",
+            "type": "integer"
+          },
           "relationship": {
             "description": "Relationship uid (from create_relationship or list_relationships)",
             "type": "string"
@@ -2506,6 +2694,202 @@
         "type": "object"
       },
       "name": "delete_relationship"
+    },
+    {
+      "description": "Create a design option set (Revit Option Set) with its first option \"Option 1\" (primary, empty). Options are alternatives shown one per set; each is a layer of changes over the shared model. Returns {element: set, option}.",
+      "inputSchema": {
+        "properties": {
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "type": "object"
+      },
+      "name": "create_option_set"
+    },
+    {
+      "description": "Rename an option set or move it to `position` (0 = first). Layers of a combination apply in set order.",
+      "inputSchema": {
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "position": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "set": {
+            "description": "Option set id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "set"
+        ],
+        "type": "object"
+      },
+      "name": "set_option_set"
+    },
+    {
+      "description": "Delete an option set with all its options (their layers stop being shown; the shared model is unchanged).",
+      "inputSchema": {
+        "properties": {
+          "set": {
+            "description": "Option set id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "set"
+        ],
+        "type": "object"
+      },
+      "name": "delete_option_set"
+    },
+    {
+      "description": "Add an option to a set: empty, or a copy of `copy_from`'s layer. Primary only if the set has no other open option. To fill it, run any command with `in_design_option` set to its id. Returns {element, is_primary}.",
+      "inputSchema": {
+        "properties": {
+          "copy_from": {
+            "description": "Option whose layer to copy",
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "set": {
+            "description": "Option set id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "set"
+        ],
+        "type": "object"
+      },
+      "name": "create_design_option"
+    },
+    {
+      "description": "Edit an open design option: rename, make it primary (is_primary: true), or replace its layer (`changes`, checked against the shared model; usually easier: run commands with `in_design_option`). Change list: [{\"op\": \"set\", \"path\": \"/elements/<uid>/name\", \"value\": ...} | {\"op\": \"remove\", \"path\": \"/elements/<uid>\"}]; paths are JSON pointers into {project, elements: {uid: element}, relationships: {uid: row}}, references between elements are uids.",
+      "inputSchema": {
+        "properties": {
+          "changes": {
+            "description": "Change list: [{\"op\": \"set\", \"path\": \"/elements/<uid>/name\", \"value\": ...} | {\"op\": \"remove\", \"path\": \"/elements/<uid>\"}]; paths are JSON pointers into {project, elements: {uid: element}, relationships: {uid: row}}, references between elements are uids.",
+            "items": {
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "is_primary": {
+            "type": "boolean"
+          },
+          "name": {
+            "type": "string"
+          },
+          "option": {
+            "description": "Design option id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "option"
+        ],
+        "type": "object"
+      },
+      "name": "set_design_option"
+    },
+    {
+      "description": "Delete a design option and its layer. The primary option cannot be deleted (make another primary first).",
+      "inputSchema": {
+        "properties": {
+          "option": {
+            "description": "Design option id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "option"
+        ],
+        "type": "object"
+      },
+      "name": "delete_design_option"
+    },
+    {
+      "description": "Accept a design option: merge its layer into the shared model (like merging a branch). The other options of its set are archived (kept, not deleted). Returns {accepted, archived}.",
+      "inputSchema": {
+        "properties": {
+          "option": {
+            "description": "Design option id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "option"
+        ],
+        "type": "object"
+      },
+      "name": "accept_design_option"
+    },
+    {
+      "description": "Apply a change list to the document, all or nothing (e.g. from diff_documents). Change list: [{\"op\": \"set\", \"path\": \"/elements/<uid>/name\", \"value\": ...} | {\"op\": \"remove\", \"path\": \"/elements/<uid>\"}]; paths are JSON pointers into {project, elements: {uid: element}, relationships: {uid: row}}, references between elements are uids.",
+      "inputSchema": {
+        "properties": {
+          "changes": {
+            "description": "Change list: [{\"op\": \"set\", \"path\": \"/elements/<uid>/name\", \"value\": ...} | {\"op\": \"remove\", \"path\": \"/elements/<uid>\"}]; paths are JSON pointers into {project, elements: {uid: element}, relationships: {uid: row}}, references between elements are uids.",
+            "items": {
+              "type": "object"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "changes"
+        ],
+        "type": "object"
+      },
+      "name": "apply_changes"
+    },
+    {
+      "description": "Option sets in order with their options: id, name, primary, status (open / accepted / archived), what each layer adds / removes / overrides, and failures (layers that no longer apply, conflicts in the primary combination).",
+      "inputSchema": {
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "name": "list_design_options"
+    },
+    {
+      "description": "Change list from one view of the open document to another, e.g. what option B changes compared with the primary combination. Feed it to apply_changes to reproduce it.",
+      "inputSchema": {
+        "properties": {
+          "from": {
+            "description": "From (default \"shared\"): \"shared\" (the shared model, no option layers), [] (primary combination), or option ids (one per option set; other sets show their primary)",
+            "items": {
+              "type": "integer"
+            },
+            "type": [
+              "array",
+              "string"
+            ]
+          },
+          "to": {
+            "description": "To (default [] = primary combination): \"shared\" (the shared model, no option layers), [] (primary combination), or option ids (one per option set; other sets show their primary)",
+            "items": {
+              "type": "integer"
+            },
+            "type": [
+              "array",
+              "string"
+            ]
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "name": "diff_documents"
     },
     {
       "description": "Relationship rows, all or those linking `element`: [{relationship, kind, elements, phase}].",
@@ -2588,11 +2972,21 @@
       "name": "revit_import"
     },
     {
-      "description": "Summarise the model: id, uid, name, category, level, faces, area (m²), volume (m³). Optional category filter.",
+      "description": "Summarise the model: id, uid, name, category, level, faces, area (m²), volume (m³). Optional category filter. `combination` shows the model as seen with design options (elements added by an option carry design_option).",
       "inputSchema": {
         "properties": {
           "category": {
             "type": "string"
+          },
+          "combination": {
+            "description": "Optional view (default: the shared model): \"shared\" (the shared model, no option layers), [] (primary combination), or option ids (one per option set; other sets show their primary)",
+            "items": {
+              "type": "integer"
+            },
+            "type": [
+              "array",
+              "string"
+            ]
           }
         },
         "required": [],

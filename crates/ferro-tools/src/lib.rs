@@ -10,6 +10,7 @@ use ferro_core::ops::{AnyCommand, ExecContext, Failure};
 use ferro_core::{Angle, Document, ElementId, Length, Session};
 use serde_json::{json, Map, Value};
 
+mod design_option;
 pub mod link;
 mod parameter;
 
@@ -242,6 +243,11 @@ pub fn list() -> Vec<Value> {
             json!({"kind": {"type":"string","enum":["join","cut","host","attach","bounds","connect","aggregate"]}, "elements": ids("Element ids, ordered as the kind says"), "phase": id("Optional phase id")}), &["kind", "elements"]),
         tool("delete_relationship", "Remove a relationship row by uid; the elements stay. Deleting an element removes its rows automatically.",
             json!({"relationship": {"type":"string","description":"Relationship uid (from create_relationship or list_relationships)"}}), &["relationship"]),
+        // Design options (ADR 0006) and change lists (M5-26).
+    ]
+    .into_iter()
+    .chain(design_option::tools())
+    .chain(vec![
         tool("list_relationships", "Relationship rows, all or those linking `element`: [{relationship, kind, elements, phase}].",
             json!({"element": id("Optional element id")}), &[]),
         // App-only (needs the Ferro app open, through Ferro Link).
@@ -254,15 +260,44 @@ pub fn list() -> Vec<Value> {
         tool("revit_import", "Revit → Ferro: apply a snapshot of the Revit model (levels, types, walls, floors, doors, windows; lengths in feet). Returns the Ferro uids of created elements.",
             json!({"snapshot": {"type":"object"}}), &["snapshot"]),
         // Read-only and session tools.
-        tool("list_elements", "Summarise the model: id, uid, name, category, level, faces, area (m²), volume (m³). Optional category filter.",
-            json!({"category": {"type":"string"}}), &[]),
+        tool("list_elements", "Summarise the model: id, uid, name, category, level, faces, area (m²), volume (m³). Optional category filter. `combination` shows the model as seen with design options (elements added by an option carry design_option).",
+            json!({"category": {"type":"string"}, "combination": design_option::combination_schema("Optional view (default: the shared model)")}), &[]),
         tool("get_element", "Full detail of one element, including each face id with its normal, area and centre (use for push_pull_face).",
             json!({"element": id("Element id")}), &["element"]),
         tool("undo", "Undo the last change.", json!({}), &[]),
         tool("redo", "Redo the last undone change.", json!({}), &[]),
         tool("get_journal", "Recent history: who changed what, with which commands.", json!({"limit":{"type":"integer"}}), &[]),
-    ]
+    ])
+    .map(with_option_argument)
+    .collect()
 }
+
+/// Every command tool takes an optional `in_design_option`: run it inside
+/// that design option (the change goes into the option's layer, the shared
+/// model is untouched).
+fn with_option_argument(mut t: Value) -> Value {
+    let is_command = t["name"]
+        .as_str()
+        .is_some_and(|n| AnyCommand::NAMES.contains(&n) && !DESIGN_OPTION_COMMANDS.contains(&n));
+    if is_command {
+        if let Some(p) = t["inputSchema"]["properties"].as_object_mut() {
+            p.insert("in_design_option".into(), json!({"type": "integer", "description": "Optional design option id: make this change inside that option (its layer), not in the shared model"}));
+        }
+    }
+    t
+}
+
+/// Commands on option sets themselves, which cannot run inside an option.
+const DESIGN_OPTION_COMMANDS: [&str; 8] = [
+    "create_option_set",
+    "set_option_set",
+    "delete_option_set",
+    "create_design_option",
+    "set_design_option",
+    "delete_design_option",
+    "accept_design_option",
+    "apply_changes",
+];
 
 /// Convert agent-friendly arguments to kernel units.
 pub fn normalize(args: &Value) -> Result<Value, String> {
@@ -381,6 +416,9 @@ pub fn summary_of(doc: &Document, category: Option<&str>, only: Option<&[Element
             m.insert("category".into(), json!(e.category));
             m.insert("body".into(), json!(e.body.kind()));
             m.insert("level".into(), json!(e.level_id));
+            if e.design_option.is_some() {
+                m.insert("design_option".into(), json!(e.design_option));
+            }
             if e.phase_created.is_some() || e.phase_demolished.is_some() {
                 m.insert("phase_created".into(), json!(e.phase_created));
                 m.insert("phase_demolished".into(), json!(e.phase_demolished));
@@ -438,6 +476,20 @@ pub fn summary_of(doc: &Document, category: Option<&str>, only: Option<&[Element
                     m.insert("outline_mm".into(), json!(f.outer));
                     m.insert("offset_mm".into(), json!(f.offset.mm()));
                     bim_dims(e, &mut m);
+                }
+                ElementBody::OptionSet(s) => {
+                    m.insert("order".into(), json!(s.order));
+                    m.insert("primary".into(), json!(doc.primary_option(e.id)));
+                }
+                ElementBody::DesignOption(o) => {
+                    let c = ferro_core::model::design_option::layer_counts(doc, &o.changes);
+                    m.insert("set".into(), json!(e.host_id));
+                    m.insert("is_primary".into(), json!(o.is_primary));
+                    m.insert("status".into(), json!(o.status.as_str()));
+                    m.insert("changes".into(), json!(o.changes.len()));
+                    m.insert("added".into(), json!(c.added));
+                    m.insert("removed".into(), json!(c.removed));
+                    m.insert("overridden".into(), json!(c.overridden));
                 }
                 ElementBody::Phase(p) => {
                     m.insert("order".into(), json!(doc.phase_index(e.id)));
@@ -612,10 +664,28 @@ pub fn call(
 ) -> Option<Result<Value, Value>> {
     let err = |m: String| Err(json!({"error": m}));
     if AnyCommand::NAMES.contains(&name) {
-        let mut norm = match normalize(args) {
+        let mut args = args.clone();
+        let in_option = match args
+            .as_object_mut()
+            .and_then(|o| o.remove("in_design_option"))
+        {
+            None | Some(Value::Null) => None,
+            Some(v) => match v.as_u64() {
+                Some(n) if !DESIGN_OPTION_COMMANDS.contains(&name) => Some(ElementId(n)),
+                Some(_) => return Some(err(format!("{name} cannot run inside a design option"))),
+                None => return Some(err("in_design_option must be an option id".into())),
+            },
+        };
+        let mut norm = match normalize(&args) {
             Ok(v) => v,
             Err(m) => return Some(err(m)),
         };
+        // `position` of a phase / option set is an index, not a length.
+        if matches!(name, "set_phase" | "set_option_set") {
+            if let Some(p) = args.get("position") {
+                norm["position"] = p.clone();
+            }
+        }
         if name == "set_parameter" {
             let key = norm
                 .get("key")
@@ -633,7 +703,13 @@ pub fn call(
             Ok(c) => c,
             Err(m) => return Some(err(m)),
         };
-        return Some(match session.execute(cmd, ctx) {
+        let result = match in_option {
+            Some(o) => {
+                session.execute_in_option(o, &ferro_core::model::Combination::primary(), cmd, ctx)
+            }
+            None => session.execute(cmd, ctx),
+        };
+        return Some(match result {
             Ok(o) => Ok(
                 json!({"result": o.output, "changed": o.changed, "warnings": failures_json(&o.warnings)}),
             ),
@@ -643,10 +719,20 @@ pub fn call(
         });
     }
     Some(match name {
-        "list_elements" => Ok(summary(
-            session.doc(),
-            args.get("category").and_then(Value::as_str),
-        )),
+        "list_elements" => {
+            let combo = match design_option::combination_arg(args.get("combination"), true) {
+                Ok(c) => c,
+                Err(m) => return Some(err(m)),
+            };
+            let category = args.get("category").and_then(Value::as_str);
+            match combo {
+                None => Ok(summary(session.doc(), category)),
+                Some(_) => design_option::seen(session.doc(), &combo)
+                    .map(|d| summary(&d, category)),
+            }
+        }
+        "list_design_options" => Ok(design_option::list_design_options(session.doc())),
+        "diff_documents" => design_option::diff_documents(session.doc(), args),
         "get_element" => match args.get("element").and_then(Value::as_u64) {
             Some(id) => detail(session.doc(), ElementId(id)).map_err(|m| {
                 json!({"error": m, "failures": [{"severity": "error", "code": "ferro.model.not_found", "message": m, "elements": [id]}]})
@@ -965,5 +1051,63 @@ mod tests {
             d["parameters_display"]["acme.energy.u"],
             json!("0.25 W/(m²·K)")
         );
+    }
+
+    #[test]
+    fn agents_edit_inside_design_options_and_diff_combinations() {
+        let tools = list();
+        let wall = tools.iter().find(|t| t["name"] == "create_box").unwrap();
+        assert!(wall["inputSchema"]["properties"]["in_design_option"].is_object());
+        let acc = tools
+            .iter()
+            .find(|t| t["name"] == "accept_design_option")
+            .unwrap();
+        assert!(acc["inputSchema"]["properties"]["in_design_option"].is_null());
+        let mut s = session();
+        let o = ok(&mut s, "create_option_set", json!({"name": "Roof"}));
+        let set = o["result"]["element"].as_u64().unwrap();
+        let b = ok(&mut s, "create_design_option", json!({"set": set}))["result"]["element"]
+            .as_u64()
+            .unwrap();
+        ok(
+            &mut s,
+            "create_box",
+            json!({"origin": [0, 0, 0], "width": "2m", "depth": "2m", "height": "2m", "in_design_option": b}),
+        );
+        assert_eq!(
+            s.doc().len(),
+            3,
+            "shared model has the set and two options only"
+        );
+        let l = ok(&mut s, "list_design_options", json!({}));
+        assert_eq!(l["sets"][0]["options"][1]["added"], 1, "{l}");
+        assert_eq!(l["failures"], json!([]));
+        let seen = ok(&mut s, "list_elements", json!({"combination": [b]}));
+        let forms: Vec<&Value> = seen["elements"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|e| e["category"] == "forms")
+            .collect();
+        assert_eq!(forms.len(), 1);
+        assert_eq!(forms[0]["design_option"], b);
+        let d = ok(&mut s, "diff_documents", json!({"to": [b]}));
+        assert_eq!(d["count"], 1, "{d}");
+        let none = ok(&mut s, "diff_documents", json!({}));
+        assert_eq!(none["count"], 0, "primary option is empty");
+        // Position is an index, not a length.
+        ok(&mut s, "set_option_set", json!({"set": set, "position": 0}));
+        let e = call(
+            &mut s,
+            &ExecContext::user(),
+            "accept_design_option",
+            &json!({"option": b, "in_design_option": b}),
+        )
+        .unwrap()
+        .unwrap_err();
+        assert!(e["error"].as_str().unwrap().contains("cannot run inside"));
+        // Applying the diff to the shared model reproduces the option.
+        ok(&mut s, "apply_changes", json!({"changes": d["changes"]}));
+        assert_eq!(s.doc().len(), 4);
     }
 }
