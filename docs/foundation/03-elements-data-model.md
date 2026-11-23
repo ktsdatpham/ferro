@@ -253,3 +253,58 @@ per category and shown status, count, volume of closed bodies and area
 cannot create them) and *Phase Created* / *Phase Demolished* are set by name.
 
 Phased cuts (ADR 0006 §5) wait for the relationship table (M5-5).
+
+## 3.11 Views (D-33, M5-22)
+
+A `View` is an element of category `Views` (Revit: `View`, `OST_Views`).
+Its `ViewType` is one of:
+
+| `ViewType` | Revit | Cut |
+|---|---|---|
+| `view_3d` | `View3D` | optional `SectionPlane` and `SectionBox` (the box is stored, not drawn yet) |
+| `plan_view` | `ViewPlan` | horizontal plane at the level + `ViewRange.cut_height` (default 1200 mm); the level is the element's `level_id` |
+| `section_view` | `ViewSection` | its `SectionPlane`, showing `depth` mm beyond it (default 10 m; the far clip is not drawn yet) |
+
+Every view carries a `ViewCamera` (eye, target, up, perspective / parallel,
+vertical field of view; mm and radians), a `DisplayStyle` (shaded, X-ray,
+wireframe, hidden line), `hidden_elements` (sorted, unique; only elements
+with geometry and levels), `hidden_tags`, an optional `phase` (none = the
+last phase), a `PhaseFilter`, and a reserved `design_options` list for the
+combination shown (ADR 0006; empty until design options land). View names
+are unique (`ferro.model.duplicate_name`).
+
+Commands: `create_view`, `set_view` (also hides / unhides elements with
+`hide`, `unhide`, `unhide_all`, and sets the phase; `null` clears a 3D cut,
+a section box or the phase), `delete_view`. Failure codes:
+`ferro.model.invalid_view` (degenerate camera — eye and target within
+`VERTEX_TOL`, up along the view direction, field of view outside (0°, 180°)
+—, view range not ordered `view_depth ≤ bottom ≤ cut_height ≤ top`, section
+box without volume, depth ≤ `SHORT_CURVE_TOL`, a field the view type does
+not have), `ferro.model.not_a_view`, `ferro.model.not_hideable`, plus the
+usual `not_found`, `not_a_level`, `not_a_phase`, `invalid_name`.
+
+**References and deletion.** The view's phase, hidden elements and design
+options are element references: ids in memory, uids in files and in the
+change format (`model::change::visit_element_refs`). Deleting an element
+removes it from every view in the same transaction, silently. Deleting a
+level deletes its plan views (Revit behaviour). A phase used only by views
+is not *in use*: deleting it clears those views' phase (they show the last
+phase); `delete_phase` with `merge_into` moves views to the phase merged
+into, like elements.
+
+**Phase filters** (Revit names): show all (default), show complete, show
+new, show previous + demo, show previous + new, show demo + new, no
+overrides. `PhaseFilter::graphics(status)` gives normal / overridden /
+hidden per status; future and past are always hidden. Overridden means the
+status graphics (existing grey, demolished / temporary red and dashed).
+
+**In the app** the screen shows the active view. Each change except the
+camera is one `set_view` undo step; orbiting never creates undo steps: the
+camera is written by *Save camera* or when switching to another view (only
+if it moved). A document without views shows a default 3D view held in
+memory; the first view change creates it as "3D View" in the same undo
+step, so opening and looking never changes a file.
+
+**Interop.** Views are not IFC products and are not exported. They are not
+synced to Revit yet (Revit views need view family types; a later task).
+

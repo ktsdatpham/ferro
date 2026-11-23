@@ -1429,6 +1429,162 @@ def list_relationships(*, element: Optional[ElementId] = None) -> Dict[str, Any]
     return _call("list_relationships", args)
 
 
+def create_view(
+    *,
+    name: str,
+    view_type: Literal["view_3d", "plan_view", "section_view"],
+    camera: Optional[Dict[str, Any]] = None,
+    depth: Optional[Length] = None,
+    display_style: Optional[Literal["shaded", "x_ray", "wireframe", "hidden_line"]] = None,
+    level: Optional[int] = None,
+    phase: Optional[int] = None,
+    phase_filter: Optional[Literal["show_all", "show_complete", "show_new", "show_previous_and_demo", "show_previous_and_new", "show_demo_and_new", "no_overrides"]] = None,
+    section_box: Optional[Dict[str, Any]] = None,
+    section_plane: Optional[Dict[str, Any]] = None,
+    view_range: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """Create a view (Revit View): `view_3d` (camera, optional section plane / section
+    box), `plan_view` (needs `level`; cut at view_range.cut_height above it, default
+    1200 mm) or `section_view` (needs `section_plane`; shows `depth` beyond it, default
+    10 m). View names are unique. A view keeps camera, display style, hidden elements /
+    tags and its phase; the Ferro app shows the active view. Returns {element}.
+
+    Args:
+        name: Text.
+        view_type: One of: view_3d, plan_view, section_view.
+        camera: Camera; points in mm. Optional.
+        depth: Length: number = millimetres, or a string with units ("3m", "300cm").
+            Optional.
+        display_style: One of: shaded, x_ray, wireframe, hidden_line. Optional.
+        level: Level of a plan view. Optional.
+        phase: Phase shown by the view (null = the last phase). Optional.
+        phase_filter: Revit phase filter: which statuses are shown and with status
+            graphics (default show_all). One of: show_all, show_complete, show_new,
+            show_previous_and_demo, show_previous_and_new, show_demo_and_new,
+            no_overrides. Optional.
+        section_box: 3D views: only what is inside is drawn (stored; not drawn by the
+            app yet). Optional.
+        section_plane: Cutting plane: geometry on the side the normal points to is not
+            drawn. Optional.
+        view_range: Plan views (Revit View Range), offsets from the level; view_depth ≤
+            bottom ≤ cut_height ≤ top. Optional.
+
+    Returns:
+        The tool's JSON body. Raises FerroError on failure.
+    """
+    args: Dict[str, Any] = {"name": name, "view_type": view_type}
+    if camera is not None:
+        args["camera"] = camera
+    if depth is not None:
+        args["depth"] = depth
+    if display_style is not None:
+        args["display_style"] = display_style
+    if level is not None:
+        args["level"] = level
+    if phase is not None:
+        args["phase"] = phase
+    if phase_filter is not None:
+        args["phase_filter"] = phase_filter
+    if section_box is not None:
+        args["section_box"] = section_box
+    if section_plane is not None:
+        args["section_plane"] = section_plane
+    if view_range is not None:
+        args["view_range"] = view_range
+    return _call("create_view", args)
+
+
+def set_view(
+    *,
+    view: ElementId,
+    camera: Optional[Dict[str, Any]] = None,
+    depth: Optional[Length] = None,
+    display_style: Optional[Literal["shaded", "x_ray", "wireframe", "hidden_line"]] = None,
+    hidden_tags: Optional[Sequence[str]] = None,
+    hide: Optional[Sequence[int]] = None,
+    name: Optional[str] = None,
+    phase: Optional[int] = None,
+    phase_filter: Optional[Literal["show_all", "show_complete", "show_new", "show_previous_and_demo", "show_previous_and_new", "show_demo_and_new", "no_overrides"]] = None,
+    section_box: Optional[Dict[str, Any]] = None,
+    section_plane: Optional[Dict[str, Any]] = None,
+    unhide: Optional[Sequence[int]] = None,
+    unhide_all: Optional[bool] = None,
+    view_range: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """Change a view. Omit a field to keep it. `section_plane`, `section_box` and
+    `phase` accept null to clear (a section view keeps its plane). `hide` / `unhide` add
+    / remove elements from the view's hidden list (`unhide_all` empties it first);
+    `hidden_tags` replaces the tags hidden in the view. Deleting an element removes it
+    from every view.
+
+    Args:
+        view: View id.
+        camera: Camera; points in mm. Optional.
+        depth: Length: number = millimetres, or a string with units ("3m", "300cm").
+            Optional.
+        display_style: One of: shaded, x_ray, wireframe, hidden_line. Optional.
+        hidden_tags: Tags whose elements are not shown. Optional.
+        hide: Elements to hide in the view. Optional.
+        name: Text. Optional.
+        phase: Phase shown by the view (null = the last phase). Optional.
+        phase_filter: Revit phase filter: which statuses are shown and with status
+            graphics (default show_all). One of: show_all, show_complete, show_new,
+            show_previous_and_demo, show_previous_and_new, show_demo_and_new,
+            no_overrides. Optional.
+        section_box: 3D views: only what is inside is drawn (stored; not drawn by the
+            app yet). Optional.
+        section_plane: Cutting plane: geometry on the side the normal points to is not
+            drawn. Optional.
+        unhide: Elements to show again. Optional.
+        unhide_all: True or False. Optional.
+        view_range: Plan views (Revit View Range), offsets from the level; view_depth ≤
+            bottom ≤ cut_height ≤ top. Optional.
+
+    Returns:
+        The tool's JSON body. Raises FerroError on failure.
+    """
+    args: Dict[str, Any] = {"view": view}
+    if camera is not None:
+        args["camera"] = camera
+    if depth is not None:
+        args["depth"] = depth
+    if display_style is not None:
+        args["display_style"] = display_style
+    if hidden_tags is not None:
+        args["hidden_tags"] = hidden_tags
+    if hide is not None:
+        args["hide"] = hide
+    if name is not None:
+        args["name"] = name
+    if phase is not None:
+        args["phase"] = phase
+    if phase_filter is not None:
+        args["phase_filter"] = phase_filter
+    if section_box is not None:
+        args["section_box"] = section_box
+    if section_plane is not None:
+        args["section_plane"] = section_plane
+    if unhide is not None:
+        args["unhide"] = unhide
+    if unhide_all is not None:
+        args["unhide_all"] = unhide_all
+    if view_range is not None:
+        args["view_range"] = view_range
+    return _call("set_view", args)
+
+
+def delete_view(*, view: ElementId) -> Dict[str, Any]:
+    """Delete a view (deleting a level also deletes its plan views).
+
+    Args:
+        view: View id.
+
+    Returns:
+        The tool's JSON body. Raises FerroError on failure.
+    """
+    return _call("delete_view", {"view": view})
+
+
 def get_selection() -> Dict[str, Any]:
     """Elements the user has selected in the Ferro app, with their summaries. Use it for
     requests like "make the selected wall taller".
@@ -1694,6 +1850,9 @@ TOOL_NAMES = (
     "create_relationship",
     "delete_relationship",
     "list_relationships",
+    "create_view",
+    "set_view",
+    "delete_view",
     "get_selection",
     "select_elements",
     "get_document_version",

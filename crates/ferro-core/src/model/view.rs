@@ -510,13 +510,18 @@ mod tests {
     #[test]
     fn view_range_order_with_tolerance() {
         ViewRange::default().validate().unwrap();
-        let mut r = ViewRange::default();
-        r.cut_height = Length::from_mm(r.top.mm() + tol::VERTEX_TOL * 0.5);
+        let top = ViewRange::default().top.mm();
+        let mut r = ViewRange {
+            cut_height: Length::from_mm(top + tol::VERTEX_TOL * 0.5),
+            ..Default::default()
+        };
         r.validate().unwrap();
         r.cut_height = Length::from_mm(r.top.mm() + 1.0);
         assert!(r.validate().is_err());
-        let mut r = ViewRange::default();
-        r.view_depth = Length::from_mm(f64::INFINITY);
+        let r = ViewRange {
+            view_depth: Length::from_mm(f64::INFINITY),
+            ..Default::default()
+        };
         assert!(r.validate().is_err());
     }
 

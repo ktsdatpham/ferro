@@ -147,13 +147,13 @@ pub struct CreateView {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub level: Option<ElementId>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub camera: Option<ViewCamera>,
+    pub camera: Option<Box<ViewCamera>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub section_plane: Option<SectionPlane>,
+    pub section_plane: Option<Box<SectionPlane>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub section_box: Option<BoundingBox3>,
+    pub section_box: Option<Box<BoundingBox3>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub view_range: Option<ViewRange>,
+    pub view_range: Option<Box<ViewRange>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub depth: Option<Length>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -171,7 +171,7 @@ impl CreateView {
             name: name.into(),
             view_type: ViewTypeName::View3D,
             level: None,
-            camera: Some(camera),
+            camera: Some(Box::new(camera)),
             section_plane: None,
             section_box: None,
             view_range: None,
@@ -232,10 +232,13 @@ impl Command for CreateView {
         let (view_type, camera, level) = match self.view_type {
             ViewTypeName::View3D => (
                 ViewType::View3D {
-                    section_plane: self.section_plane,
-                    section_box: self.section_box,
+                    section_plane: self.section_plane.as_deref().copied(),
+                    section_box: self.section_box.as_deref().copied(),
                 },
-                self.camera.unwrap_or_else(ViewCamera::default_3d),
+                self.camera
+                    .as_deref()
+                    .copied()
+                    .unwrap_or_else(ViewCamera::default_3d),
                 None,
             ),
             ViewTypeName::PlanView => {
@@ -251,16 +254,19 @@ impl Command for CreateView {
                     .on(level));
                 };
                 let z = l.elevation.mm();
-                let range = self.view_range.unwrap_or_default();
+                let range = self.view_range.as_deref().copied().unwrap_or_default();
                 range.validate().map_err(invalid)?;
                 (
                     ViewType::PlanView { view_range: range },
-                    self.camera.unwrap_or_else(|| ViewCamera::plan(0.0, 0.0, z)),
+                    self.camera
+                        .as_deref()
+                        .copied()
+                        .unwrap_or_else(|| ViewCamera::plan(0.0, 0.0, z)),
                     Some(level),
                 )
             }
             ViewTypeName::SectionView => {
-                let Some(plane) = self.section_plane else {
+                let Some(plane) = self.section_plane.as_deref().copied() else {
                     return Err(invalid("a section view needs a section plane"));
                 };
                 let depth = self
@@ -272,7 +278,10 @@ impl Command for CreateView {
                         section_plane: plane,
                         depth,
                     },
-                    self.camera.unwrap_or_else(|| ViewCamera::section(&plane)),
+                    self.camera
+                        .as_deref()
+                        .copied()
+                        .unwrap_or_else(|| ViewCamera::section(&plane)),
                     None,
                 )
             }
@@ -315,7 +324,7 @@ pub struct SetView {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub camera: Option<ViewCamera>,
+    pub camera: Option<Box<ViewCamera>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub display_style: Option<DisplayStyle>,
     #[serde(
@@ -323,15 +332,15 @@ pub struct SetView {
         deserialize_with = "present",
         skip_serializing_if = "Option::is_none"
     )]
-    pub section_plane: Option<Option<SectionPlane>>,
+    pub section_plane: Option<Option<Box<SectionPlane>>>,
     #[serde(
         default,
         deserialize_with = "present",
         skip_serializing_if = "Option::is_none"
     )]
-    pub section_box: Option<Option<BoundingBox3>>,
+    pub section_box: Option<Option<Box<BoundingBox3>>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub view_range: Option<ViewRange>,
+    pub view_range: Option<Box<ViewRange>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub depth: Option<Length>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -385,7 +394,7 @@ impl Command for SetView {
         }
         if let Some(c) = &self.camera {
             check_camera(c)?;
-            view.camera = *c;
+            view.camera = **c;
         }
         if let Some(s) = self.display_style {
             view.display_style = s;
@@ -399,7 +408,7 @@ impl Command for SetView {
         }
         let kind = view.view_type.as_str();
         let no = |what: &str| invalid(format!("a {kind} has no {what}"));
-        if let Some(plane) = self.section_plane {
+        if let Some(plane) = self.section_plane.as_ref().map(|p| p.as_deref().copied()) {
             if let Some(p) = &plane {
                 validate_section_plane(p).map_err(invalid)?;
             }
@@ -412,7 +421,7 @@ impl Command for SetView {
                 (ViewType::PlanView { .. }, _) => return Err(no("section plane")),
             }
         }
-        if let Some(b) = self.section_box {
+        if let Some(b) = self.section_box.as_ref().map(|p| p.as_deref().copied()) {
             if let Some(b) = &b {
                 validate_section_box(b).map_err(invalid)?;
             }
@@ -421,7 +430,7 @@ impl Command for SetView {
                 _ => return Err(no("section box")),
             }
         }
-        if let Some(r) = self.view_range {
+        if let Some(r) = self.view_range.as_deref().copied() {
             r.validate().map_err(invalid)?;
             match &mut view.view_type {
                 ViewType::PlanView { view_range } => *view_range = r,

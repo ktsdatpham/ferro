@@ -25,9 +25,7 @@ use crate::camera::OrbitCamera;
 use crate::tools::SectionPlane;
 use eframe::egui::{self, RichText};
 use ferro_core::math::tol;
-use ferro_core::model::{
-    DisplayStyle, PhaseFilter, Projection, View, ViewCamera, ViewRange, ViewType,
-};
+use ferro_core::model::{DisplayStyle, PhaseFilter, Projection, View, ViewCamera, ViewType};
 use ferro_core::ops::view_commands::{CreateView, DeleteView, SetView, ViewTypeName};
 use ferro_core::ops::Outcome;
 use ferro_core::{Angle, AnyCommand, Document, ElementId, UnitVec3, Vec3};
@@ -253,20 +251,20 @@ impl FerroApp {
         cmd.phase = self.phasing.pick;
         cmd.phase_filter = Some(self.phasing.filter);
         match kind {
-            ViewTypeName::View3D => cmd.section_plane = self.section,
+            ViewTypeName::View3D => cmd.section_plane = self.section.map(Box::new),
             ViewTypeName::SectionView => {
-                cmd.section_plane = self.section;
-                cmd.camera = self.section.map(|p| ViewCamera::section(&p));
+                cmd.section_plane = self.section.map(Box::new);
+                cmd.camera = self.section.map(|p| Box::new(ViewCamera::section(&p)));
             }
             ViewTypeName::PlanView => {
                 let (level, z) = self.level_info()?;
                 cmd.level = Some(level);
-                cmd.view_range = Some(ViewRange::default());
-                cmd.camera = Some(ViewCamera::plan(
+                cmd.view_range = Some(Box::default());
+                cmd.camera = Some(Box::new(ViewCamera::plan(
                     self.camera.target.x,
                     self.camera.target.y,
                     z,
-                ));
+                )));
                 cmd.display_style = Some(DisplayStyle::HiddenLine);
             }
         }
@@ -405,7 +403,7 @@ impl FerroApp {
                 self.say("A section view always cuts; switch to a 3D view", true);
                 false
             }
-            _ => self.edit_view(|c| c.section_plane = Some(p)),
+            _ => self.edit_view(|c| c.section_plane = Some(p.map(Box::new))),
         }
     }
 
@@ -430,7 +428,7 @@ impl FerroApp {
             self.say(m, true);
             return;
         }
-        if self.edit_view(|c| c.camera = Some(cam)) {
+        if self.edit_view(|c| c.camera = Some(Box::new(cam))) {
             self.say("Camera saved in the view", false);
         }
     }
@@ -452,7 +450,7 @@ impl FerroApp {
         if self.camera_moved() {
             let cam = camera_to_view(&self.camera);
             if cam.validate().is_ok() {
-                self.edit_view(|c| c.camera = Some(cam));
+                self.edit_view(|c| c.camera = Some(Box::new(cam)));
             }
         }
         self.views.active = Some(id);

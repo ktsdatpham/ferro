@@ -56,6 +56,12 @@ for the same concept.
 | `PhaseQuantities` | Volumes and areas per category split by `PhaseStatus` in one phase | Phase schedule, Demolition list |
 | `Relationship` | A row of the document's relationship table: a `Uid`, a `RelationshipKind` and the linked elements in kind order (ADR 0004 §5) | Link, Association, Connection (alone), Constraint |
 | `RelationshipKind` | `join`, `cut`, `host`, `attach`, `bounds`, `connect`, `aggregate` | RelationType, LinkType |
+| `View` (`View3D`, `PlanView`, `SectionView`) | An element of category `Views` (Revit `View`, `OST_Views`, D-33): camera, cut, display style, hidden elements / tags, phase and phase filter; `ViewType` says which kind | Viewport, Camera (as an element), Scene (for this), Sheet |
+| `ViewCamera` | A view's eye, target, up direction, projection (perspective / parallel) and vertical field of view | Viewpoint, Eye (as a type) |
+| `SectionPlane` / `SectionBox` | A plane cutting a view (a point and the normal of the side cut away) / a 3D view's box limiting what is drawn (Revit *Section Box*) | Clip plane, Cutting plane (as a type), Crop box (for this) |
+| `ViewRange` | A plan view's top, cut height, bottom and view depth as offsets from its level (Revit *View Range*) | Cut settings, Plan range |
+| `DisplayStyle` | How a view draws: shaded, X-ray, wireframe, hidden line (Revit `DisplayStyle`); presentation styles are `RenderStyle` (D-49) | Visual style, Render mode, Shading mode |
+| `PhaseFilter` / `PhaseGraphics` | A view's choice of which `PhaseStatus` values are shown and how (Revit *Phase Filter*: show all, show complete, show new…) / normal, overridden (status graphics) or hidden | Phase view mode, Phase visibility mode |
 | `DisplayScene` / `DrawRecord` | Display data derived from a `Document` snapshot (`ferro-scene`, ADR 0004 §6) / what to draw for one element; never saved | Scene (alone, as a type), Render model, Node |
 
 Adding a term requires adding it here first.
