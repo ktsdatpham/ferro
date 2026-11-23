@@ -57,6 +57,7 @@ namespace Ferro.Revit
                         case "floor": Floor(op); break;
                         case "opening": Opening(op); break;
                         case "direct_shape": DirectShape(op); break;
+                        case "site_location": SiteLocationOf(op); break;
                         default: _report.Problems.Add($"unknown operation {kind}"); break;
                     }
                 }
@@ -115,6 +116,27 @@ namespace Ferro.Revit
             _doc.Delete(e.Id);
             _byUid.Remove(Str(op, "ferro_uid"));
             _report.Deleted++;
+        }
+
+        /// <summary>Project location (M5-24.3): latitude / longitude in
+        /// radians, time zone in hours, place name. Revit's SiteLocation
+        /// elevation is read-only, so the op's `elevation` (feet) is not
+        /// applied here.</summary>
+        private void SiteLocationOf(JsonObject op)
+        {
+            var site = _doc.SiteLocation ?? throw new InvalidOperationException("this model has no site location");
+            site.Latitude = Num(op, "latitude");
+            site.Longitude = Num(op, "longitude");
+            site.TimeZone = Num(op, "time_zone");
+            var place = Str(op, "place");
+            if (place.Length > 0) site.PlaceName = place;
+            var created = Existing(op) == null;
+            try { Tag(site, op, created); }
+            catch (Exception ex)
+            {
+                // Values are applied; without the tag the op is just re-sent.
+                _report.Problems.Add($"site location: not tagged ({ex.Message})");
+            }
         }
 
         private void Material(JsonObject op)

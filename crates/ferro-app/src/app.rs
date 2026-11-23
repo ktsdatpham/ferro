@@ -11,6 +11,7 @@ use crate::scene::{self, line_vertex, SceneCache};
 use crate::tools::{
     pick_sub, SectionPlane, SelectOp, SubPick, ToolCtx, ToolEvent, ToolKind, ToolState,
 };
+use crate::units;
 use eframe::egui::{self, Color32, Key, PointerButton, Pos2, Rect, RichText, Sense, Vec2};
 use eframe::wgpu;
 use ferro_core::model::{keys, Category, ElementBody};
@@ -141,6 +142,8 @@ pub struct FerroApp {
     new_material_name: String,
     /// Material open in the Materials panel editor.
     material_draft: Option<MaterialDraft>,
+    /// The open Project settings window (M5-24.2), if any.
+    project_settings: Option<crate::settings_window::ProjectSettingsDraft>,
     clipboard: Vec<ElementId>,
     /// Last Move-copy, for arrays typed afterwards (`5x`, `/5`).
     last_copy: Option<CopyElements>,
@@ -222,6 +225,7 @@ impl FerroApp {
             new_material_color: [0.80, 0.55, 0.40],
             new_material_name: "Material 1".into(),
             material_draft: None,
+            project_settings: None,
             clipboard: Vec::new(),
             last_copy: None,
             select_drag: None,
@@ -854,6 +858,25 @@ impl FerroApp {
         self.material_draft = Some(draft);
     }
 
+    /// The Project settings window: its edits run as commands (undoable).
+    fn project_settings_window(&mut self, ctx: &egui::Context) {
+        let Some(mut draft) = self.project_settings.take() else {
+            return;
+        };
+        let mut open = true;
+        let mut cmds = Vec::new();
+        egui::Window::new("Project settings")
+            .open(&mut open)
+            .resizable(false)
+            .show(ctx, |ui| cmds = draft.ui(ui, self.session.doc()));
+        for c in cmds {
+            self.run(c);
+        }
+        if open {
+            self.project_settings = Some(draft);
+        }
+    }
+
     fn level_info(&self) -> Option<(ElementId, f64)> {
         let id = self.active_level?;
         let e = self.session.doc().get(id)?;
@@ -1238,6 +1261,10 @@ impl FerroApp {
                     self.export_ifc();
                 }
                 ui.separator();
+                if ui.button("Project settings…").clicked() {
+                    self.project_settings.get_or_insert_with(Default::default);
+                }
+                ui.separator();
                 if ui.button("Quit").clicked() {
                     ui.ctx().send_viewport_cmd(egui::ViewportCommand::Close);
                 }
@@ -1529,6 +1556,7 @@ impl FerroApp {
 
     fn properties_ui(&mut self, ui: &mut egui::Ui) {
         ui.heading("Properties");
+        let u = self.session.doc().project().settings.units.clone();
         if self.selection.is_empty() {
             ui.label("Nothing selected.");
             return;
@@ -1694,13 +1722,13 @@ impl FerroApp {
                         if let Some(bb) = f.body.bounding_box() {
                             let s = bb.size();
                             ui.label("Size");
-                            ui.label(format!("{:.0} × {:.0} × {:.0} mm", s.x, s.y, s.z));
+                            ui.label(units::lengths(&u, &[s.x, s.y, s.z]));
                             ui.end_row();
                         }
                     }
                     ElementBody::Level(l) => {
                         ui.label("Elevation");
-                        ui.label(format!("{:.3} m", l.elevation.m()));
+                        ui.label(units::length(&u, l.elevation.mm()));
                         ui.end_row();
                     }
                     ElementBody::Wall(_) | ElementBody::Floor(_) => {
@@ -1711,18 +1739,18 @@ impl FerroApp {
                         ] {
                             if let Some(ParamValue::Length(l)) = e.param(k) {
                                 ui.label(label);
-                                ui.label(format!("{:.0} mm", l.mm()));
+                                ui.label(units::length(&u, l.mm()));
                                 ui.end_row();
                             }
                         }
                         if let Some(ParamValue::Area(a)) = e.param(keys::AREA) {
                             ui.label("Area");
-                            ui.label(format!("{:.2} m²", a / 1e6));
+                            ui.label(units::area(&u, *a));
                             ui.end_row();
                         }
                         if let Some(ParamValue::Volume(v)) = e.param(keys::VOLUME) {
                             ui.label("Volume");
-                            ui.label(format!("{:.3} m³", v / 1e9));
+                            ui.label(units::volume(&u, *v));
                             ui.end_row();
                         }
                     }
@@ -1733,16 +1761,16 @@ impl FerroApp {
                             ui.end_row();
                         }
                         ui.label("Size");
-                        ui.label(format!("{:.0} × {:.0} mm", o.width.mm(), o.height.mm()));
+                        ui.label(units::lengths(&u, &[o.width.mm(), o.height.mm()]));
                         ui.end_row();
                         ui.label("Sill");
-                        ui.label(format!("{:.0} mm", o.sill.mm()));
+                        ui.label(units::length(&u, o.sill.mm()));
                         ui.end_row();
                     }
                     ElementBody::WallType(ferro_core::model::bim::WallType { structure })
                     | ElementBody::FloorType(ferro_core::model::bim::FloorType { structure }) => {
                         ui.label("Thickness");
-                        ui.label(format!("{:.0} mm", structure.thickness()));
+                        ui.label(units::length(&u, structure.thickness()));
                         ui.end_row();
                         for l in &structure.layers {
                             ui.label(format!("{:?}", l.function));
@@ -1751,7 +1779,7 @@ impl FerroApp {
                                 .and_then(|m| self.session.doc().get(m))
                                 .map(|m| m.label())
                                 .unwrap_or_else(|| "—".into());
-                            ui.label(format!("{:.0} mm  {mat}", l.thickness.mm()));
+                            ui.label(format!("{}  {mat}", units::length(&u, l.thickness.mm())));
                             ui.end_row();
                         }
                         self.type_quantities_ui(ui, id);
@@ -1765,12 +1793,12 @@ impl FerroApp {
                 }
                 if let Some(ParamValue::Area(a)) = e.param(keys::FORM_AREA) {
                     ui.label("Surface area");
-                    ui.label(format!("{:.2} m²", a / 1e6));
+                    ui.label(units::area(&u, *a));
                     ui.end_row();
                 }
                 if let Some(ParamValue::Volume(v)) = e.param(keys::FORM_VOLUME) {
                     ui.label("Volume");
-                    ui.label(format!("{:.3} m³", v / 1e9));
+                    ui.label(units::volume(&u, *v));
                     ui.end_row();
                 }
                 // Quantity parameters in display units (ADR 0004 §2), e.g.
@@ -1781,7 +1809,10 @@ impl FerroApp {
                     .filter(|(k, p)| !k.starts_with("ferro.") && p.spec().is_some())
                 {
                     ui.label(k.as_str());
-                    ui.label(p.display());
+                    ui.label(match p.as_quantity() {
+                        Some((spec, v)) => units::quantity(&u, spec, v),
+                        None => p.display(),
+                    });
                     ui.end_row();
                 }
 
@@ -1832,7 +1863,13 @@ impl FerroApp {
             (
                 "U-value",
                 StructureQuantity::UValue,
-                q.u_value_w_m2k.map(|v| format!("{v:.3} W/(m²·K)")),
+                q.u_value_w_m2k.map(|v| {
+                    units::quantity(
+                        &self.session.doc().project().settings.units,
+                        ferro_core::math::QuantitySpec::UValue,
+                        v,
+                    )
+                }),
             ),
             (
                 "Mass",
@@ -1847,13 +1884,25 @@ impl FerroApp {
             (
                 "Cost",
                 StructureQuantity::Cost,
-                q.cost_per_m2
-                    .map(|v| format!("{v:.0} {}/m²", q.currency.as_deref().unwrap_or(""))),
+                q.cost_per_m2.map(|v| {
+                    units::cost_per_m2(
+                        v,
+                        q.currency.as_deref(),
+                        self.session.doc().project().settings.currency.as_deref(),
+                    )
+                }),
             ),
         ];
+        let mismatch = units::currency_mismatch(
+            q.currency.as_deref(),
+            self.session.doc().project().settings.currency.as_deref(),
+        );
         for (label, what, value) in rows {
             ui.label(label);
             match value {
+                Some(v) if mismatch && what == StructureQuantity::Cost => ui
+                    .colored_label(Color32::from_rgb(200, 120, 0), v)
+                    .on_hover_text("The materials are priced in another currency than the project's; costs are not converted."),
                 Some(v) => ui.label(v),
                 None => ui.label(RichText::new(lacking(what)).weak()),
             };
@@ -2583,9 +2632,12 @@ impl FerroApp {
             rect.right_top() + Vec2::new(-10.0, 10.0),
             egui::Align2::RIGHT_TOP,
             format!(
-                "{}  ·  {:.1} m view",
+                "{}  ·  {} view",
                 self.workspace.label(),
-                self.camera.distance / 1000.0
+                units::length(
+                    &self.session.doc().project().settings.units,
+                    self.camera.distance
+                )
             ),
             egui::FontId::proportional(12.0),
             Color32::from_gray(90),
@@ -2992,6 +3044,7 @@ impl FerroApp {
     }
 
     fn windows(&mut self, ctx: &egui::Context) {
+        self.project_settings_window(ctx);
         egui::Window::new("About Ferro").open(&mut self.show_about).resizable(false).show(ctx, |ui| {
             ui.heading(format!("Ferro {}", env!("CARGO_PKG_VERSION")));
             ui.label("Open-source, AI-native 3D design tool for architects.");
