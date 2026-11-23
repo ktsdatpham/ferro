@@ -142,6 +142,16 @@ Turns the display scene (`ferro-scene`) into GPU vertex lists.
 - fn `face_triangles` — Triangles of one face, for hover highlighting.
 - fn `doc_bounds`
 
+### `ferro_app::settings_window`
+
+The *Project settings…* window (M5-24.2): display units and decimals per quantity, site location and currency.
+
+- const `LISTED` — Quantities listed in the window, in this order: the geometric ones first,
+- struct `ProjectSettingsDraft` — Text being edited in the window; reloaded from the document whenever the
+- fn `ProjectSettingsDraft::ui` — Draw the window contents. Returns the commands to run (empty when
+- fn `format_utc_offset` — `"+07:00"` for 420 minutes, `"-03:30"` for −210.
+- fn `parse_utc_offset` — Read `"+7"`, `"7"`, `"+07:00"`, `"-3:30"`, `"5.5"` or `"UTC+7"` as
+
 ### `ferro_app::tools`
 
 Drawing tools (D-72): app-side state machines. Each tool previews by evaluating a command on a copy of the document, and commits exactly one named command, so a human and an AI agent produce identical history.
@@ -159,7 +169,6 @@ Drawing tools (D-72): app-side state machines. Each tool previews by evaluating 
 - struct `DrawPlane` — A plane to draw on, with an in-plane frame.
 - fn `DrawPlane::is_horizontal`
 - struct `ToolState`
-- fn `parse_lengths` — Parse "4000", "4m", "4000,3000", "4m;3m".
 - fn `ToolState::new`
 - fn `ToolState::is_active`
 - fn `ToolState::cancel`
@@ -178,6 +187,22 @@ Drawing tools (D-72): app-side state machines. Each tool previews by evaluating 
 - fn `ToolState::click`
 - fn `ToolState::typed` — Enter pressed with typed text (value control box).
 - fn `ToolState::rubber_band` — Lines to draw: the chain being drawn, the rubber band to the cursor,
+
+### `ferro_app::units`
+
+Showing and reading quantities in the project's display units (M5-24.2).
+
+- fn `quantity` — A stored value of `spec` in the project's display unit with its symbol,
+- fn `length` — A length stored in mm, e.g. `"3300 mm"` or `"3.30 m"`.
+- fn `area` — An area stored in mm², e.g. `"12.00 m²"`.
+- fn `volume` — A volume stored in mm³, e.g. `"2.400 m³"`.
+- fn `angle` — An angle stored in radians, e.g. `"90.0°"`.
+- fn `lengths` — Several lengths in mm sharing one unit symbol, e.g. `"4.000 × 3.000 m"`.
+- fn `parse_length` — Read one typed length in mm. A bare number is in the project's length
+- fn `parse_lengths` — Read typed lengths separated by `,` or `;` (`"4,3"`, `"4m; 3m"`), in mm.
+- fn `parse_angle` — Read a typed angle in radians. A bare number is in the project's angle
+- fn `cost_per_m2` — A material cost per m² with its currency, e.g. `"450000 VND/m²"`.
+- fn `currency_mismatch` — `true` when [`cost_per_m2`] flags a currency mismatch.
 
 ## `ferro-cli`
 
@@ -1032,6 +1057,7 @@ Revit → Ferro: apply a snapshot of the Revit model to a session as ordinary co
 Ferro → Revit: the operations that make a Revit model match a document.
 
 - const `DEFAULT_LEVEL_UID` — Uid of the level created in Revit for elements that have no level.
+- const `SITE_LOCATION_UID` — Uid the add-in tags Revit's `SiteLocation` with (one per project). It is
 - struct `RevitState` — What the Revit model already holds: one record per element tagged with a
 - struct `RevitRecord`
 - struct `OpLayer` — A compound-structure layer in Revit terms.
