@@ -231,7 +231,7 @@ namespace Ferro.Revit
             var order = (int)Num(op, "order");
             if (order >= 0 && order < _doc.Phases.Size)
             {
-                var p = _doc.Phases[order];
+                var p = _doc.Phases.get_Item(order);
                 p.Name = name;
                 _report.Updated++;
                 return;

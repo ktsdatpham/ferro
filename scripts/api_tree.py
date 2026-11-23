@@ -98,8 +98,9 @@ def module_files(src):
             if parts and parts[-1].endswith("_tests") or "tests" in parts:
                 continue
             out.append(("::".join(parts), os.path.join(dirpath, name)))
-    out.sort(key=lambda x: (x[0].count("::") if x[0] else -1, x[0]))
-    out.sort(key=lambda x: x[0])
+    # Module path, then file: lib.rs and main.rs share the crate root, and
+    # os.walk order differs between filesystems (CI vs local).
+    out.sort(key=lambda x: (x[0], x[1].replace(os.sep, "/")))
     return out
 
 
