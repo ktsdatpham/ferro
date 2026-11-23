@@ -19,6 +19,7 @@ Revit equivalent: identical (Revit is right-handed, Z up).
 | Area | mm² | `f64` | ft² | Display usually in m² |
 | Volume | mm³ | `f64` | ft³ | Display usually in m³ |
 | Slope | rise / run (unitless) | `f64` | same | Display as %, ratio or degrees |
+| Other physical quantities | SI (kg, N, Pa, W/(m·K), K …) | `f64` | per spec | Table `QuantitySpec`, ADR 0004 §2 |
 
 Rules:
 
@@ -75,6 +76,7 @@ One set of tolerances, defined once in `ferro_core::math::tol`:
 | `SHORT_CURVE_TOL` | 0.5 mm | Shortest allowed edge / curve | `ShortCurveTolerance` (~0.8 mm) |
 | `ANGLE_TOL` | 1e-6 rad | Two directions within this are parallel | Angle tolerance |
 | `PARAM_TOL` | 1e-9 | Curve parameter equality on [0, 1] | — |
+| `QUANTITY_REL_TOL` | 1e-9 (relative) | Equality of other quantities (density, stress, U-value…; ADR 0004 §2) | — |
 
 Rules:
 

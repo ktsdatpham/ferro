@@ -35,10 +35,14 @@ Legend: `[ ]` open · `[~]` in progress · `[x]` done · `✓` verified ·
   - [ ] M5-2.2 Wall faces by side (exterior / interior / top / ends) for direct walls, by comparing with the type's layers when possible
   - [ ] M5-2.3 Derived representations: Axis (walls), Footprint (all), Box; cached, not saved
 - [ ] **M5-3 Quantity-typed parameters** (ADR 0004 §2)
-  - [ ] M5-3.1 Spec table: id, SI unit, Revit `SpecTypeId`, IFC measure, display units
-  - [ ] M5-3.2 `ParamValue::Quantity { spec, value }`; old files still load
-  - [ ] M5-3.3 Parameter definitions with `Uid` (key, spec, group, instance / type, Revit / IFC Pset mapping); built-in keys registered
-  - [ ] M5-3.4 `set_parameter` takes quantities with units (`"0.8 W/mK"`), UI shows them in display units
+  - [x] M5-3.1 Spec table: id, SI unit, Revit `SpecTypeId`, IFC measure, display units @agent-quantities · branch `m5/quantities`
+    - Acceptance: `cargo test -p ferro-core math::quantity_spec` passes; `QuantitySpec::ALL` has 23 specs with unique ids, and `QuantitySpec::parse("35 MPa", None)` gives `(Stress, 35e6)`.
+  - [x] M5-3.2 `ParamValue::Quantity { spec, value }`; old files still load @agent-quantities · branch `m5/quantities`
+    - Acceptance: `cargo test -p ferro-core model::parameter` passes, including `old_variants_still_load_and_report_their_spec` (M1–M4 JSON shapes load).
+  - [x] M5-3.3 Parameter definitions with `Uid` (key, spec, group, instance / type, Revit / IFC Pset mapping); built-in keys registered @agent-quantities · branch `m5/quantities`
+    - Acceptance: `cargo test -p ferro-core parameter` passes (covers `parameter_definition` and `parameter_commands`); all 12 `keys::*` have a definition with `Uid = ParameterDefinition::uid_for_key(key)`; `set_parameter_definition` persists in `ProjectInfo` and undoes.
+  - [x] M5-3.4 `set_parameter` takes quantities with units (`"0.8 W/mK"`), UI shows them in display units @agent-quantities · branch `m5/quantities`
+    - Acceptance: `cargo test -p ferro-tools` passes; via MCP `set_parameter` with `"value": "1200 kg/m3"` stores `{"type":"quantity","value":{"spec":"density","value":1200.0}}`; the properties panel lists non-`ferro.*` quantity parameters as e.g. `0.8 W/(m·K)`.
 - [ ] **M5-4 Material assets** (ADR 0004 §3)
   - [ ] M5-4.1 `Material` assets: appearance (OpenPBR subset), physical, thermal, environmental, cost; old files load
   - [ ] M5-4.2 Type quantities from layers: U-value, mass per m², GWP per m², cost per m²

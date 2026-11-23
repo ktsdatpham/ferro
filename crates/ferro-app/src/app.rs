@@ -1483,6 +1483,17 @@ impl FerroApp {
                     ui.label(format!("{:.3} m³", v / 1e9));
                     ui.end_row();
                 }
+                // Quantity parameters in display units (ADR 0004 §2), e.g.
+                // "0.8 W/(m·K)"; built-in ones are shown above.
+                for (k, p) in e
+                    .params
+                    .iter()
+                    .filter(|(k, p)| !k.starts_with("ferro.") && p.spec().is_some())
+                {
+                    ui.label(k.as_str());
+                    ui.label(p.display());
+                    ui.end_row();
+                }
 
                 ui.label("Comments");
                 let current = match e.param(keys::COMMENTS) {

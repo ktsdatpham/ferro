@@ -87,7 +87,8 @@ All data on elements is held in **typed parameters**, never free-form strings.
 | Property | Values | Revit |
 |---|---|---|
 | Key | Stable string id, e.g. `ferro.wall.unconnected_height` | `BuiltInParameter` / shared GUID |
-| Storage | `Length`, `Angle`, `Area`, `Volume`, `Number`, `Integer`, `Bool`, `Text`, `ElementRef` | `StorageType` + spec |
+| Storage | `Quantity { spec, value }` (ADR 0004 §2; `Length`, `Angle`, `Area`, `Volume`, `Number` kept for older files), `Integer`, `Bool`, `Text`, `Tags`, `ElementRef` | `StorageType` + spec |
+| Definition | `ParameterDefinition` with a `Uid`: built-in registry, or project definitions in `ProjectInfo` | shared parameter / binding |
 | Scope | **Instance** or **Type** | instance / type parameter |
 | Origin | **Built-in** (defined by Ferro), **Shared** (defined in a shared parameter file, has a GUID), **Project** (user, this document only) | same |
 | Read-only | `true` when computed (e.g. `area`) | `IsReadOnly` |

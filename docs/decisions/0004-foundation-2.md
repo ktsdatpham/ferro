@@ -50,6 +50,39 @@ would force rewrites of every exporter, tool and renderer.
    parameters): key, spec, group, instance / type, description, Revit and
    IFC Pset mapping. Round-trips match by `Uid`, not by name.
 
+**Amendment (M5-3, 2026-11-23).** How §2 is built:
+
+- The table is `QuantitySpec` (`ferro_core::math`); its stable ids are the
+  snake_case names above plus `moment`, `pressure`, `number`. Each has a
+  storage unit, a Revit `SpecTypeId` name, an IFC measure and display units
+  (`DisplayUnit`, `storage = value × factor + offset`; only temperature has
+  an offset). Temperature is stored in K. Revit has no carbon or ratio spec
+  (they map to `Mass` / `Number`); IFC has no stress or carbon measure
+  (`IfcPressureMeasure` / `IfcMassMeasure`). Reverse lookups take the first
+  spec in table order.
+- Text input is read by one function, `QuantitySpec::parse(text, expected)`.
+  A bare number is in the spec's default display unit (mm, degrees, °C …),
+  as with `Length::parse` / `Angle::parse`. When a unit belongs to several
+  specs (`Pa`, `kPa`) and none is expected, the first in table order wins
+  (pressure before stress).
+- `ParamValue::Length / Angle / Area / Volume / Number` stay so older files
+  load; `ParamValue::spec()` / `as_quantity()` report their spec. New keys
+  use `ParamValue::Quantity`.
+- Non-length, non-angle quantities compare with the relative tolerance
+  `tol::QUANTITY_REL_TOL` (1e-9).
+- `ParameterDefinition` origins follow §3.5: **built-in** definitions
+  (`ferro.*` keys) come from a fixed registry with `Uid =
+  Uid::from_name("ferro.parameter_definition:" + key)` (name-based UUID v8,
+  128-bit FNV-1a; never changes); **project** definitions are stored in
+  `ProjectInfo.parameter_definitions` (omitted when empty, so older files
+  load unchanged). A Revit shared parameter keeps its GUID as `Uid`.
+- New command / MCP tool `set_parameter_definition` (adds or replaces a
+  project definition). `set_parameter` checks values against the key's
+  definition. New failure codes: `ferro.model.invalid_parameter_value`,
+  `ferro.model.parameter_type_mismatch`,
+  `ferro.model.builtin_parameter_definition`,
+  `ferro.model.invalid_parameter_definition`, `ferro.model.duplicate_uid`.
+
 ### 3. Materials with assets (F3)
 
 `Material` holds optional assets: `appearance` (OpenPBR parameters, texture
