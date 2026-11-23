@@ -24,11 +24,13 @@ Legend: `[ ]` open · `[~]` in progress · `[x]` done · `✓` verified ·
 
 ## M5 Foundation 2 (ADR 0004)
 
-- [~] **M5-1 Geometry source** @lead
-  - [x] M5-1.1 `GeometrySource` (Parametric / Direct) on `Element` · PR #11 ✓ verified @lead
-  - [x] M5-1.2 `set_geometry_source`: freeze walls (with openings) and floors; recognise plain walls / slabs · PR #11 ✓ verified @lead
-  - [x] M5-1.3 `set_category` keeps fitting types; `set_element_type` on direct walls / floors · PR #11 ✓ verified @lead
-  - [x] M5-1.4 Properties panel switch (Edit freely / Make parametric) · PR #11 ✓ verified @lead
+- [x] **M5-1 Geometry source** @lead
+  - [x] M5-1.1 `GeometrySource` (Parametric / Direct) on `Element` · PR #11 @lead
+    - accept: `cargo test -p ferro-core geometry_source` (7 tests) passes
+  - [x] M5-1.2 `set_geometry_source`: freeze walls (with openings) and floors; recognise plain walls / slabs · PR #11 @lead
+  - [x] M5-1.3 `set_category` keeps fitting types; `set_element_type` on direct walls / floors · PR #11 @lead
+  - [x] M5-1.4 Properties panel switch (Edit freely / Make parametric) · PR #11 @lead
+    - accept: select a wall, "Edit freely" → Geometry shows Direct, Push/Pull on its faces edits the solid; "Make parametric" on a plain box wall returns it
   - [x] M5-1.5 Type selector and type data shown for direct walls / floors in the properties panel @lead
     - accept: select a frozen wall: the Properties panel shows a Type combo listing wall types; picking one runs `set_element_type`
 - [ ] **M5-2 Representations and quantities** @lead
