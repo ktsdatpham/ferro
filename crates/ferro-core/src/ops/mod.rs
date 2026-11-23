@@ -30,8 +30,16 @@ mod bim_tests;
 #[cfg(test)]
 mod form_tests;
 #[cfg(test)]
+mod fuzz_tests;
+#[cfg(test)]
 mod geometry_source_tests;
 #[cfg(test)]
 mod material_tests;
 #[cfg(test)]
 mod project_tests;
+#[cfg(test)]
+mod scenario_common_tests;
+#[cfg(test)]
+mod scenario_tests;
+#[cfg(test)]
+mod stress_tests;

@@ -115,6 +115,26 @@ Legend: `[ ]` open · `[~]` in progress · `[x]` done · `✓` verified ·
   - [ ] M5-14.5 Register the SDK's client error codes (`ferro.link.not_open`, `unreachable`, `invalid_token`, `timeout`, `protocol`, `ferro.tool.failed`) in the spec's failure-code list
   - [ ] M5-14.6 `get_element` summary with a body kind field, so the SDK picks wrappers without guessing and `get(id)` needs one call
 
+- [~] **M5-15 Scenario test audit** @agent-tests
+  - [x] M5-15.1 Every command through `from_tool` + `execute`: basic, degenerate, missing / wrong-kind ids, tolerance edges, rollback with the documented code, bad JSON arguments; fixes: offset past the middle → `offset_too_large`, no edge below `SHORT_CURVE_TOL` from any Form command @agent-tests
+    - accept: `cargo test -p ferro-core scenario_tests` passes (20 tests, 2 ignored = M5-15.10); `valid_calls_cover_every_command` lists all 37 commands
+  - [x] M5-15.2 Undo / redo of every command restores the exact serialised document; failures keep redo @agent-tests
+    - accept: `cargo test -p ferro-core undo_and_redo_restore_exact_documents_for_every_command full_history_undo_redo_roundtrip failures_do_not_touch_redo` passes
+  - [x] M5-15.3 `.fro` / `.fro.json` round trip of every element kind (with and without id gaps); IFC / OBJ / GLB exports deterministic @agent-tests
+    - accept: `cargo test -p ferro-io --test roundtrip` passes (7 tests, 1 ignored = M5-15.9)
+  - [x] M5-15.4 Push/pull + imprint stress at 0° / 30° / 45° and 5 km from the origin, bodies validated and volumes checked every step @agent-tests
+    - accept: `cargo test -p ferro-core stress_tests` passes (6 tests, 2 ignored = M5-15.7, M5-15.8)
+  - [x] M5-15.5 Seeded xorshift fuzzing of Form edits (3 × 200 steps) and random push/pull volume bookkeeping @agent-tests
+    - accept: `cargo test -p ferro-core fuzz_tests` passes in under 10 s (debug)
+  - [x] M5-15.6 Snapping: priority, occlusion, parallel / perpendicular, pixel tolerance, degenerate input; fix: coincident top / bottom corners prefer the nearer @agent-tests
+    - accept: `cargo test -p ferro-snap --test scenarios` passes (13 tests)
+  - [ ] M5-15.7 Bug (medium): pulling a pocket floor back to flush or beyond fails with `ferro.algo.collapse` (SketchUp removes the pocket / makes a boss). Repro: box 4000×3000×2000, imprint 1000 mm square on top, push −800, push the same face +800 → collapse. Test `stress_tests::pocket_back_to_flush_and_beyond` (ignored)
+  - [ ] M5-15.8 Bug (high): a pocket pushed deeper than the solid is committed as a self-intersecting body with a wrong volume (`validate_solid` passes). Repro: same box, imprint square on top, push −2100 → accepted. Push/pull needs a check that the moved face stays inside / outside the solid. Test `stress_tests::pocket_deeper_than_the_box_is_refused` (ignored)
+  - [ ] M5-15.9 Bug (low): IFC `Name` of unnamed elements is `"walls #<local id>"`; ids are renumbered when a file with gaps is loaded, so the same model exports different names after save / load. Use a uid-based or stable label. Test `roundtrip::ifc_export_is_stable_across_a_round_trip` (ignored)
+  - [ ] M5-15.10 Bug (high): self-intersecting (bow-tie) outlines are accepted. Repro: `create_polygon` points (0,0) (3000,1000) (3000,0) (0,2000), or `create_floor` with the same outline → committed. Needs a simple-polygon check (`push_pull::is_simple` exists, private) for faces, floor outlines and holes. Tests `scenario_tests::self_intersecting_*` (ignored)
+  - [ ] M5-15.11 Spec mismatch: D-60 orders snaps "points > edges / faces > directions > grid", `ferro-snap` uses points > edges > directions > faces > ground. Decide and align spec or code
+  - [ ] M5-15.12 Low: `set_name` without `name` clears the name (schema says required; serde treats a missing `Option` as `null`); a journal loaded from a file with id gaps still names the old ids
+
 ## M6 SketchUp parity, rest (on Foundation 2)
 
 - [ ] M6-1 Reference lines and points (Tape guides), snapping to them (ADR 0003)

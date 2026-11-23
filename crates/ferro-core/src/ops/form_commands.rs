@@ -180,9 +180,16 @@ pub fn inset_polygon(pts: &[Point3], normal: UnitVec3, d: f64) -> Option<Vec<Poi
         out.push(plane.to_world(q));
     }
     // The inset must keep the orientation (no flip) and stay simple.
+    // An inset past the middle of a convex face mirrors it through its
+    // centre: same orientation, but every edge reversed. Each edge must keep
+    // its direction.
     let before = polygon::polygon_normal(pts)?;
     let after = polygon::polygon_normal(&out)?;
-    (before.dot(after) > 0.0).then_some(out)
+    let edges_kept = (0..n).all(|i| {
+        let j = (i + 1) % n;
+        (out[j] - out[i]).dot(pts[j] - pts[i]) > 0.0
+    });
+    (before.dot(after) > 0.0 && edges_kept).then_some(out)
 }
 
 impl Command for OffsetFace {
