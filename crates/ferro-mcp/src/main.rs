@@ -345,7 +345,10 @@ mod tests {
         // python/ferro/tools.json feeds scripts/gen_python.py (ADR 0005).
         let path =
             std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../python/ferro/tools.json");
-        let snapshot = std::fs::read_to_string(&path).unwrap_or_default();
+        // Git may check the file out with CRLF line ends (Windows).
+        let snapshot = std::fs::read_to_string(&path)
+            .unwrap_or_default()
+            .replace("\r\n", "\n");
         assert_eq!(
             snapshot.trim_end(),
             tools_json(),
