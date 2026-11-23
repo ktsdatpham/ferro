@@ -626,6 +626,8 @@ any_command!(
     CreateFloor,
     CreateOpening,
     SetOpening,
+    SetWall,
+    SetFloor,
 );
 
 impl AnyCommand {

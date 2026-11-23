@@ -33,3 +33,13 @@ jobs:
       - run: rustup target add wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@v2
       - run: cargo build -p ferro-core --target wasm32-unknown-unknown
+
+  revit-addin:
+    # The C# shell compiles against Revit 2025 reference assemblies (NuGet).
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+      - run: dotnet build revit-addin/FerroRevit.csproj -c Release

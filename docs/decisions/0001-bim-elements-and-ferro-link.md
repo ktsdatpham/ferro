@@ -31,7 +31,7 @@ data or how agents reach a running app.
 4. `Wall` = location `Curve` (line or arc, horizontal), `base_offset`, `top`
    (`unconnected {height}` or `level {level, offset}`), `location_line`
    (Revit `WALL_KEY_REF_PARAM`). Base level = `Element::level_id`. The
-   **exterior face is on the left** of the curve direction.
+   **exterior face is on the left** of the curve direction, as in Revit: a closed chain drawn clockwise (seen from above) faces outwards.
 5. `Floor` = plan outline + holes (`Point2`, mm) and an `offset`; the top sits at
    level + offset and the slab extends down by the type thickness.
 6. `Opening` = door or window hosted by a straight wall (`host_id`):

@@ -26,18 +26,19 @@ Each milestone should ship something a designer can actually try.
 - [ ] Tools for selections ("make the selected face 500 mm taller") → M3
 - [ ] Screenshot tool so agents can see the viewport → M3
 
-## Milestone 3: Revit link
+## Milestone 3: Revit link + IFC ✅
 
-- [ ] Revit add-in: solids → `DirectShape`
-- [ ] Tags → native elements (`category: wall` → Wall, `room` → Room, levels)
-- [ ] Round-trip IDs so re-importing updates instead of duplicating
-- [ ] Same C# shell, Rust core: no geometry logic in C#
+- [x] Revit add-in (2025+): Ferro → native levels, types, walls, floors, doors, windows; Forms → `DirectShape`
+- [x] Revit → Ferro push, as a proposal; deletions; uid round trip (no duplicates)
+- [x] Live sync (Revit pulls when the Ferro model changes)
+- [x] Same C# shell, Rust core: no geometry logic in C# (`ferro-revit`)
+- [x] IFC4 export; T-joins; selection tools for agents
 
 ## Milestone 4: Rhino-style power + interop
 
 - [ ] Command line with autocomplete (every tool is also a command, and an MCP tool)
-- [ ] IFC4 export (`IfcWall`, `IfcSlab`, `IfcSpace` from tags)
-- [ ] Live link: Revit watches the `.fro` file and updates in place
+- [ ] Rhino `.3dm`, point clouds, viewport screenshot for agents (moved from M3)
+- [ ] Revit 2024 and older; roofs, rooms, grids in the link
 - [ ] Plugin API (WASM) so the community can ship add-ins safely
 - [ ] Parametric node editor (Grasshopper-style), later
 

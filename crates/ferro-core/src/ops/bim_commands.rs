@@ -649,6 +649,124 @@ impl Command for SetOpening {
     }
 }
 
+/// Change a wall's location and constraints; omitted fields keep their
+/// value. Give `start` and `end` (and `mid` for a curved wall) together.
+/// `height` makes the top unconnected; `top_level` attaches it to a level.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SetWall {
+    pub wall: ElementId,
+    #[serde(default)]
+    pub start: Option<Point3>,
+    #[serde(default)]
+    pub end: Option<Point3>,
+    #[serde(default)]
+    pub mid: Option<Point3>,
+    #[serde(default)]
+    pub base_offset: Option<Length>,
+    #[serde(default)]
+    pub height: Option<Length>,
+    #[serde(default)]
+    pub top_level: Option<ElementId>,
+    #[serde(default)]
+    pub top_offset: Option<Length>,
+    #[serde(default)]
+    pub location_line: Option<LocationLine>,
+}
+
+impl Command for SetWall {
+    const NAME: &'static str = "set_wall";
+    fn execute(&self, tx: &mut Transaction) -> Result<CommandOutput, CommandError> {
+        let curve = match (self.start, self.end, self.mid) {
+            (Some(a), Some(b), None) => Some(Curve::Line(Line::from_points(flat(a), flat(b))?)),
+            (Some(a), Some(b), Some(m)) => {
+                let arc = Arc::from_three_points(flat(a), flat(m), flat(b))?;
+                Some(Curve::Arc(if arc.start().is_almost_equal(flat(a)) {
+                    arc
+                } else {
+                    arc.reversed()
+                }))
+            }
+            (None, None, None) => None,
+            _ => {
+                return Err(err(
+                    "ferro.model.invalid_location",
+                    "give start and end together (and mid for a curved wall)",
+                ))
+            }
+        };
+        if let Some(l) = self.top_level {
+            if tx.element(l)?.as_level().is_none() {
+                return Err(err("ferro.model.not_a_level", format!("{l} is not a level")).on(l));
+            }
+        }
+        let s = self.clone();
+        tx.modify(self.wall, |e| match &mut e.body {
+            ElementBody::Wall(w) => {
+                if let Some(c) = curve {
+                    w.curve = c;
+                }
+                w.base_offset = s.base_offset.unwrap_or(w.base_offset);
+                w.location_line = s.location_line.unwrap_or(w.location_line);
+                match (s.top_level, s.height) {
+                    (Some(level), _) => {
+                        let offset = s.top_offset.unwrap_or(Length::ZERO);
+                        w.top = WallTop::Level { level, offset };
+                    }
+                    (None, Some(height)) => w.top = WallTop::Unconnected { height },
+                    (None, None) => {
+                        if let (WallTop::Level { offset, .. }, Some(o)) = (&mut w.top, s.top_offset)
+                        {
+                            *offset = o;
+                        }
+                    }
+                }
+                Ok(())
+            }
+            _ => Err(err("ferro.model.not_a_wall", "element is not a wall").on(e.id)),
+        })?;
+        Ok(json!({ "element": self.wall }))
+    }
+}
+
+/// Change a floor's outline, holes or offset; omitted fields keep their value.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SetFloor {
+    pub floor: ElementId,
+    #[serde(default)]
+    pub points: Option<Vec<Point2>>,
+    #[serde(default)]
+    pub holes: Option<Vec<Vec<Point2>>>,
+    #[serde(default)]
+    pub offset: Option<Length>,
+}
+
+impl Command for SetFloor {
+    const NAME: &'static str = "set_floor";
+    fn execute(&self, tx: &mut Transaction) -> Result<CommandOutput, CommandError> {
+        if self.points.as_ref().is_some_and(|p| p.len() < 3) {
+            return Err(err(
+                "ferro.geom.degenerate",
+                "a floor needs at least 3 points",
+            ));
+        }
+        let s = self.clone();
+        tx.modify(self.floor, |e| match &mut e.body {
+            ElementBody::Floor(f) => {
+                if let Some(p) = s.points {
+                    f.outer = p;
+                }
+                if let Some(h) = s.holes {
+                    f.holes = h;
+                }
+                f.offset = s.offset.unwrap_or(f.offset);
+                Ok(())
+            }
+            _ => Err(err("ferro.model.not_a_floor", "element is not a floor").on(e.id)),
+        })?;
+        Ok(json!({ "element": self.floor }))
+    }
+}
+
 // ------------------------------------------------------ semantic push/pull
 
 fn face_info(e: &Element, face: FaceId) -> Result<(Vec3, Point3), CommandError> {

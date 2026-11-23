@@ -49,9 +49,14 @@ Rules:
 | Ferro | Revit |
 |---|---|
 | `Document` | `Document` |
-| `Element.uid` | `UniqueId` (stored in a shared parameter `Ferro_Uid` on export for round-trip) |
+| `Element.uid` | Stored on the Revit element in Extensible Storage (`FerroElement.Uid`, with the last sync signature); the Revit `UniqueId` is kept on the Ferro side of the sync state |
 | `Category` | `BuiltInCategory` |
 | `FamilyType` | `ElementType` / `FamilySymbol` |
+| `WallType` / `FloorType` + `CompoundStructure` | Duplicated basic `WallType` / `FloorType` with `SetCompoundStructure`; layer functions map to `MaterialFunctionAssignment` |
+| `Material` | `Material` (name, colour) |
+| `Wall` | `Wall.Create` (+ `WALL_KEY_REF_PARAM`, `WALL_HEIGHT_TYPE` / `WALL_USER_HEIGHT_PARAM`, `WALL_TOP_OFFSET`); exterior on the left in both |
+| `Floor` | `Floor.Create` with curve loops; `FLOOR_HEIGHTABOVELEVEL_PARAM` |
+| `Opening` (door / window) | `FamilyInstance` of the first loaded door / window family, type duplicated per size, hosted by the wall |
 | `Parameter` (built-in) | `BuiltInParameter` where one exists, otherwise shared parameter |
 | `Level`, `Grid`, `ReferencePlane` | same |
 | `WorkPlane` | `SketchPlane` |
@@ -61,13 +66,17 @@ Rules:
 | Internal Origin / PBP / SP | same |
 | Length mm | feet (convert at the C# / FFI edge only) |
 
-Rules:
+Rules (ADR 0002):
 
-1. Unit conversion to feet happens only in the Revit bridge.
-2. Re-importing the same Ferro file updates elements matched by `Ferro_Uid`
-   instead of duplicating them.
+1. Unit conversion to feet happens only in the Revit bridge (`ferro-revit`).
+2. All mapping decisions are made in Rust (`ferro_revit::plan` /
+   `ferro_revit::import`); the C# add-in only executes operations and reads
+   the model.
+3. Re-syncing updates elements matched by uid instead of duplicating them;
+   unchanged elements (same signature) are not touched.
+4. Changes coming from Revit enter Ferro as commands, as one proposal.
 
-## 6.4 IFC mapping (milestone 4)
+## 6.4 IFC mapping (export since milestone 3; import milestone 4)
 
 | Ferro category | IFC4 class |
 |---|---|
@@ -80,3 +89,8 @@ Rules:
 | `Forms` (unclassified) | `IfcBuildingElementProxy` |
 
 `Uid` maps to `IfcGloballyUniqueId` (base64-compressed form of the same UUID).
+Types map to `IfcWallType` / `IfcSlabType` with `IfcMaterialLayerSet`;
+openings to `IfcOpeningElement` + `IfcRelVoidsElement` + `IfcRelFillsElement`;
+quantities to `Qto_WallBaseQuantities` / `Qto_SlabBaseQuantities`; the uid
+also to `Pset_FerroCommon.FerroUid`. Geometry is `IfcTriangulatedFaceSet`
+in millimetres.

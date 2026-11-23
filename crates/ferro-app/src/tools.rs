@@ -397,7 +397,7 @@ impl ToolState {
             ToolKind::Move if self.move_base.is_none() => "Click a base point (on the element to move, or with elements selected). Hold Ctrl to copy.",
             ToolKind::Move => "Click the destination, or type a distance and press Enter. Arrow-free: snap to the red/green/blue axes.",
             ToolKind::Eraser => "Click an element to delete it.",
-            ToolKind::Wall if self.poly.is_empty() => "Click the start of the wall. Draw counter-clockwise so the exterior faces out.",
+            ToolKind::Wall if self.poly.is_empty() => "Click the start of the wall. Draw clockwise so the exterior faces out (as in Revit).",
             ToolKind::Wall => "Click the next corner or type a length. Click the first point to close the loop, or press Enter to finish an open chain.",
             ToolKind::Floor if self.poly.is_empty() => "Click the first corner of the floor outline.",
             ToolKind::Floor => "Click the next corner. Click the first point or press Enter to finish.",

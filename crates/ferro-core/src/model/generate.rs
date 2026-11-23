@@ -389,13 +389,55 @@ fn joins(walls: &[StraightWall]) -> HashMap<ElementId, [Option<EndCorners>; 2]> 
                     found.push((y, false));
                 }
             }
-            if let [(y, y_start)] = found.as_slice() {
-                ends[k] = miter(x, at_start, y, *y_start);
-            }
+            let tee_join = || {
+                // T-join: the end touches the middle of another wall.
+                walls
+                    .iter()
+                    .enumerate()
+                    .filter(|(jdx, _)| *jdx != i)
+                    .find_map(|(_, y)| tee(x, at_start, y))
+            };
+            ends[k] = match found.as_slice() {
+                // A collinear continuation cannot be mitred; it may still
+                // butt against a third wall it crosses.
+                [(y, y_start)] => miter(x, at_start, y, *y_start).or_else(tee_join),
+                [] => tee_join(),
+                _ => None,
+            };
         }
         out.insert(x.id, ends);
     }
     out
+}
+
+/// Corners for wall `x` whose end lies on the location line of wall `y`,
+/// away from `y`'s ends: `x` stops at the face of `y` on its own side.
+fn tee(x: &StraightWall, x_at_start: bool, y: &StraightWall) -> Option<EndCorners> {
+    let j = if x_at_start { x.s } else { x.e };
+    let other = if x_at_start { x.e } else { x.s };
+    let len = (y.e - y.s).length();
+    let u = (j - y.s).dot(y.d);
+    let ny = Vec2::new(-y.d.y, y.d.x);
+    let off = (j - y.s).dot(ny);
+    let margin = JOIN_TOL.max(1.0);
+    if u <= margin || u >= len - margin || off.abs() > JOIN_TOL {
+        return None;
+    }
+    if x.d.perp_dot(y.d).abs() < 1e-3 {
+        return None; // parallel: not a T
+    }
+    // The face of `y` that looks towards the rest of `x`.
+    let side = (other - y.s).dot(ny);
+    let face = if side >= 0.0 { y.ext } else { y.int };
+    let face_pt = y.s + ny * face;
+    let nx = Vec2::new(-x.d.y, x.d.x);
+    let pe = intersect(x.s + nx * x.ext, x.d, face_pt, y.d)?;
+    let pi = intersect(x.s + nx * x.int, x.d, face_pt, y.d)?;
+    let limit = 5.0 * (x.ext - x.int).max(y.ext - y.int);
+    if (pe - j).length() > limit || (pi - j).length() > limit {
+        return None;
+    }
+    Some((pe, pi))
 }
 
 // -------------------------------------------------------------------- walls

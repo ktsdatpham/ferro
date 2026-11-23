@@ -504,3 +504,83 @@ fn regeneration_is_deterministic() {
         assert_eq!(Some(e), b.get(e.id));
     }
 }
+
+#[test]
+fn clockwise_chain_faces_outwards_like_revit() {
+    let mut s = session();
+    // Clockwise seen from above: up the west side first.
+    let o = run(
+        &mut s,
+        "create_walls",
+        json!({"points": [{"x": 0, "y": 0, "z": 0}, {"x": 0, "y": 6000, "z": 0},
+                          {"x": 8000, "y": 6000, "z": 0}, {"x": 8000, "y": 0, "z": 0}], "closed": true,
+               "location_line": "finish_interior"}),
+    );
+    // With the curve on the interior face, the wall body lies outside the
+    // 8 × 6 m rectangle when the exterior faces out.
+    let west = s.doc().get(ids(&o)[0]).unwrap().bounding_box().unwrap();
+    assert!((west.min.x + T).abs() < 1e-6 && west.max.x.abs() < 1e-6);
+}
+
+#[test]
+fn set_wall_and_set_floor_edit_location_and_constraints() {
+    let mut s = session();
+    let l2 = id(&run(
+        &mut s,
+        "create_level",
+        json!({"name": "L2", "elevation": 3500}),
+    ));
+    let w = wall(&mut s, 0.0, 0.0, 4000.0, 0.0);
+    run(
+        &mut s,
+        "set_wall",
+        json!({"wall": w, "start": {"x": 0, "y": 1000, "z": 0}, "end": {"x": 6000, "y": 1000, "z": 0}, "top_level": l2}),
+    );
+    assert!((length_param(&s, w, keys::LENGTH) - 6000.0).abs() < 1e-6);
+    assert!((length_param(&s, w, keys::HEIGHT) - 3500.0).abs() < 1e-6);
+    run(&mut s, "set_wall", json!({"wall": w, "height": 2000}));
+    assert!((length_param(&s, w, keys::HEIGHT) - 2000.0).abs() < 1e-6);
+    let r = try_run(
+        &mut s,
+        "set_wall",
+        json!({"wall": w, "start": {"x": 0, "y": 0, "z": 0}}),
+    );
+    assert_eq!(r.unwrap_err()[0].code, "ferro.model.invalid_location");
+
+    let f = id(&run(
+        &mut s,
+        "create_floor",
+        json!({"points": [{"x": 0, "y": 0}, {"x": 1000, "y": 0}, {"x": 1000, "y": 1000}]}),
+    ));
+    run(
+        &mut s,
+        "set_floor",
+        json!({"floor": f, "points": [{"x": 0, "y": 0}, {"x": 2000, "y": 0}, {"x": 2000, "y": 2000}, {"x": 0, "y": 2000}]}),
+    );
+    assert!((volume(&s, f) - 2000.0 * 2000.0 * 200.0).abs() < 1.0);
+}
+
+#[test]
+fn tee_join_trims_the_branch_to_the_face() {
+    let mut s = session();
+    let main = wall(&mut s, 0.0, 0.0, 6000.0, 0.0);
+    // Branch from the middle of `main` going north (and one going south).
+    let north = wall(&mut s, 3000.0, 0.0, 3000.0, 4000.0);
+    let south = wall(&mut s, 3000.0, -3000.0, 3000.0, 0.0);
+    assert!(
+        (volume(&s, main) - 6000.0 * T * H).abs() < 1.0,
+        "main is untouched"
+    );
+    // Each branch loses half the main wall's thickness.
+    for w in [north, south] {
+        let len = if w == north { 4000.0 } else { 3000.0 };
+        assert!((volume(&s, w) - (len - T / 2.0) * T * H).abs() < 1.0);
+    }
+    let bb = s.doc().get(north).unwrap().bounding_box().unwrap();
+    assert!((bb.min.y - T / 2.0).abs() < 1e-6);
+    // An angled branch is cut along the face too (no overlap, still a solid).
+    let angled = wall(&mut s, 1000.0, 0.0, 2000.0, 2000.0);
+    assert!(volume(&s, angled) > 0.0);
+    let bb = s.doc().get(angled).unwrap().bounding_box().unwrap();
+    assert!(bb.min.y >= T / 2.0 - 1e-6);
+}

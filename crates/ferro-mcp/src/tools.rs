@@ -158,6 +158,16 @@ impl Server {
                     Err(m) => err(m),
                 }
             }
+            "export_ifc" => {
+                let Some(p) = path_arg() else {
+                    return err("missing path".into());
+                };
+                ferro_io::export_ifc(self.session.doc())
+                    .map_err(|e| e.to_string())
+                    .and_then(|t| std::fs::write(&p, t).map_err(|e| e.to_string()))
+                    .map(|_| json!({"exported": p}))
+                    .or_else(err)
+            }
             "export_obj" | "export_glb" => {
                 let Some(p) = path_arg() else {
                     return err("missing path".into());
