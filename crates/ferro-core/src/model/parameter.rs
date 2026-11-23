@@ -53,8 +53,27 @@ pub mod keys {
     /// Classification code (Uniclass / OmniClass / Vietnamese code), D-40.
     pub const CLASSIFICATION: &str = "ferro.common.classification";
 
+    /// Computed: length of a wall's location curve (mm). Read-only.
+    pub const LENGTH: &str = "ferro.dimensions.length";
+    /// Computed: height of a wall (mm). Read-only.
+    pub const HEIGHT: &str = "ferro.dimensions.height";
+    /// Computed: thickness from the element's type (mm). Read-only.
+    pub const THICKNESS: &str = "ferro.dimensions.thickness";
+    /// Computed: plan area of a floor (mm²). Read-only.
+    pub const AREA: &str = "ferro.dimensions.area";
+    /// Computed: volume of a wall or floor, openings deducted (mm³). Read-only.
+    pub const VOLUME: &str = "ferro.dimensions.volume";
+
     /// Keys computed by regeneration; commands may not write them.
-    pub const READ_ONLY: [&str; 2] = [FORM_AREA, FORM_VOLUME];
+    pub const READ_ONLY: [&str; 7] = [
+        FORM_AREA,
+        FORM_VOLUME,
+        LENGTH,
+        HEIGHT,
+        THICKNESS,
+        AREA,
+        VOLUME,
+    ];
 
     /// A parameter key is `namespace.group.name`, lowercase snake case.
     pub fn is_valid(key: &str) -> bool {

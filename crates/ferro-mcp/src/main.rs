@@ -34,8 +34,10 @@ fn handle(server: &mut Server, req: &Value) -> Option<Value> {
                 "serverInfo": { "name": "ferro", "version": env!("CARGO_PKG_VERSION") },
                 "instructions": "Ferro is an open-source, AI-native 3D design tool for architects. \
                     Units: millimetres unless a unit is given (\"3m\"); angles in degrees; Z is up. \
-                    Typical flow: create_level -> create_box / create_rectangle + push_pull_face -> \
-                    set_category -> list_elements / get_element. Every change is one undo step and \
+                    Typical flow: create_level -> create_walls (closed, counter-clockwise) -> create_opening \
+                    -> create_floor; or massing with create_box + push_pull_face. Inspect with \
+                    list_elements / get_element. If link_status says linked, you are editing the \
+                    model open in the Ferro app and the user reviews your changes. Every change is one undo step and \
                     is recorded with your client name. Save with save_document (.fro)."
             }))
         }
@@ -91,6 +93,12 @@ fn main() {
 mod tests {
     use super::*;
 
+    fn server() -> Server {
+        let mut s = Server::new();
+        s.use_link = false;
+        s
+    }
+
     fn call(s: &mut Server, name: &str, args: Value) -> Value {
         let req = json!({"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":name,"arguments":args}});
         let r = handle(s, &req).unwrap()["result"].clone();
@@ -111,7 +119,7 @@ mod tests {
 
     #[test]
     fn agent_models_a_house_with_units_and_undo() {
-        let mut s = Server::new();
+        let mut s = server();
         let r = call(
             &mut s,
             "create_level",
@@ -153,8 +161,62 @@ mod tests {
     }
 
     #[test]
+    fn agent_builds_walls_doors_and_a_floor_in_metres() {
+        let mut s = server();
+        let r = call(
+            &mut s,
+            "create_walls",
+            json!({"points": [[0,0,0],["8m",0,0],["8m","6m",0],[0,"6m",0]], "closed": true, "height": "3m"}),
+        );
+        assert_eq!(r["is_error"], false, "{r}");
+        let walls = r["body"]["result"]["elements"].as_array().unwrap().clone();
+        let r = call(
+            &mut s,
+            "create_opening",
+            json!({"wall": walls[0], "kind": "door", "position": "2m"}),
+        );
+        assert_eq!(r["is_error"], false, "{r}");
+        let r = call(
+            &mut s,
+            "create_floor",
+            json!({"points": [[0,0],["8m",0],["8m","6m"],[0,"6m"]]}),
+        );
+        assert_eq!(r["is_error"], false, "{r}");
+        let r = call(
+            &mut s,
+            "create_wall_type",
+            json!({"name": "Brick", "layers": [{"function": "structure", "thickness": "22cm"}]}),
+        );
+        assert_eq!(r["is_error"], false, "{r}");
+        let l = call(&mut s, "list_elements", json!({"category": "walls"}));
+        let first = l["body"]["elements"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|e| e["id"] == walls[0])
+            .unwrap()
+            .clone();
+        assert_eq!(first["length_m"], 8.0);
+        assert_eq!(first["height_m"], 3.0);
+        let d = call(&mut s, "get_element", json!({"element": walls[0]}));
+        assert!(d["body"]["faces"].as_array().unwrap().len() > 6);
+        let r = call(
+            &mut s,
+            "create_opening",
+            json!({"wall": walls[0], "kind": "window", "position": "7.9m"}),
+        );
+        assert_eq!(r["is_error"], true);
+        assert_eq!(
+            r["body"]["failures"][0]["code"],
+            "ferro.opening.outside_host"
+        );
+        let st = call(&mut s, "link_status", json!({}));
+        assert_eq!(st["body"]["linked"], false);
+    }
+
+    #[test]
     fn failures_are_reported_and_change_nothing() {
-        let mut s = Server::new();
+        let mut s = server();
         let r = call(
             &mut s,
             "create_box",
@@ -175,7 +237,7 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("ferro-mcp-test-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("t.fro");
-        let mut s = Server::new();
+        let mut s = server();
         call(
             &mut s,
             "create_box",
@@ -183,7 +245,7 @@ mod tests {
         );
         let r = call(&mut s, "save_document", json!({"path": path}));
         assert_eq!(r["is_error"], false, "{r}");
-        let mut s2 = Server::new();
+        let mut s2 = server();
         let r = call(&mut s2, "open_document", json!({"path": path}));
         assert_eq!(r["body"]["elements"].as_array().unwrap().len(), 1);
         let _ = std::fs::remove_dir_all(dir);
@@ -191,7 +253,7 @@ mod tests {
 
     #[test]
     fn notifications_get_no_reply() {
-        let mut s = Server::new();
+        let mut s = server();
         assert!(handle(
             &mut s,
             &json!({"jsonrpc":"2.0","method":"notifications/initialized"})

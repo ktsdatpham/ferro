@@ -160,7 +160,12 @@ impl From<UnitVec3> for Vec3 {
 
 impl TryFrom<Vec3> for UnitVec3 {
     type Error = &'static str;
+    /// Already-unit vectors (as written by Ferro) are kept bit for bit so
+    /// files round-trip exactly; anything else is normalised.
     fn try_from(v: Vec3) -> Result<Self, Self::Error> {
+        if (v.length_squared() - 1.0).abs() < 1e-12 {
+            return Ok(UnitVec3(v));
+        }
         v.normalize().ok_or("zero-length vector is not a direction")
     }
 }

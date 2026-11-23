@@ -12,6 +12,31 @@ use std::collections::{HashMap, HashSet};
 pub const EDGE: [f32; 4] = [0.08, 0.09, 0.11, 1.0];
 pub const SELECT: [f32; 4] = [0.18, 0.45, 0.95, 1.0];
 
+/// Display colour: the material of the element's type (core layer), else a
+/// category colour.
+fn element_color(doc: &Document, e: &ferro_core::Element) -> [f32; 4] {
+    use ferro_core::model::ElementBody;
+    let structure = e
+        .type_id
+        .and_then(|t| doc.get(t))
+        .and_then(|t| match &t.body {
+            ElementBody::WallType(w) => Some(&w.structure),
+            ElementBody::FloorType(f) => Some(&f.structure),
+            _ => None,
+        });
+    let material = structure
+        .and_then(|s| s.core_material())
+        .and_then(|m| doc.get(m))
+        .and_then(|m| match &m.body {
+            ElementBody::Material(m) => Some(m.color),
+            _ => None,
+        });
+    match material {
+        Some([r, g, b]) => [r, g, b, 1.0],
+        None => face_color(e.category),
+    }
+}
+
 fn face_color(c: Category) -> [f32; 4] {
     match c {
         Category::Walls => [0.93, 0.90, 0.84, 1.0],
@@ -19,6 +44,8 @@ fn face_color(c: Category) -> [f32; 4] {
         Category::Roofs => [0.72, 0.44, 0.36, 1.0],
         Category::Columns => [0.80, 0.80, 0.80, 1.0],
         Category::Furniture => [0.74, 0.63, 0.50, 1.0],
+        Category::Doors => [0.62, 0.45, 0.30, 1.0],
+        Category::Windows => [0.62, 0.78, 0.90, 1.0],
         _ => [0.90, 0.90, 0.88, 1.0],
     }
 }
@@ -55,7 +82,7 @@ impl SceneCache {
         // Re-mesh changed elements only.
         let mut fresh = HashMap::new();
         for e in doc.elements() {
-            let Some(f) = e.as_form() else { continue };
+            let Some(g) = e.geometry() else { continue };
             let reuse = self
                 .last
                 .as_ref()
@@ -63,7 +90,7 @@ impl SceneCache {
                 .and_then(|_| self.meshes.remove(&e.id));
             let m = match reuse {
                 Some(m) => m,
-                None => body_mesh(&f.body).unwrap_or_default(),
+                None => body_mesh(g).unwrap_or_default(),
             };
             fresh.insert(e.id, m);
         }
@@ -79,10 +106,10 @@ impl SceneCache {
             [v.x as f32, v.y as f32, v.z as f32]
         };
         for e in doc.elements() {
-            let Some(f) = e.as_form() else { continue };
+            let Some(g) = e.geometry() else { continue };
             let selected = selection.contains(&e.id);
             let color = if selected {
-                let c = face_color(e.category);
+                let c = element_color(doc, e);
                 [
                     c[0] * 0.7 + 0.3 * SELECT[0],
                     c[1] * 0.7 + 0.3 * SELECT[1],
@@ -90,7 +117,7 @@ impl SceneCache {
                     1.0,
                 ]
             } else {
-                face_color(e.category)
+                element_color(doc, e)
             };
             if let Some(m) = self.meshes.get(&e.id) {
                 for t in &m.indices {
@@ -106,7 +133,7 @@ impl SceneCache {
             }
             let edge = if selected { SELECT } else { EDGE };
             // Hide edges inside smooth groups (facets of one curved surface).
-            for (a, b) in visible_edges(&f.body) {
+            for (a, b) in visible_edges(g) {
                 self.lines.push(line_vertex(rel(a), edge));
                 self.lines.push(line_vertex(rel(b), edge));
             }

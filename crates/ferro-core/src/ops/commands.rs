@@ -1,16 +1,20 @@
-//! Milestone 1 commands. Each command's `NAME` is also its MCP tool name
+//! Core commands (milestone 1) and the dispatch enum; BIM commands live in
+//! `bim_commands`. Each command's `NAME` is also its MCP tool name
 //! (D-17, `verb_noun`). Arguments use kernel units: lengths in mm, angles in
 //! radians; the MCP edge converts user units (`"3m"`, degrees).
 
+use super::bim_commands::*;
 use super::{CommandError, Transaction};
 use crate::algo::{push_pull_face, PushPullMode};
 use crate::geom::{polygon, Plane};
 use crate::math::{tol, Angle, Length, Point3, Transform, UnitVec3, Vec3};
+use crate::model::generate;
 use crate::model::{keys, Category, ElementBody, ElementId, Form, Level, ParamValue};
 use crate::topo::{Body, FaceId};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+use std::collections::BTreeSet;
 
 /// JSON result of a command (ids created, lineage, ...).
 pub type CommandOutput = Value;
@@ -256,6 +260,9 @@ pub struct PushPullFace {
 impl Command for PushPullFace {
     const NAME: &'static str = "push_pull_face";
     fn execute(&self, tx: &mut Transaction) -> Result<CommandOutput, CommandError> {
+        if tx.element(self.element)?.as_form().is_none() {
+            return semantic_push_pull(tx, self.element, self.face, self.distance.mm());
+        }
         let mut body = form_body(tx, self.element)?;
         let (mode, lineage) = push_pull_face(&mut body, self.face, self.distance.mm())
             .map_err(|e| CommandError::from(e).on(self.element))?;
@@ -279,7 +286,26 @@ fn transform_elements(
     ids: &[ElementId],
     t: &Transform,
 ) -> Result<(), CommandError> {
+    let set: BTreeSet<ElementId> = ids.iter().copied().collect();
+    let dz = t.apply(Point3::ORIGIN).z;
     for id in ids {
+        let e = tx.element(*id)?.clone();
+        // Hosted openings follow their host; alone they slide along it.
+        let mut host_frame = None;
+        if let ElementBody::Opening(_) = e.body {
+            match e.host_id {
+                Some(h) if set.contains(&h) => continue,
+                Some(h) => {
+                    let host = tx.element(h)?;
+                    if let Some(w) = host.as_wall() {
+                        host_frame = generate::wall_layout(tx.doc(), host, w)
+                            .ok()
+                            .and_then(|l| l.frame());
+                    }
+                }
+                None => {}
+            }
+        }
         tx.modify(*id, |e| match &mut e.body {
             ElementBody::Form(f) => {
                 f.body.transform(t);
@@ -290,6 +316,54 @@ fn transform_elements(
                 "levels move with set_level_elevation",
             )
             .on(e.id)),
+            ElementBody::Material(_) | ElementBody::WallType(_) | ElementBody::FloorType(_) => {
+                Err(CommandError::new(
+                    "ferro.model.not_movable",
+                    "types and materials have no location",
+                )
+                .on(e.id))
+            }
+            ElementBody::Wall(w) => {
+                w.curve = match w.curve.transformed(t)? {
+                    crate::geom::Curve::Line(l) => {
+                        let f = |p: Point3| Point3::new(p.x, p.y, 0.0);
+                        crate::geom::Curve::Line(crate::geom::Line::from_points(
+                            f(l.start()),
+                            f(l.end()),
+                        )?)
+                    }
+                    c => c,
+                };
+                w.base_offset = Length::from_mm(w.base_offset.mm() + dz);
+                if let crate::model::bim::WallTop::Level { offset, .. } = &mut w.top {
+                    *offset = Length::from_mm(offset.mm() + dz);
+                }
+                Ok(())
+            }
+            ElementBody::Floor(f) => {
+                let m = |p: &mut crate::math::Point2| {
+                    let q = t.apply(Point3::new(p.x, p.y, 0.0));
+                    *p = crate::math::Point2::new(q.x, q.y);
+                };
+                f.outer.iter_mut().for_each(m);
+                f.holes.iter_mut().flatten().for_each(m);
+                f.offset = Length::from_mm(f.offset.mm() + dz);
+                Ok(())
+            }
+            ElementBody::Opening(o) => {
+                let Some((s, d, _)) = host_frame else {
+                    return Err(CommandError::new(
+                        "ferro.opening.no_host",
+                        "a door or window moves along its host wall",
+                    )
+                    .on(e.id));
+                };
+                let c = s + d * o.position.mm();
+                let q = t.apply(Point3::new(c.x, c.y, 0.0));
+                let u = (crate::math::Point2::new(q.x, q.y) - s).dot(d);
+                o.position = Length::from_mm(u);
+                Ok(())
+            }
         })?;
     }
     Ok(())
@@ -349,12 +423,31 @@ impl Command for CopyElements {
                 "count must be 1..=1000",
             ));
         }
+        let set: BTreeSet<ElementId> = self.elements.iter().copied().collect();
         let mut created = Vec::new();
         for i in 1..=self.count {
             for id in &self.elements {
+                let e = tx.element(*id)?;
+                if e.host_id.is_some_and(|h| set.contains(&h)) {
+                    continue; // copied with its host below
+                }
+                let hosted: Vec<ElementId> = tx
+                    .doc()
+                    .elements()
+                    .filter(|o| o.host_id == Some(*id))
+                    .map(|o| o.id)
+                    .collect();
                 let new = tx.duplicate(*id)?;
                 transform_elements(tx, &[new], &Transform::translation(self.vector * i as f64))?;
                 created.push(new);
+                for h in hosted {
+                    let c = tx.duplicate(h)?;
+                    tx.modify(c, |e| {
+                        e.host_id = Some(new);
+                        Ok(())
+                    })?;
+                    created.push(c);
+                }
             }
         }
         Ok(json!({ "elements": created }))
@@ -522,6 +615,17 @@ any_command!(
     SetParameter,
     SetCategory,
     SetProjectName,
+    CreateMaterial,
+    CreateWallType,
+    CreateFloorType,
+    CreateWall,
+    CreateWalls,
+    CreateArcWall,
+    SetWallHeight,
+    SetElementType,
+    CreateFloor,
+    CreateOpening,
+    SetOpening,
 );
 
 impl AnyCommand {

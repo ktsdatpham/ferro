@@ -2,10 +2,13 @@
 //! evaluating a command on a copy of the document, and commits exactly one
 //! named command, so a human and an AI agent produce identical history.
 
+use ferro_core::model::bim::OpeningKind;
+use ferro_core::model::generate;
 use ferro_core::model::{Document, ElementId};
+use ferro_core::ops::bim_commands::*;
 use ferro_core::ops::commands::*;
 use ferro_core::topo::FaceId;
-use ferro_core::{AnyCommand, Length, Point3, UnitVec3, Vec3};
+use ferro_core::{AnyCommand, Length, Point2, Point3, UnitVec3, Vec3};
 use ferro_snap::{Ray, SnapKind, SnapResult};
 use std::collections::HashSet;
 
@@ -17,17 +20,29 @@ pub enum ToolKind {
     PushPull,
     Move,
     Eraser,
+    Wall,
+    Floor,
+    Door,
+    Window,
 }
 
 impl ToolKind {
-    pub const ALL: [ToolKind; 6] = [
+    pub const ALL: [ToolKind; 10] = [
         ToolKind::Select,
         ToolKind::Rectangle,
         ToolKind::Polygon,
         ToolKind::PushPull,
         ToolKind::Move,
         ToolKind::Eraser,
+        ToolKind::Wall,
+        ToolKind::Floor,
+        ToolKind::Door,
+        ToolKind::Window,
     ];
+    /// Tools that draw a chain of clicked points.
+    pub fn is_chain(self) -> bool {
+        matches!(self, ToolKind::Polygon | ToolKind::Wall | ToolKind::Floor)
+    }
     pub fn label(self) -> &'static str {
         match self {
             ToolKind::Select => "Select",
@@ -36,6 +51,10 @@ impl ToolKind {
             ToolKind::PushPull => "Push/Pull",
             ToolKind::Move => "Move",
             ToolKind::Eraser => "Eraser",
+            ToolKind::Wall => "Wall",
+            ToolKind::Floor => "Floor",
+            ToolKind::Door => "Door",
+            ToolKind::Window => "Window",
         }
     }
     pub fn icon(self) -> &'static str {
@@ -46,6 +65,10 @@ impl ToolKind {
             ToolKind::PushPull => "P",
             ToolKind::Move => "M",
             ToolKind::Eraser => "E",
+            ToolKind::Wall => "W",
+            ToolKind::Floor => "F",
+            ToolKind::Door => "D",
+            ToolKind::Window => "N",
         }
     }
     pub fn shortcut(self) -> &'static str {
@@ -56,6 +79,10 @@ impl ToolKind {
             ToolKind::PushPull => "P",
             ToolKind::Move => "M",
             ToolKind::Eraser => "E",
+            ToolKind::Wall => "W",
+            ToolKind::Floor => "F",
+            ToolKind::Door => "D",
+            ToolKind::Window => "N",
         }
     }
 }
@@ -174,7 +201,7 @@ impl ToolState {
     }
 
     pub fn backspace(&mut self) {
-        if self.kind == ToolKind::Polygon {
+        if self.kind.is_chain() {
             self.poly.pop();
         }
     }
@@ -183,7 +210,7 @@ impl ToolState {
     /// opposite corner must not lock to an axis or it would be degenerate).
     pub fn anchor(&self) -> Option<Point3> {
         match self.kind {
-            ToolKind::Polygon => self.poly.last().copied(),
+            k if k.is_chain() => self.poly.last().copied(),
             ToolKind::Move => self.move_base,
             _ => None,
         }
@@ -212,7 +239,7 @@ impl ToolState {
         }
         let s = ctx.snap?;
         let (e, f) = (s.element?, s.face?);
-        ctx.doc.get(e)?.as_form()?;
+        ctx.doc.get(e)?.geometry()?;
         Some((e, f))
     }
 
@@ -285,6 +312,23 @@ impl ToolState {
                 (w.abs() >= 1.0 && d.abs() >= 1.0).then(|| self.rect_cmd(ctx, first, w, d))
             }
             ToolKind::Polygon => None,
+            ToolKind::Wall => {
+                let last = *self.poly.last()?;
+                let p = on_plane(ctx, last.z)?;
+                let mut pts = self.poly.clone();
+                if p.distance_to(last) >= 1.0 {
+                    pts.push(p);
+                }
+                (pts.len() >= 2).then(|| self.walls_cmd(ctx, pts, false))
+            }
+            ToolKind::Floor => {
+                let last = *self.poly.last()?;
+                let p = on_plane(ctx, last.z)?;
+                let mut pts = self.poly.clone();
+                pts.push(p);
+                (pts.len() >= 3).then(|| self.floor_cmd(ctx, &pts))
+            }
+            ToolKind::Door | ToolKind::Window => self.opening_cmd(ctx),
             ToolKind::PushPull => {
                 let d = self.drag.as_ref()?;
                 let dist = self.pp_distance(ctx)?;
@@ -318,7 +362,7 @@ impl ToolState {
                         .map(|p| format!("{}, {}", m((p.x - f.x).abs()), m((p.y - f.y).abs())))
                 })
                 .unwrap_or_default(),
-            ToolKind::Polygon => self
+            k if k.is_chain() => self
                 .poly
                 .last()
                 .and_then(|l| on_plane(ctx, l.z).map(|p| m(p.distance_to(*l))))
@@ -335,7 +379,7 @@ impl ToolState {
     pub fn value_label(&self) -> &'static str {
         match self.kind {
             ToolKind::Rectangle => "Dimensions",
-            ToolKind::Polygon => "Length",
+            ToolKind::Polygon | ToolKind::Wall | ToolKind::Floor => "Length",
             ToolKind::PushPull | ToolKind::Move => "Distance",
             _ => "Value",
         }
@@ -353,6 +397,12 @@ impl ToolState {
             ToolKind::Move if self.move_base.is_none() => "Click a base point (on the element to move, or with elements selected). Hold Ctrl to copy.",
             ToolKind::Move => "Click the destination, or type a distance and press Enter. Arrow-free: snap to the red/green/blue axes.",
             ToolKind::Eraser => "Click an element to delete it.",
+            ToolKind::Wall if self.poly.is_empty() => "Click the start of the wall. Draw counter-clockwise so the exterior faces out.",
+            ToolKind::Wall => "Click the next corner or type a length. Click the first point to close the loop, or press Enter to finish an open chain.",
+            ToolKind::Floor if self.poly.is_empty() => "Click the first corner of the floor outline.",
+            ToolKind::Floor => "Click the next corner. Click the first point or press Enter to finish.",
+            ToolKind::Door => "Hover a wall and click to place a 900 × 2100 door.",
+            ToolKind::Window => "Hover a wall and click to place a 1200 × 1200 window (sill 900).",
         }
     }
 
@@ -371,6 +421,10 @@ impl ToolState {
                 Some(e) => ToolEvent::Commit(DeleteElements { elements: vec![e] }.into()),
                 None => ToolEvent::None,
             },
+            ToolKind::Door | ToolKind::Window => match self.opening_cmd(ctx) {
+                Some(c) => ToolEvent::Commit(c),
+                None => ToolEvent::None,
+            },
             ToolKind::Rectangle => match self.rect_first {
                 None => {
                     let z = self.rect_plane_z(ctx, &s);
@@ -385,15 +439,19 @@ impl ToolState {
                     None => ToolEvent::None,
                 },
             },
-            ToolKind::Polygon => {
+            ToolKind::Polygon | ToolKind::Wall | ToolKind::Floor => {
                 if self.poly.len() >= 3 && ctx.near_first_px.is_some_and(|d| d <= 10.0) {
-                    return self.close_polygon(ctx);
+                    return self.close_chain(ctx, true);
                 }
-                let z = self
-                    .poly
-                    .first()
-                    .map(|p| p.z)
-                    .unwrap_or_else(|| self.rect_plane_z(ctx, &s));
+                let z = match self.kind {
+                    // BIM elements are drawn on the active level.
+                    ToolKind::Wall | ToolKind::Floor => ctx.level.map(|l| l.1).unwrap_or(0.0),
+                    _ => self
+                        .poly
+                        .first()
+                        .map(|p| p.z)
+                        .unwrap_or_else(|| self.rect_plane_z(ctx, &s)),
+                };
                 if let Some(p) = on_plane(ctx, z) {
                     if self.poly.last().is_none_or(|l| l.distance_to(p) >= 1.0) {
                         self.poly.push(p);
@@ -407,8 +465,8 @@ impl ToolState {
                         let normal = ctx
                             .doc
                             .get(element)
-                            .and_then(|e| e.as_form())
-                            .and_then(|f| f.body.face_normal(face).ok());
+                            .and_then(|e| e.geometry())
+                            .and_then(|g| g.face_normal(face).ok());
                         if let Some(normal) = normal {
                             self.drag = Some(PushPullDrag {
                                 element,
@@ -439,7 +497,7 @@ impl ToolState {
                     };
                     let elems: Vec<ElementId> = elems
                         .into_iter()
-                        .filter(|e| ctx.doc.get(*e).is_some_and(|x| x.as_form().is_some()))
+                        .filter(|e| ctx.doc.get(*e).is_some_and(|x| x.geometry().is_some()))
                         .collect();
                     if elems.is_empty() {
                         return ToolEvent::None;
@@ -456,6 +514,82 @@ impl ToolState {
                     None => ToolEvent::None,
                 },
             },
+        }
+    }
+
+    fn walls_cmd(&self, ctx: &ToolCtx, points: Vec<Point3>, closed: bool) -> AnyCommand {
+        CreateWalls {
+            points,
+            closed,
+            level: ctx.level.map(|l| l.0),
+            wall_type: None,
+            height: None,
+            top_level: None,
+            top_offset: Length::ZERO,
+            base_offset: Length::ZERO,
+            location_line: Default::default(),
+            name: None,
+        }
+        .into()
+    }
+
+    fn floor_cmd(&self, ctx: &ToolCtx, pts: &[Point3]) -> AnyCommand {
+        CreateFloor {
+            points: pts.iter().map(|p| Point2::new(p.x, p.y)).collect(),
+            holes: Vec::new(),
+            level: ctx.level.map(|l| l.0),
+            offset: Length::ZERO,
+            floor_type: None,
+            name: None,
+        }
+        .into()
+    }
+
+    /// Door / window under the cursor: the hovered wall and the position of
+    /// the cursor along it.
+    fn opening_cmd(&self, ctx: &ToolCtx) -> Option<AnyCommand> {
+        let s = ctx.snap?;
+        let e = ctx.doc.get(s.element?)?;
+        let w = e.as_wall()?;
+        let lay = generate::wall_layout(ctx.doc, e, w).ok()?;
+        let (o, d, _) = lay.frame()?;
+        let (host, u) = (e.id, (Point2::new(s.point.x, s.point.y) - o).dot(d));
+        let kind = if self.kind == ToolKind::Door {
+            OpeningKind::Door
+        } else {
+            OpeningKind::Window
+        };
+        Some(
+            CreateOpening {
+                wall: host,
+                kind,
+                position: Length::from_mm(u.round()),
+                width: None,
+                height: None,
+                sill: None,
+                name: None,
+            }
+            .into(),
+        )
+    }
+
+    fn close_chain(&mut self, ctx: &ToolCtx, closed: bool) -> ToolEvent {
+        match self.kind {
+            ToolKind::Wall => {
+                if self.poly.len() < 2 || (closed && self.poly.len() < 3) {
+                    return ToolEvent::None;
+                }
+                let pts = std::mem::take(&mut self.poly);
+                ToolEvent::Commit(self.walls_cmd(ctx, pts, closed))
+            }
+            ToolKind::Floor => {
+                if self.poly.len() < 3 {
+                    return ToolEvent::None;
+                }
+                let pts = std::mem::take(&mut self.poly);
+                ToolEvent::Commit(self.floor_cmd(ctx, &pts))
+            }
+            _ => self.close_polygon(ctx),
         }
     }
 
@@ -482,8 +616,8 @@ impl ToolState {
     /// Enter pressed with typed text (value control box).
     pub fn typed(&mut self, text: &str, ctx: &ToolCtx) -> Result<ToolEvent, String> {
         if text.trim().is_empty() {
-            return Ok(if self.kind == ToolKind::Polygon {
-                self.close_polygon(ctx)
+            return Ok(if self.kind.is_chain() {
+                self.close_chain(ctx, false)
             } else {
                 ToolEvent::None
             });
@@ -503,7 +637,7 @@ impl ToolState {
                 self.rect_first = None;
                 Ok(ToolEvent::Commit(self.rect_cmd(ctx, first, w * sx, d * sy)))
             }
-            ToolKind::Polygon => {
+            ToolKind::Polygon | ToolKind::Wall | ToolKind::Floor => {
                 let last = *self.poly.last().ok_or("click the first point first")?;
                 let p = on_plane(ctx, last.z).ok_or("move the cursor to set a direction")?;
                 let dir = (p - last)
@@ -544,7 +678,7 @@ impl ToolState {
         for w in self.poly.windows(2) {
             segs.push((w[0], w[1]));
         }
-        if let (Some(l), true) = (self.poly.last(), self.kind == ToolKind::Polygon) {
+        if let (Some(l), true) = (self.poly.last(), self.kind.is_chain()) {
             if let Some(p) = on_plane(ctx, l.z) {
                 segs.push((*l, p));
             }

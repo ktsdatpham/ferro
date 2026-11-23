@@ -6,12 +6,13 @@
 tool that lets designers sketch freely and fast, while real BIM data builds up
 underneath, ready to hand to Revit for documentation.
 
-> Status: **milestone 1 — first usable desktop app.** Sketch modelling with
-> SketchUp-style snapping and push/pull, levels, undo, `.fro` files, OBJ / glTF
-> export, and an MCP server so AI agents can model too. BIM elements (walls,
-> floors, doors), rendering and in-app AI arrive in the next milestones.
+> Status: **milestone 2 — BIM elements and live AI.** Sketch modelling with
+> SketchUp-style snapping and push/pull, plus real walls, floors, doors and
+> windows with types and materials. AI agents (any MCP client, or the built-in
+> chat with your own key) edit the model you have open, as a proposal you accept
+> or reject. The Revit link and rendering come next.
 
-![Ferro milestone 1](docs/images/screenshot-m1.png)
+![Ferro milestone 2: an AI agent's proposal waiting for review](docs/images/screenshot-m2.png)
 
 ## Download
 
@@ -48,27 +49,28 @@ Keeping the scope tight matters more than piling on features. Ferro core is
 Anything outside the core loop (sketch → AI → BIM data → Revit) should be an
 add-in.
 
-## What works today (milestone 1)
+## What works today (milestone 2)
 
 | Area | Status |
 |---|---|
-| Tools | Select, Rectangle, Polygon, Push/Pull, Move (Ctrl = copy), Eraser; type exact values while drawing (`4000,3000`, `3m`) |
+| Tools | Select, Rectangle, Polygon, Push/Pull, Move (Ctrl = copy), Eraser; Wall, Floor, Door, Window; type exact values while drawing (`4000,3000`, `3m`) |
+| BIM | Walls (straight and curved, mitred corners, top attached to a level or fixed height), floors with holes, doors and windows that cut their wall; wall / floor types with layers and materials; push/pull a wall's top to change its height, its end to change its length |
 | Snapping | Endpoint, midpoint, on edge, on face, red / green / blue axis inference, ground / active level |
 | Model | Immutable document, elements with stable UUIDs, levels (Forms move with their level), Forms classifiable as walls / floors / roofs …, typed parameters, computed area and volume |
 | History | Every change is one command + transaction: undo / redo, journal of who did what (user or AI agent) |
 | Files | `.fro` (SQLite, autosave, crash-safe), `.fro.json` interchange, OBJ and glTF export |
-| AI | `ferro-mcp`: every command is an MCP tool (units like `"3m"`, angles in degrees) |
+| AI | `ferro-mcp`: every command is an MCP tool (units like `"3m"`, angles in degrees). With the app open, agents edit the open model over **Ferro Link**; their changes arrive as a proposal (Accept / Reject). Built-in **AI chat** with your own Anthropic key or any OpenAI-compatible endpoint (including local models) |
 | Platforms | Windows, macOS, Linux; kernel builds for WebAssembly |
 
 ## Architecture
 
 ```
- ferro-app (egui + wgpu)    ferro-mcp (AI agents)    Revit add-in (C#)
+ ferro-app (egui + wgpu) ◄─Ferro Link─ ferro-mcp (AI agents)   Revit add-in (C#)
         │                         │                        │ P/Invoke
         │                         │                   ferro-ffi (C ABI)
         └──────────┬──────────────┴────────────────────────┘
                    ▼
-   ferro-snap (inference)   ferro-io (.fro, JSON, OBJ, glTF)
+   ferro-tools · ferro-snap (inference) · ferro-io (.fro, JSON, OBJ, glTF)
                    ▼
    ferro-core:  math → geom → topo → algo → model → ops
    (pure: no IO, no UI, deterministic, builds for wasm32)
@@ -79,7 +81,8 @@ add-in.
 | `crates/ferro-core` | Kernel: math, curves and profiles, half-edge B-rep with persistent ids, extrude / push-pull / triangulation, immutable `Document`, commands, transactions, undo |
 | `crates/ferro-io` | `.fro` SQLite files (incremental autosave), `.fro.json`, OBJ / glTF export |
 | `crates/ferro-snap` | Inference engine: SketchUp-style snapping in screen space |
-| `crates/ferro-mcp` | MCP server over stdio: kernel commands as tools, plus list / get / undo / save / export |
+| `crates/ferro-tools` | Shared AI tool surface: schemas, unit conversion, dispatch, Ferro Link protocol |
+| `crates/ferro-mcp` | MCP server over stdio; forwards to the open app over Ferro Link, else works headless with save / export |
 | `crates/ferro-ffi` | C ABI for the Revit add-in and native shells |
 | `crates/ferro-app` | The desktop app (`ferro`): viewport, tools, levels, properties |
 | `revit-addin/` | C# shell that loads the Rust core inside Revit |
@@ -113,16 +116,20 @@ Add it to your MCP client, e.g. Claude Desktop:
 }
 ```
 
-Then ask: *"Create level L2 at 3.6 m, a 5 × 20 m ground floor 3.6 m high and a
-5 × 16 m upper floor on L2, classify the ground floor as walls, and save it to
-~/house.fro."* Open the file in the app.
+Open the Ferro app, then ask: *"Draw a 10 × 8 m house with 3 m brick walls, a
+door and two windows on the south side, and a floor slab."* The walls appear in
+the open app as a proposal; click **Accept** or **Reject**. (Without the app
+open, ferro-mcp works on its own copy: ask it to save to `~/house.fro`.)
+
+Prefer to stay in the app? **AI ▸ Chat settings** takes your own Anthropic key,
+or the address of an OpenAI-compatible server such as a local Ollama.
 
 ## Roadmap
 
 See [docs/ROADMAP.md](docs/ROADMAP.md). In short:
 
 1. ✅ **Viewport + SketchUp basics**: window, orbit, rectangle, push-pull, snapping (`docs/milestones/M1.md`)
-2. **AI in the app**: chat panel driving the same MCP tools, live-updating the view (Ferro Link)
+2. ✅ **BIM elements + AI in the app**: walls, floors, doors, windows, types, materials; Ferro Link, proposals, chat (`docs/milestones/M2.md`)
 3. **Revit link**: solids → DirectShape, tags → native walls / floors / rooms
 4. **Rhino-style power**: command line, parametric nodes, IFC export
 5. **Real-time rendering**: materials and lighting in the viewport, wgpu PBR

@@ -31,6 +31,13 @@ for the same concept.
 | `Failure` | Reported problem | Issue, Problem |
 | `Regenerate` | Rebuild dependents | Update, Refresh, Recompute |
 | `Host` / hosted | Containment relation | Parent / child (for this) |
+| `Material` | Appearance + physical data, an element | Texture, Shader (for this) |
+| `CompoundStructure` / `CompoundLayer` | Layers of a wall / floor type | Build-up, Layer (alone), Ply |
+| `WallType` / `FloorType` | System family types | WallStyle, Assembly |
+| `Opening` | Door or window hosted by a wall | Hole, Cutout, Insert (as a type) |
+| `LocationLine` | Which line of a wall its curve follows | Justification, Alignment |
+| Ferro Link | Local protocol for agents to drive the open app | Bridge, Socket API |
+| Proposal | Agent changes awaiting the user's accept / reject | Draft, Suggestion (for this) |
 
 Adding a term requires adding it here first.
 

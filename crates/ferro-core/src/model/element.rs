@@ -1,3 +1,4 @@
+use super::bim::{Floor, FloorType, Material, Opening, Wall, WallType};
 use super::{Category, ElementId, ParamValue, Uid};
 use crate::math::{BoundingBox3, Length};
 use crate::topo::Body;
@@ -25,6 +26,12 @@ pub struct Form {
 pub enum ElementBody {
     Level(Level),
     Form(Form),
+    Material(Material),
+    WallType(WallType),
+    FloorType(FloorType),
+    Wall(Wall),
+    Floor(Floor),
+    Opening(Opening),
 }
 
 /// Anything in the document with identity (Foundation Spec §3.2).
@@ -62,11 +69,35 @@ impl Element {
             _ => None,
         }
     }
+    /// Model geometry of the element, if it has any (Forms, walls, floors,
+    /// openings).
+    pub fn geometry(&self) -> Option<&Body> {
+        match &self.body {
+            ElementBody::Form(f) => Some(&f.body),
+            ElementBody::Wall(w) => Some(&w.geometry),
+            ElementBody::Floor(f) => Some(&f.geometry),
+            ElementBody::Opening(o) => Some(&o.geometry),
+            _ => None,
+        }
+    }
+    /// `true` for type and material definitions (not placed in the model).
+    pub fn is_definition(&self) -> bool {
+        matches!(
+            self.body,
+            ElementBody::Material(_) | ElementBody::WallType(_) | ElementBody::FloorType(_)
+        )
+    }
+    pub fn as_wall(&self) -> Option<&Wall> {
+        match &self.body {
+            ElementBody::Wall(w) => Some(w),
+            _ => None,
+        }
+    }
     pub fn param(&self, key: &str) -> Option<&ParamValue> {
         self.params.get(key)
     }
     pub fn bounding_box(&self) -> Option<BoundingBox3> {
-        self.as_form().and_then(|f| f.body.bounding_box())
+        self.geometry().and_then(|b| b.bounding_box())
     }
     /// Display label: name, else category and id.
     pub fn label(&self) -> String {
