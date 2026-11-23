@@ -995,7 +995,6 @@ fn tolerance_edges_accept_just_above_the_limit() {
 /// D-06 rule 3: no command may create an edge shorter than 0.5 mm. A circle
 /// of radius 1 mm with 360 segments would have 0.017 mm edges.
 #[test]
-#[ignore = "bug: tiny circles commit edges shorter than SHORT_CURVE_TOL"]
 fn circles_never_create_edges_below_short_curve_tolerance() {
     let mut f = Fx::new();
     expect_code(
@@ -1021,7 +1020,6 @@ fn circles_never_create_edges_below_short_curve_tolerance() {
 
 /// Scaling must not shrink edges below 0.5 mm either (D-06 rule 3).
 #[test]
-#[ignore = "bug: scaling down commits edges shorter than SHORT_CURVE_TOL"]
 fn scaling_never_creates_edges_below_short_curve_tolerance() {
     let mut f = Fx::new();
     // 2000 mm × 1e-4 = 0.2 mm edges.
@@ -1058,7 +1056,6 @@ fn offset_past_the_middle_is_too_large() {
 /// Offsetting to within less than 0.5 mm of the opposite side would leave a
 /// sliver face with short edges.
 #[test]
-#[ignore = "bug: offset can leave a sliver with edges shorter than SHORT_CURVE_TOL"]
 fn offset_leaving_a_sliver_is_rejected() {
     let mut f = Fx::new();
     let top = f.top(f.bx);
@@ -1075,7 +1072,6 @@ fn offset_leaving_a_sliver_is_rejected() {
 /// vertex; 0.02 mm away it is a distinct point and the 0.02 mm edge is
 /// rejected.
 #[test]
-#[ignore = "bug: imprint commits a 0.02 mm edge next to a vertex"]
 fn imprint_points_snap_within_vertex_tolerance() {
     let mut f = Fx::new();
     let bx = f.bx;

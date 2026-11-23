@@ -1,5 +1,5 @@
 use super::{CommandError, DocumentChanged, Failure};
-use crate::math::Vec3;
+use crate::math::{tol, Vec3};
 use crate::model::bim::WallTop;
 use crate::model::generate;
 use crate::model::{
@@ -303,6 +303,22 @@ impl<'a> Transaction<'a> {
             if let ElementBody::Form(f) = &e.body {
                 if let Err(err) = f.body.validate() {
                     errors.push(Failure::error(err.code(), err.to_string(), vec![*id]));
+                    continue;
+                }
+                // D-06 rule 3: no command may leave an edge shorter than
+                // SHORT_CURVE_TOL (tiny circles, slivers from imprint or
+                // offset, scaling down).
+                let shortest = f
+                    .body
+                    .edges()
+                    .map(|(_, a, b)| a.distance_to(b))
+                    .reduce(f64::min);
+                if shortest.is_some_and(|m| m + tol::PARAM_TOL < tol::SHORT_CURVE_TOL) {
+                    errors.push(Failure::error(
+                        "ferro.geom.short_curve",
+                        "this would create an edge shorter than 0.5 mm",
+                        vec![*id],
+                    ));
                     continue;
                 }
                 if let Some(bb) = f.body.bounding_box() {

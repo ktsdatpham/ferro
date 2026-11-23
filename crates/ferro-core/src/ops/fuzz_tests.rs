@@ -119,7 +119,6 @@ fn random_step(rng: &mut XorShift, s: &mut Session, step: usize) -> (String, Val
 /// 200 random steps per seed, three seeds; the outcome of every step is
 /// checked. A panic reports the seed, the step and the command.
 #[test]
-#[ignore = "bug: random edits commit edges shorter than SHORT_CURVE_TOL"]
 fn random_form_edits_keep_documents_valid() {
     let mut ok = 0;
     let mut failed = 0;
