@@ -2622,7 +2622,15 @@ impl FerroApp {
         let name = self.session.doc().project().name.clone();
         self.link.set_project(&name);
         for p in self.link.drain() {
+            let tool = p.req.tool.clone();
             let resp = self.agent_call(p.req);
+            // Tool name and outcome code only (no arguments: model data).
+            let code = resp.body.get("code").and_then(|c| c.as_str()).unwrap_or("");
+            crate::report::record(if resp.ok {
+                format!("agent {tool} ok")
+            } else {
+                format!("agent {tool} failed {code}")
+            });
             let _ = p.reply.send(resp);
         }
     }
