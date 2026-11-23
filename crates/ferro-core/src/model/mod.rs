@@ -7,6 +7,7 @@
 
 pub mod bim;
 mod category;
+pub mod change;
 mod document;
 mod element;
 pub mod generate;

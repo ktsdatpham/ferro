@@ -553,6 +553,21 @@ BIM element data (Foundation Spec ch. 3, D-41, D-70): system family types with c
 - fn `Category::ifc_class` — IFC4 entity class.
 - fn `Category::classifiable_form` — Categories a `Form` may be classified as (D-12).
 
+### `ferro_core::model::change`
+
+The change format (M5-26, F10 of the foundation review, D-34, D-55, ADR 0006): every property of a document has a stable path, and a change is a list of edits on those paths. Diff, merge, sync between computers and design-option layers all use it.
+
+- const `REF_FIELDS` — Fields of an element that hold another element's id.
+- struct `ChangeError` — A failed diff or apply, with a stable code (`ferro.change.*`).
+- enum `Change` — One edit: set the value at `path`, or remove it.
+- fn `Change::path`
+- fn `visit_element_refs` — Call `f` on every place in an element's JSON that holds an element
+- fn `element_value` — An element as canonical JSON: local `id` dropped, references as uids.
+- fn `escape` — RFC 6901 escaping of one path segment (`~` → `~0`, `/` → `~1`).
+- fn `diff` — The edits that turn `a` into `b`, sorted by path. `diff(a, a)` is empty.
+- fn `apply` — Apply edits to `doc`. Elements keep their `ElementId`; new elements get
+- fn `conflicts` — Paths where `ours` and `theirs` disagree: both edit the same path with
+
 ### `ferro_core::model::document`
 
 - const `EXTENT_LIMIT_MM` — Geometry must stay within this distance of the Internal Origin (D-05).

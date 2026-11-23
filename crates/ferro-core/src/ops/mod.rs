@@ -28,6 +28,8 @@ pub use transaction::{IdSource, SequentialIds, Transaction};
 #[cfg(test)]
 mod bim_tests;
 #[cfg(test)]
+mod change_tests;
+#[cfg(test)]
 mod form_tests;
 #[cfg(test)]
 mod fuzz_tests;

@@ -124,7 +124,11 @@ Legend: `[ ]` open · `[~]` in progress · `[x]` done · `✓` verified ·
   - [ ] M5-24.2 App: Project settings window; lengths / areas / volumes in the properties panel and value box shown in project units
   - [ ] M5-24.3 Exports read settings: IFC `IfcSite` RefLatitude / RefLongitude / RefElevation, Revit SiteLocation, cost currency
 - [ ] **M5-25 Family and component definition format** (D-43, D-71): `.ffa` = parameters + formulas + geometry (Forms / profiles / sweeps) + type catalog; components are instances of a definition; what M6-4, M6-8–M6-10 build on
-- [ ] **M5-26 Change format for sync and branches** (D-34, D-55, F10): every property has a stable path; a change is a list of path edits; diff / merge / sync use it
+- [~] **M5-26 Change format for sync and branches** (D-34, D-55, F10): every property has a stable path; a change is a list of path edits; diff / merge / sync use it @lead
+  - [x] M5-26.1 `model::change`: JSON-pointer paths keyed by element uid (`/elements/<uid>/params/<key>`), `diff` (sorted, property-level), `apply` (ids kept, new ids for new uids, refs as uids), `conflicts`; one reference walk shared with ferro-io @lead
+    - accept: `cargo test -p ferro-core change` passes (6 tests: every kind of edit round-trips, refs as uids, bad edits fail with `ferro.change.*` and change nothing, per-property conflicts, dangling `element_ref` params kept, RFC 6901 escaping); `cargo test -p ferro-io` passes
+  - [ ] M5-26.2 MCP tools `diff_documents` / `apply_changes` (change lists as JSON), with schemas and scenarios
+  - [ ] M5-26.3 Design-option layers store their changes in this format (M5-23 options)
 - [ ] **M5-14 Python SDK** (ADR 0005)
   - [x] M5-14.1 `ferro-mcp --tools-json` prints the tool list (schemas) for generators @agent-python
     - accept: `cargo run -q -p ferro-mcp -- --tools-json` prints `{"tools": [...]}` equal to MCP `tools/list`; `cargo test -p ferro-mcp` passes (incl. `tools_json_matches_tools_list`, `python_sdk_snapshot_is_current`) ✓ verified @lead (52 tools, 8 tests)

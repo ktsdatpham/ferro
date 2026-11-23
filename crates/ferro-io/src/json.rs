@@ -1,4 +1,5 @@
 use crate::IoError;
+use ferro_core::model::change::visit_element_refs;
 use ferro_core::model::{Document, Element, ElementId, ProjectInfo, Uid};
 use serde_json::{json, Map, Value};
 use std::collections::HashMap;
@@ -6,79 +7,35 @@ use std::collections::HashMap;
 /// Version of the logical file schema (D-21). Bump with a migration.
 pub use crate::migrate::FORMAT_VERSION;
 
-const REF_FIELDS: [&str; 6] = [
-    "level_id",
-    "type_id",
-    "host_id",
-    "design_option",
-    "phase_created",
-    "phase_demolished",
-];
-
-/// Element references stored inside the category-specific body: a wall's top
-/// level and the materials of a type's layers.
-fn body_refs(obj: &mut Map<String, Value>) -> Vec<&mut Value> {
-    let mut out = Vec::new();
-    let Some(body) = obj.get_mut("body").and_then(Value::as_object_mut) else {
-        return out;
-    };
-    let mut top_level = None;
-    let mut layers = None;
-    for (k, v) in body.iter_mut() {
-        match k.as_str() {
-            "top" => top_level = v.get_mut("level"),
-            "structure" => layers = v.get_mut("layers").and_then(Value::as_array_mut),
-            _ => {}
-        }
-    }
-    if let Some(l) = top_level {
-        out.push(l);
-    }
-    if let Some(ls) = layers {
-        for l in ls {
-            if let Some(m) = l.get_mut("material").filter(|m| !m.is_null()) {
-                out.push(m);
-            }
-        }
-    }
-    out
-}
-
 /// Element → JSON with references rewritten as uids and the local id dropped.
+/// The reference walk is shared with the change format
+/// (`ferro_core::model::change::visit_element_refs`).
 pub(crate) fn element_to_value(
     e: &Element,
     uid_of: &HashMap<ElementId, Uid>,
 ) -> Result<Value, IoError> {
     let mut v = serde_json::to_value(e)?;
-    let obj = v.as_object_mut().expect("element is an object");
+    let obj = v
+        .as_object_mut()
+        .ok_or_else(|| IoError::new("ferro.io.schema", "element is not an object"))?;
     obj.remove("id");
-    for f in REF_FIELDS {
-        if let Some(r) = obj.get(f).and_then(Value::as_u64) {
-            let uid = uid_of.get(&ElementId(r)).ok_or_else(|| {
-                IoError::new("ferro.io.dangling_reference", format!("{f} → #{r}"))
-            })?;
-            obj.insert(f.into(), Value::String(uid.to_string()));
-        }
-    }
-    for r in body_refs(obj) {
-        if let Some(id) = r.as_u64() {
-            let uid = uid_of.get(&ElementId(id)).ok_or_else(|| {
-                IoError::new("ferro.io.dangling_reference", format!("body → #{id}"))
-            })?;
-            *r = Value::String(uid.to_string());
-        }
-    }
-    if let Some(params) = obj.get_mut("params").and_then(Value::as_object_mut) {
-        for p in params.values_mut() {
-            if p["type"] == "element_ref" {
-                if let Some(r) = p["value"].as_u64() {
-                    if let Some(uid) = uid_of.get(&ElementId(r)) {
-                        p["value"] = Value::String(uid.to_string());
-                    }
-                }
+    visit_element_refs::<IoError>(obj, &mut |r: &mut Value, lenient| {
+        let Some(id) = r.as_u64() else {
+            return Ok(());
+        };
+        match uid_of.get(&ElementId(id)) {
+            Some(uid) => *r = Value::String(uid.to_string()),
+            // A parameter may point at an element deleted since: keep it.
+            None if lenient => {}
+            None => {
+                return Err(IoError::new(
+                    "ferro.io.dangling_reference",
+                    format!("{} → #{id}", e.label()),
+                ))
             }
         }
-    }
+        Ok(())
+    })?;
     Ok(v)
 }
 
@@ -96,39 +53,24 @@ pub(crate) fn elements_from_values(values: Vec<Value>) -> Result<Vec<Element>, I
             ));
         }
     }
-    let lookup = |s: &str| -> Result<u64, IoError> {
-        id_of.get(s).copied().ok_or_else(|| {
-            IoError::new(
-                "ferro.io.dangling_reference",
-                format!("missing element {s}"),
-            )
-        })
-    };
     let mut out = Vec::with_capacity(values.len());
     for (i, mut v) in values.into_iter().enumerate() {
         let obj = v
             .as_object_mut()
             .ok_or_else(|| IoError::new("ferro.io.schema", "element is not an object"))?;
         obj.insert("id".into(), json!(i as u64 + 1));
-        for f in REF_FIELDS {
-            if let Some(s) = obj.get(f).and_then(Value::as_str).map(str::to_string) {
-                obj.insert(f.into(), json!(lookup(&s)?));
+        visit_element_refs::<IoError>(obj, &mut |r: &mut Value, _| {
+            if let Some(s) = r.as_str() {
+                let id = id_of.get(s).copied().ok_or_else(|| {
+                    IoError::new(
+                        "ferro.io.dangling_reference",
+                        format!("missing element {s}"),
+                    )
+                })?;
+                *r = json!(id);
             }
-        }
-        for r in body_refs(obj) {
-            if let Some(s) = r.as_str().map(str::to_string) {
-                *r = json!(lookup(&s)?);
-            }
-        }
-        if let Some(params) = obj.get_mut("params").and_then(Value::as_object_mut) {
-            for p in params.values_mut() {
-                if p["type"] == "element_ref" {
-                    if let Some(s) = p["value"].as_str().map(str::to_string) {
-                        p["value"] = json!(lookup(&s)?);
-                    }
-                }
-            }
-        }
+            Ok(())
+        })?;
         out.push(serde_json::from_value(v)?);
     }
     Ok(out)
