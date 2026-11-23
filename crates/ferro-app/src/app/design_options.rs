@@ -199,8 +199,8 @@ impl FerroApp {
                         pick = Some(o.id);
                     }
                     if d.is_primary {
-                        ui.label(RichText::new("★ primary").small());
-                    } else if ui.small_button("☆").on_hover_text("Make primary").clicked() {
+                        ui.label(RichText::new("(primary)").small());
+                    } else if ui.small_button("Make primary").on_hover_text("Make this the primary option of its set").clicked() {
                         cmds.push(SetDesignOption { option: o.id, name: None, is_primary: Some(true), changes: None }.into());
                     }
                     let editing = self.options.editing == Some(o.id);

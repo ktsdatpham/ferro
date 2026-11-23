@@ -485,7 +485,7 @@ impl FerroApp {
                     switch = Some(*id);
                 }
                 if ui
-                    .small_button("✕")
+                    .small_button("×")
                     .on_hover_text("Delete this view")
                     .clicked()
                 {

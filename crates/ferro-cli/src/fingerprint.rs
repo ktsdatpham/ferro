@@ -43,6 +43,30 @@ fn element(doc: &Document, e: &Element) -> Value {
             m.insert(k.into(), json!(id));
         }
     }
+    if let Some(v) = e.as_view() {
+        m.insert("hidden".into(), json!(v.hidden_elements));
+        m.insert("display_style".into(), json!(v.display_style));
+    }
+    if let Some(o) = e.as_design_option() {
+        // The option layer by path (values left out: they hold uids).
+        let paths: Vec<String> = o
+            .changes
+            .iter()
+            .map(|c| {
+                let p = c.path();
+                // `/elements/<uid>/…` → `/elements/*/…`: uids are random.
+                let mut parts: Vec<&str> = p.split('/').collect();
+                if parts.len() > 2 {
+                    parts[2] = "*";
+                }
+                parts.join("/")
+            })
+            .collect();
+        m.insert(
+            "option".into(),
+            json!({"primary": o.is_primary, "status": o.status, "changes": paths}),
+        );
+    }
     if let Some(g) = e.geometry() {
         let faces: Vec<Value> = g
             .face_ids()
