@@ -55,7 +55,7 @@ Legend: `[ ]` open · `[~]` in progress · `[x]` done · `✓` verified ·
   - [x] M5-4.3 `create_material` / `set_material` tools and a material editor in the app · branch `m5/materials` @agent-materials
     - Acceptance: `cargo test -p ferro-core material_tests` and `cargo test -p ferro-mcp agent_sets_material_data` pass; in the app, ✎ next to a material opens an editor whose Apply changes the wall type's U-value shown in Properties. — ✓ tests re-run @lead after merge ; app ✓ verified @lead (Wool λ 0.035 via the editor → type U-value 0.304 W/(m²·K), mass 363 kg/m²)
   - [x] M5-4.4 IFC material property sets; Revit material op carries thermal / physical values · branch `m5/materials` @agent-materials
-    - Acceptance: `cargo test -p ferro-io ifc` and `cargo test -p ferro-revit material_op` pass; IFC of a material with data contains `IFCMATERIALPROPERTIES('Pset_MaterialThermal'`; the C# add-in (`Applier.cs`, thermal / structural assets) builds in CI. — ✓ tests re-run @lead after merge (C# compile: waiting for CI)
+    - Acceptance: `cargo test -p ferro-io ifc` and `cargo test -p ferro-revit material_op` pass; IFC of a material with data contains `IFCMATERIALPROPERTIES('Pset_MaterialThermal'`; the C# add-in (`Applier.cs`, thermal / structural assets) builds in CI. — ✓ tests re-run @lead after merge ; C# ✓ compiled in CI (revit-addin job on 7141d1f)
   - [ ] M5-4.5 Acoustic asset (absorption per octave band) and texture rendering of `ImageMapping`
 - [ ] **M5-5 Relationships** (ADR 0004 §5) @lead
   - [ ] M5-5.1 Relationship table in the document (`Uid`, kind, elements), saved, undoable
