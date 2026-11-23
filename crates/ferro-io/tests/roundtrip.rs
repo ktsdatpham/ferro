@@ -268,6 +268,23 @@ fn house(gaps: bool) -> Session {
         "set_name",
         json!({"element": south, "name": "Tường nam"}),
     );
+    // Phases (M5-23): the two defaults from the simple mode plus a dated
+    // stage; the south wall is demolished, the box is new.
+    run(
+        &mut s,
+        "set_renovation_status",
+        json!({"elements": [south], "status": "demolish"}),
+    );
+    run(
+        &mut s,
+        "set_renovation_status",
+        json!({"elements": [bx], "status": "new"}),
+    );
+    run(
+        &mut s,
+        "create_phase",
+        json!({"name": "Hoàn thiện", "start_date": "2027-01-15", "end_date": "2027-06-30"}),
+    );
     s
 }
 
@@ -373,6 +390,8 @@ fn every_element_kind_is_present() {
         |e| e.as_form().is_some() && e.category == ferro_core::Category::Windows
     ));
     assert!(!s.doc().project().parameter_definitions.is_empty());
+    assert!(has(|e| matches!(e.body, ElementBody::Phase(_))));
+    assert!(has(|e| e.phase_demolished.is_some()));
 }
 
 #[test]
