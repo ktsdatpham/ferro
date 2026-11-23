@@ -53,7 +53,7 @@ Rules:
 | `Category` | `BuiltInCategory` |
 | `FamilyType` | `ElementType` / `FamilySymbol` |
 | `WallType` / `FloorType` + `CompoundStructure` | Duplicated basic `WallType` / `FloorType` with `SetCompoundStructure`; layer functions map to `MaterialFunctionAssignment` |
-| `Material` | `Material` (name, colour) |
+| `Material` | `Material` (name, colour); `thermal` → Thermal asset, `physical` → Structural asset (`PropertySetElement`, SI converted with `UnitUtils`) |
 | `Wall` | `Wall.Create` (+ `WALL_KEY_REF_PARAM`, `WALL_HEIGHT_TYPE` / `WALL_USER_HEIGHT_PARAM`, `WALL_TOP_OFFSET`); exterior on the left in both |
 | `Floor` | `Floor.Create` with curve loops; `FLOOR_HEIGHTABOVELEVEL_PARAM` |
 | `Opening` (door / window) | `FamilyInstance` of the first loaded door / window family, type duplicated per size, hosted by the wall |
@@ -92,5 +92,13 @@ Rules (ADR 0002):
 Types map to `IfcWallType` / `IfcSlabType` with `IfcMaterialLayerSet`;
 openings to `IfcOpeningElement` + `IfcRelVoidsElement` + `IfcRelFillsElement`;
 quantities to `Qto_WallBaseQuantities` / `Qto_SlabBaseQuantities`; the uid
-also to `Pset_FerroCommon.FerroUid`. Geometry is `IfcTriangulatedFaceSet`
+also to `Pset_FerroCommon.FerroUid`. Material assets become
+`IfcMaterialProperties`: `Pset_MaterialCommon.MassDensity`,
+`Pset_MaterialThermal` (`ThermalConductivity`, `SpecificHeatCapacity`),
+`Pset_MaterialMechanical` (`YoungModulus`, `PoissonRatio`,
+`ThermalExpansionCoefficient`) and `Pset_FerroMaterial` for the rest
+(strengths, emissivity, solar absorptance, vapour resistance, GWP per stage,
+EPD source, price); a complete U-value becomes
+`Pset_WallCommon` / `Pset_SlabCommon.ThermalTransmittance` on the type. SI
+derived units are declared only when such data exists. Geometry is `IfcTriangulatedFaceSet`
 in millimetres.

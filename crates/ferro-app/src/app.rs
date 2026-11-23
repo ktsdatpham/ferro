@@ -5,6 +5,7 @@ use crate::ai::{self, AiSettings, ChatEvent, Provider};
 use crate::camera::{FrameCamera, OrbitCamera};
 use crate::keymap::{KeyResolver, KeyScheme, Keymap, KeymapFile, Target};
 use crate::link::{self, LinkServer};
+use crate::material_editor::{DraftAction, MaterialDraft};
 use crate::render::{FrameData, Renderer, Vertex};
 use crate::scene::{self, line_vertex, SceneCache};
 use crate::tools::{
@@ -138,6 +139,8 @@ pub struct FerroApp {
     material: Option<ElementId>,
     new_material_color: [f32; 3],
     new_material_name: String,
+    /// Material open in the Materials panel editor.
+    material_draft: Option<MaterialDraft>,
     clipboard: Vec<ElementId>,
     /// Last Move-copy, for arrays typed afterwards (`5x`, `/5`).
     last_copy: Option<CopyElements>,
@@ -218,6 +221,7 @@ impl FerroApp {
             material: None,
             new_material_color: [0.80, 0.55, 0.40],
             new_material_name: "Material 1".into(),
+            material_draft: None,
             clipboard: Vec::new(),
             last_copy: None,
             select_drag: None,
@@ -770,8 +774,16 @@ impl FerroApp {
                     self.material = Some(*id);
                     self.set_tool(ToolKind::Paint);
                 }
+                if ui
+                    .small_button("✎")
+                    .on_hover_text("Edit material")
+                    .clicked()
+                {
+                    self.open_material_editor(*id);
+                }
             });
         }
+        self.material_editor_ui(ui);
         ui.horizontal(|ui| {
             ui.color_edit_button_rgb(&mut self.new_material_color);
             ui.add(egui::TextEdit::singleline(&mut self.new_material_name).desired_width(110.0));
@@ -783,7 +795,7 @@ impl FerroApp {
                         ferro_core::ops::bim_commands::CreateMaterial {
                             name,
                             color: format!("#{r:02x}{g:02x}{b:02x}"),
-                            roughness: None,
+                            ..Default::default()
                         }
                         .into(),
                     )
@@ -795,6 +807,51 @@ impl FerroApp {
                 }
             }
         });
+    }
+
+    fn open_material_editor(&mut self, id: ElementId) {
+        let doc = self.session.doc();
+        self.material_draft = doc.get(id).and_then(|e| match &e.body {
+            ElementBody::Material(m) => Some(MaterialDraft::from_material(id, e.label(), m)),
+            _ => None,
+        });
+    }
+
+    fn material_editor_ui(&mut self, ui: &mut egui::Ui) {
+        let Some(mut draft) = self.material_draft.take() else {
+            return;
+        };
+        if !self.session.doc().contains(draft.material) {
+            return; // deleted (or undone) meanwhile
+        }
+        ui.separator();
+        match draft.ui(ui) {
+            DraftAction::Close => return,
+            DraftAction::Apply => match draft.to_command() {
+                Ok(cmd) => {
+                    let id = draft.material;
+                    let current = self.session.doc().get(id).map(|e| e.label());
+                    let name = draft.name.trim().to_string();
+                    if !name.is_empty() && current.as_deref() != Some(name.as_str()) {
+                        self.run(
+                            SetName {
+                                element: id,
+                                name: Some(name),
+                            }
+                            .into(),
+                        );
+                    }
+                    if self.run(cmd.into()) {
+                        // Show the stored (validated) values.
+                        self.open_material_editor(id);
+                        return;
+                    }
+                }
+                Err(msg) => self.say(msg, true),
+            },
+            DraftAction::None => {}
+        }
+        self.material_draft = Some(draft);
     }
 
     fn level_info(&self) -> Option<(ElementId, f64)> {
@@ -1697,6 +1754,7 @@ impl FerroApp {
                             ui.label(format!("{:.0} mm  {mat}", l.thickness.mm()));
                             ui.end_row();
                         }
+                        self.type_quantities_ui(ui, id);
                     }
                     ElementBody::Material(m) => {
                         ui.label("Colour");
@@ -1713,6 +1771,17 @@ impl FerroApp {
                 if let Some(ParamValue::Volume(v)) = e.param(keys::FORM_VOLUME) {
                     ui.label("Volume");
                     ui.label(format!("{:.3} m³", v / 1e9));
+                    ui.end_row();
+                }
+                // Quantity parameters in display units (ADR 0004 §2), e.g.
+                // "0.8 W/(m·K)"; built-in ones are shown above.
+                for (k, p) in e
+                    .params
+                    .iter()
+                    .filter(|(k, p)| !k.starts_with("ferro.") && p.spec().is_some())
+                {
+                    ui.label(k.as_str());
+                    ui.label(p.display());
                     ui.end_row();
                 }
 
@@ -1741,6 +1810,55 @@ impl FerroApp {
                 }
                 ui.end_row();
             });
+    }
+
+    /// Read-only quantities of a wall / floor type from its layer materials
+    /// (U-value, mass, GWP, cost per m²); "—" with the layers that lack data.
+    fn type_quantities_ui(&self, ui: &mut egui::Ui, id: ElementId) {
+        use ferro_core::model::structure_quantities::{StructureQuantities, StructureQuantity};
+        let Some(q) = StructureQuantities::from_type(self.session.doc(), id) else {
+            return;
+        };
+        let lacking = |what: StructureQuantity| -> String {
+            let layers: Vec<String> = q
+                .gaps
+                .iter()
+                .filter(|g| g.quantity == what)
+                .map(|g| format!("layer {}", g.layer + 1))
+                .collect();
+            format!("— (no data: {})", layers.join(", "))
+        };
+        let rows = [
+            (
+                "U-value",
+                StructureQuantity::UValue,
+                q.u_value_w_m2k.map(|v| format!("{v:.3} W/(m²·K)")),
+            ),
+            (
+                "Mass",
+                StructureQuantity::Mass,
+                q.mass_kg_m2.map(|v| format!("{v:.1} kg/m²")),
+            ),
+            (
+                "GWP A1–A3",
+                StructureQuantity::Gwp,
+                q.gwp_a1_a3_kgco2e_m2.map(|v| format!("{v:.1} kg CO₂e/m²")),
+            ),
+            (
+                "Cost",
+                StructureQuantity::Cost,
+                q.cost_per_m2
+                    .map(|v| format!("{v:.0} {}/m²", q.currency.as_deref().unwrap_or(""))),
+            ),
+        ];
+        for (label, what, value) in rows {
+            ui.label(label);
+            match value {
+                Some(v) => ui.label(v),
+                None => ui.label(RichText::new(lacking(what)).weak()),
+            };
+            ui.end_row();
+        }
     }
 
     fn status_bar(&mut self, ui: &mut egui::Ui) {

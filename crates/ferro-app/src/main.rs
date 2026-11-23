@@ -9,6 +9,7 @@ mod app;
 mod camera;
 mod keymap;
 mod link;
+mod material_editor;
 mod render;
 mod report;
 mod scene;

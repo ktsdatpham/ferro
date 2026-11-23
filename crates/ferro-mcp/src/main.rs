@@ -131,6 +131,67 @@ mod tests {
     }
 
     #[test]
+    fn agent_sets_material_data_and_reads_type_u_value() {
+        let mut s = server();
+        let r = call(
+            &mut s,
+            "create_material",
+            json!({"name":"Brick","color":"#b5533c","thermal":{"conductivity_w_mk":0.77},"physical":{"density_kg_m3":1800}}),
+        );
+        assert_eq!(r["is_error"], false, "{r}");
+        let brick = r["body"]["result"]["element"].as_u64().unwrap();
+        let r = call(
+            &mut s,
+            "create_material",
+            json!({"name":"Wool","color":"#eeee88"}),
+        );
+        let wool = r["body"]["result"]["element"].as_u64().unwrap();
+        let r = call(
+            &mut s,
+            "create_wall_type",
+            json!({"name":"Brick + wool","layers":[
+                {"function":"structure","thickness":"200mm","material":brick},
+                {"function":"insulation","thickness":"10cm","material":wool}]}),
+        );
+        let wt = r["body"]["result"]["element"].as_u64().unwrap();
+
+        // Wool lacks data: U-value is null and the layer is named.
+        let d = call(&mut s, "get_element", json!({"element": wt}))["body"].clone();
+        let q = &d["quantities"];
+        assert!(q["u_value_w_m2k"].is_null(), "{d}");
+        assert!(q["missing"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|g| g["layer"] == 1 && g["reason"] == "no_conductivity"));
+
+        let r = call(
+            &mut s,
+            "set_material",
+            json!({"material": wool, "thermal": {"conductivity_w_mk": 0.035, "density_kg_m3": 30}}),
+        );
+        assert_eq!(r["is_error"], false, "{r}");
+        let d = call(&mut s, "get_element", json!({"element": wt}))["body"].clone();
+        // R = 0.13 + 0.2/0.77 + 0.1/0.035 + 0.04 = 3.2869 → U = 0.3042
+        let u = d["quantities"]["u_value_w_m2k"].as_f64().unwrap();
+        assert!((u - 0.3042).abs() < 1e-4, "{d}");
+        let m = d["quantities"]["mass_kg_m2"].as_f64().unwrap();
+        assert!((m - 363.0).abs() < 1e-6, "{d}");
+
+        // Material detail shows its assets.
+        let d = call(&mut s, "get_element", json!({"element": wool}))["body"].clone();
+        assert!((d["thermal"]["conductivity_w_mk"].as_f64().unwrap() - 0.035).abs() < 1e-12);
+
+        // A typo is an error, not silently ignored.
+        let r = call(
+            &mut s,
+            "set_material",
+            json!({"material": wool, "thermal": {"lambda": 0.04}}),
+        );
+        assert_eq!(r["is_error"], true, "{r}");
+    }
+
+    #[test]
     fn agent_models_a_house_with_units_and_undo() {
         let mut s = server();
         let r = call(

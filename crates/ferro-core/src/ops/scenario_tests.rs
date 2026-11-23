@@ -455,6 +455,56 @@ fn every_command_rejects_degenerate_and_wrong_inputs_with_rollback() {
         ),
         // materials and types
         (
+            "set_material",
+            json!({"material": wall, "color": "#ffffff"}),
+            "ferro.model.not_a_material",
+        ),
+        (
+            "set_material",
+            json!({"material": 9999, "color": "#ffffff"}),
+            "ferro.model.not_found",
+        ),
+        (
+            "set_material",
+            json!({"material": mat, "color": "red"}),
+            "ferro.model.invalid_color",
+        ),
+        (
+            "set_material",
+            json!({"material": mat, "roughness": 1.5}),
+            "ferro.model.invalid_material",
+        ),
+        (
+            "set_material",
+            json!({"material": mat, "thermal": {"conductivity_w_mk": -1}}),
+            "ferro.model.invalid_material",
+        ),
+        (
+            "set_material",
+            json!({"material": mat, "thermal": {"conductivity": 1}}),
+            "ferro.model.invalid_material",
+        ),
+        (
+            "set_material",
+            json!({"material": mat, "thermal": 3}),
+            "ferro.model.invalid_material",
+        ),
+        (
+            "set_parameter_definition",
+            json!({"key": "bad key", "data_type": "text"}),
+            "ferro.model.invalid_parameter_key",
+        ),
+        (
+            "set_parameter_definition",
+            json!({"key": "ferro.common.comments", "data_type": "text"}),
+            "ferro.model.builtin_parameter_definition",
+        ),
+        (
+            "set_parameter_definition",
+            json!({"key": "acme.x.y", "data_type": "text", "ifc": {"property_set": " ", "property": "P"}}),
+            "ferro.model.invalid_parameter_definition",
+        ),
+        (
             "create_material",
             json!({"name": "Concrete", "color": "#ffffff"}),
             "ferro.model.duplicate_name",
@@ -1369,6 +1419,14 @@ fn valid_calls(f: &Fx) -> Vec<(&'static str, Value)> {
         (
             "set_geometry_source",
             json!({"element": f.wall, "source": "direct"}),
+        ),
+        (
+            "set_material",
+            json!({"material": f.mat, "color": "#909090", "thermal": {"conductivity_w_mk": 1.8}}),
+        ),
+        (
+            "set_parameter_definition",
+            json!({"key": "acme.fire.rating", "data_type": "text", "description": "Fire rating"}),
         ),
         // a semantic push / pull on a wall (height)
         (

@@ -369,7 +369,7 @@
       "name": "set_name"
     },
     {
-      "description": "Set a typed parameter. Key format namespace.group.name (e.g. ferro.common.comments, acme.fengshui.score). Value: {\"type\": \"length\"|\"angle\"|\"area\"|\"volume\"|\"number\"|\"integer\"|\"bool\"|\"text\"|\"tags\"|\"element_ref\", \"value\": ...}. Lengths in mm, angles in radians here. Computed keys (ferro.form.area, ferro.form.volume) are read-only.",
+      "description": "Set a typed parameter. Key format namespace.group.name (e.g. ferro.common.comments, acme.energy.conductivity). Value forms: (1) a quantity with a unit as text: \"0.8 W/mK\", \"1200 kg/m3\", \"35 MPa\", \"0.25 W/m2K\", \"20 °C\", \"120 kgCO2e\", \"3m\" (if the key has a quantity definition, a bare number in text uses its default unit); (2) {\"spec\": \"density\", \"value\": 1200, \"unit\": \"kg/m3\"} (no unit = SI storage unit; length mm, angle rad); (3) {\"type\": \"text\"|\"integer\"|\"bool\"|\"tags\"|\"element_ref\"|\"number\", \"value\": ...}; also plain numbers, booleans and string arrays (tags). Specs: length, area, volume, angle, mass, density, force, moment, pressure, stress, thermal_conductivity, thermal_resistance, u_value, heat_capacity, temperature, power, illuminance, flow, currency, carbon_mass, time, ratio, number. Fails if the key's definition has another type. Computed keys (ferro.form.*, ferro.dimensions.*) are read-only.",
       "inputSchema": {
         "properties": {
           "element": {
@@ -380,7 +380,13 @@
             "type": "string"
           },
           "value": {
-            "type": "object"
+            "type": [
+              "object",
+              "string",
+              "number",
+              "boolean",
+              "array"
+            ]
           }
         },
         "required": [
@@ -391,6 +397,70 @@
         "type": "object"
       },
       "name": "set_parameter"
+    },
+    {
+      "description": "Define a project parameter key (like a Revit shared parameter): data type, group, instance / type binding, description and optional IFC property set mapping. Values set later must fit the type. Built-in ferro.* keys cannot be defined. Returns {key, uid}; pass `uid` (a Revit shared parameter GUID) to match an existing Revit parameter.",
+      "inputSchema": {
+        "properties": {
+          "binding": {
+            "enum": [
+              "instance",
+              "type"
+            ],
+            "type": "string"
+          },
+          "data_type": {
+            "description": "\"text\"|\"integer\"|\"bool\"|\"tags\"|\"element_ref\" or {\"quantity\": \"<spec>\"}, e.g. {\"quantity\": \"u_value\"}. Specs: length, area, volume, angle, mass, density, force, moment, pressure, stress, thermal_conductivity, thermal_resistance, u_value, heat_capacity, temperature, power, illuminance, flow, currency, carbon_mass, time, ratio, number",
+            "type": [
+              "string",
+              "object"
+            ]
+          },
+          "description": {
+            "type": "string"
+          },
+          "group": {
+            "enum": [
+              "constraints",
+              "dimensions",
+              "identity_data",
+              "materials",
+              "analysis",
+              "structural",
+              "data"
+            ],
+            "type": "string"
+          },
+          "ifc": {
+            "properties": {
+              "property": {
+                "type": "string"
+              },
+              "property_set": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "property_set",
+              "property"
+            ],
+            "type": "object"
+          },
+          "key": {
+            "type": "string"
+          },
+          "uid": {
+            "description": "Optional UUID (8-4-4-4-12)",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "data_type"
+        ],
+        "type": "object"
+      },
+      "name": "set_parameter_definition"
     },
     {
       "description": "Classify directly edited geometry (a Form, or a frozen wall / floor) as a BIM category: a free-form wall keeps its shape and becomes a Wall with type, materials and parameters, exported to Revit / IFC as a wall. A type that no longer fits is removed.",
@@ -466,20 +536,323 @@
       "name": "set_project_name"
     },
     {
-      "description": "Create a material with a base colour. Returns {element}.",
+      "description": "Create a material with a base colour and optional assets (all optional, SI units named in each field): appearance (OpenPBR), physical, thermal, environmental (GWP from an EPD), cost. Wall / floor types using it then report U-value, mass, carbon and cost per m² (get_element on the type). Returns {element}.",
       "inputSchema": {
         "properties": {
+          "appearance": {
+            "description": "OpenPBR surface parameters beyond colour (= base_color) and roughness (= specular_roughness)",
+            "properties": {
+              "base_color_image": {
+                "description": "Image laid on faces at real-world size (placeholder, not rendered yet)",
+                "properties": {
+                  "height_mm": {
+                    "type": "number"
+                  },
+                  "path": {
+                    "type": "string"
+                  },
+                  "rotation_rad": {
+                    "type": "number"
+                  },
+                  "width_mm": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "path",
+                  "width_mm",
+                  "height_mm"
+                ],
+                "type": [
+                  "object",
+                  "null"
+                ]
+              },
+              "base_metalness": {
+                "description": "0..1, OpenPBR base_metalness",
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "coat_weight": {
+                "description": "0..1, varnish / lacquer",
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "emission_color": {
+                "description": "sRGB 0..1",
+                "items": {
+                  "type": "number"
+                },
+                "maxItems": 3,
+                "minItems": 3,
+                "type": [
+                  "array",
+                  "null"
+                ]
+              },
+              "emission_luminance": {
+                "description": "cd/m² (nits)",
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "geometry_opacity": {
+                "description": "0..1, 1 = opaque",
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "normal_image": {
+                "description": "Image laid on faces at real-world size (placeholder, not rendered yet)",
+                "properties": {
+                  "height_mm": {
+                    "type": "number"
+                  },
+                  "path": {
+                    "type": "string"
+                  },
+                  "rotation_rad": {
+                    "type": "number"
+                  },
+                  "width_mm": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "path",
+                  "width_mm",
+                  "height_mm"
+                ],
+                "type": [
+                  "object",
+                  "null"
+                ]
+              },
+              "specular_ior": {
+                "description": "Index of refraction, default 1.5",
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "transmission_weight": {
+                "description": "0..1, glass ≈ 1",
+                "type": [
+                  "number",
+                  "null"
+                ]
+              }
+            },
+            "type": "object"
+          },
           "color": {
             "description": "#rrggbb",
             "type": "string"
           },
+          "cost": {
+            "description": "Unit price",
+            "properties": {
+              "currency": {
+                "description": "ISO 4217, e.g. VND, USD",
+                "type": "string"
+              },
+              "unit": {
+                "description": "Per cubic metre, kilogram or square metre of material",
+                "enum": [
+                  "m3",
+                  "kg",
+                  "m2"
+                ],
+                "type": "string"
+              },
+              "unit_price": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "unit_price",
+              "currency",
+              "unit"
+            ],
+            "type": "object"
+          },
+          "environmental": {
+            "description": "Embodied carbon (GWP-total, EN 15804 stages) in kg CO2e per declared unit",
+            "properties": {
+              "declared_unit": {
+                "description": "Per cubic metre, kilogram or square metre of material",
+                "enum": [
+                  "m3",
+                  "kg",
+                  "m2"
+                ],
+                "type": "string"
+              },
+              "epd_source": {
+                "description": "EPD number / database",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "gwp_a1_a3": {
+                "description": "Product stage A1-A3",
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "gwp_a4": {
+                "description": "A4 transport",
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "gwp_a5": {
+                "description": "A5 installation",
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "gwp_b": {
+                "description": "B1-B7 use",
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "gwp_c": {
+                "description": "C1-C4 end of life",
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "gwp_d": {
+                "description": "D beyond system boundary",
+                "type": [
+                  "number",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "declared_unit"
+            ],
+            "type": "object"
+          },
           "name": {
             "type": "string"
           },
+          "physical": {
+            "description": "Mechanical data, SI units",
+            "properties": {
+              "compressive_strength_pa": {
+                "description": "Pa",
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "density_kg_m3": {
+                "description": "kg/m³",
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "poisson_ratio": {
+                "description": "-1..0.5",
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "tensile_strength_pa": {
+                "description": "Pa",
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "thermal_expansion_per_k": {
+                "description": "1/K",
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "youngs_modulus_pa": {
+                "description": "Young's modulus, Pa (concrete ≈ 3.1e10)",
+                "type": [
+                  "number",
+                  "null"
+                ]
+              }
+            },
+            "type": "object"
+          },
           "roughness": {
+            "description": "OpenPBR specular_roughness, default 0.8",
             "maximum": 1,
             "minimum": 0,
             "type": "number"
+          },
+          "thermal": {
+            "description": "Thermal data, SI units; conductivity gives wall / floor U-values",
+            "properties": {
+              "conductivity_w_mk": {
+                "description": "λ, W/(m·K), > 0",
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "density_kg_m3": {
+                "description": "kg/m³ (used when physical has none)",
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "emissivity": {
+                "description": "0..1",
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "solar_absorptance": {
+                "description": "0..1",
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "specific_heat_j_kgk": {
+                "description": "J/(kg·K)",
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "vapour_resistance_factor": {
+                "description": "μ, ≥ 1",
+                "type": [
+                  "number",
+                  "null"
+                ]
+              }
+            },
+            "type": "object"
           }
         },
         "required": [
@@ -489,6 +862,341 @@
         "type": "object"
       },
       "name": "create_material"
+    },
+    {
+      "description": "Edit a material; omitted fields keep their value. Each asset is a partial update: given fields are set, fields set to null are cleared, others kept (e.g. {\"material\": 3, \"thermal\": {\"conductivity_w_mk\": 0.8}}). `clear` removes whole assets. Unknown field names fail.",
+      "inputSchema": {
+        "properties": {
+          "appearance": {
+            "description": "OpenPBR surface parameters beyond colour (= base_color) and roughness (= specular_roughness)",
+            "properties": {
+              "base_color_image": {
+                "description": "Image laid on faces at real-world size (placeholder, not rendered yet)",
+                "properties": {
+                  "height_mm": {
+                    "type": "number"
+                  },
+                  "path": {
+                    "type": "string"
+                  },
+                  "rotation_rad": {
+                    "type": "number"
+                  },
+                  "width_mm": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "path",
+                  "width_mm",
+                  "height_mm"
+                ],
+                "type": [
+                  "object",
+                  "null"
+                ]
+              },
+              "base_metalness": {
+                "description": "0..1, OpenPBR base_metalness",
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "coat_weight": {
+                "description": "0..1, varnish / lacquer",
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "emission_color": {
+                "description": "sRGB 0..1",
+                "items": {
+                  "type": "number"
+                },
+                "maxItems": 3,
+                "minItems": 3,
+                "type": [
+                  "array",
+                  "null"
+                ]
+              },
+              "emission_luminance": {
+                "description": "cd/m² (nits)",
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "geometry_opacity": {
+                "description": "0..1, 1 = opaque",
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "normal_image": {
+                "description": "Image laid on faces at real-world size (placeholder, not rendered yet)",
+                "properties": {
+                  "height_mm": {
+                    "type": "number"
+                  },
+                  "path": {
+                    "type": "string"
+                  },
+                  "rotation_rad": {
+                    "type": "number"
+                  },
+                  "width_mm": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "path",
+                  "width_mm",
+                  "height_mm"
+                ],
+                "type": [
+                  "object",
+                  "null"
+                ]
+              },
+              "specular_ior": {
+                "description": "Index of refraction, default 1.5",
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "transmission_weight": {
+                "description": "0..1, glass ≈ 1",
+                "type": [
+                  "number",
+                  "null"
+                ]
+              }
+            },
+            "type": "object"
+          },
+          "clear": {
+            "description": "Assets to remove before applying the updates",
+            "items": {
+              "enum": [
+                "appearance",
+                "physical",
+                "thermal",
+                "environmental",
+                "cost"
+              ],
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "color": {
+            "description": "#rrggbb",
+            "type": "string"
+          },
+          "cost": {
+            "description": "Unit price",
+            "properties": {
+              "currency": {
+                "description": "ISO 4217, e.g. VND, USD",
+                "type": "string"
+              },
+              "unit": {
+                "description": "Per cubic metre, kilogram or square metre of material",
+                "enum": [
+                  "m3",
+                  "kg",
+                  "m2"
+                ],
+                "type": "string"
+              },
+              "unit_price": {
+                "type": "number"
+              }
+            },
+            "required": [],
+            "type": "object"
+          },
+          "environmental": {
+            "description": "Embodied carbon (GWP-total, EN 15804 stages) in kg CO2e per declared unit",
+            "properties": {
+              "declared_unit": {
+                "description": "Per cubic metre, kilogram or square metre of material",
+                "enum": [
+                  "m3",
+                  "kg",
+                  "m2"
+                ],
+                "type": "string"
+              },
+              "epd_source": {
+                "description": "EPD number / database",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "gwp_a1_a3": {
+                "description": "Product stage A1-A3",
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "gwp_a4": {
+                "description": "A4 transport",
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "gwp_a5": {
+                "description": "A5 installation",
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "gwp_b": {
+                "description": "B1-B7 use",
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "gwp_c": {
+                "description": "C1-C4 end of life",
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "gwp_d": {
+                "description": "D beyond system boundary",
+                "type": [
+                  "number",
+                  "null"
+                ]
+              }
+            },
+            "required": [],
+            "type": "object"
+          },
+          "material": {
+            "description": "Material id",
+            "type": "integer"
+          },
+          "physical": {
+            "description": "Mechanical data, SI units",
+            "properties": {
+              "compressive_strength_pa": {
+                "description": "Pa",
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "density_kg_m3": {
+                "description": "kg/m³",
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "poisson_ratio": {
+                "description": "-1..0.5",
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "tensile_strength_pa": {
+                "description": "Pa",
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "thermal_expansion_per_k": {
+                "description": "1/K",
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "youngs_modulus_pa": {
+                "description": "Young's modulus, Pa (concrete ≈ 3.1e10)",
+                "type": [
+                  "number",
+                  "null"
+                ]
+              }
+            },
+            "type": "object"
+          },
+          "roughness": {
+            "maximum": 1,
+            "minimum": 0,
+            "type": "number"
+          },
+          "thermal": {
+            "description": "Thermal data, SI units; conductivity gives wall / floor U-values",
+            "properties": {
+              "conductivity_w_mk": {
+                "description": "λ, W/(m·K), > 0",
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "density_kg_m3": {
+                "description": "kg/m³ (used when physical has none)",
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "emissivity": {
+                "description": "0..1",
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "solar_absorptance": {
+                "description": "0..1",
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "specific_heat_j_kgk": {
+                "description": "J/(kg·K)",
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "vapour_resistance_factor": {
+                "description": "μ, ≥ 1",
+                "type": [
+                  "number",
+                  "null"
+                ]
+              }
+            },
+            "type": "object"
+          }
+        },
+        "required": [
+          "material"
+        ],
+        "type": "object"
+      },
+      "name": "set_material"
     },
     {
       "description": "Create a wall type: either one layer of `thickness` (+ optional material id) or `layers` listed from the exterior face to the interior face, each {function: structure|substrate|insulation|finish|membrane, thickness, material?}.",

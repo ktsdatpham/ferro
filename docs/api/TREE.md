@@ -87,6 +87,16 @@ Ferro Link server (D-65): agents (ferro-mcp, the in-app chat) send tool calls; t
 - fn `LinkServer::set_project` — Keep `link.json` in sync with the open project's name.
 - fn `ask_ui` — Hand a request to the UI thread and wait for its answer.
 
+### `ferro_app::material_editor`
+
+Minimal material editor for the Materials panel (ADR 0004 §3): colour, roughness and the thermal / physical / environmental / cost numbers. The panel edits a draft; Apply turns it into one `set_material` command (and `set_name` if the name changed). Values are typed in the units shown and converted to the stored SI units here, at the UI edge.
+
+- enum `DraftAction` — What the user did in the editor this frame.
+- struct `MaterialDraft` — Editable copy of a material; numbers are kept as typed text.
+- fn `MaterialDraft::from_material` — A draft showing the current values of material `id`.
+- fn `MaterialDraft::to_command` — The `set_material` command for this draft. Fails with a message
+- fn `MaterialDraft::ui` — Draw the editor; returns what the user clicked.
+
 ### `ferro_app::render`
 
 Offscreen wgpu renderer for the viewport (D-48). Draws into its own colour (4× MSAA, resolved) and depth targets; the app shows the result as an egui image. Independent of egui, so it can be tested headless.
@@ -383,6 +393,31 @@ Quantities with units fixed by the spec (D-01, D-02). Unit conversion happens on
 - fn `Angle::deg`
 - fn `Angle::parse` — Parse agent / user input in degrees (`"90"`, `"90deg"`, `"90°"`) or
 
+### `ferro_core::math::quantity_spec`
+
+The fixed table of physical quantities for typed parameters (ADR 0004 §2).
+
+- enum `QuantitySpec` — A physical quantity a parameter value can carry (Revit: `SpecTypeId`,
+- struct `DisplayUnit` — A unit a quantity can be typed in or shown in.
+- fn `DisplayUnit::to_storage` — Convert a value in this unit to the storage unit.
+- fn `DisplayUnit::from_storage` — Convert a stored value to this unit.
+- fn `DisplayUnit::matches` — `true` if `text` names this unit. Spaces, `·`, `*`, `-`, `.` and
+- enum `QuantityError` — Why a quantity text could not be read.
+- fn `QuantitySpec::id` — Stable snake_case id (same as the serde form), e.g. `"u_value"`.
+- fn `QuantitySpec::from_id` — Look a spec up by its stable id. `None` if unknown.
+- fn `QuantitySpec::storage_unit` — Symbol of the storage unit, e.g. `"mm"`, `"kg/m³"`, `"K"`.
+- fn `QuantitySpec::revit_spec` — Name of the Revit `SpecTypeId` property, e.g. `"HeatTransferCoefficient"`.
+- fn `QuantitySpec::ifc_measure` — IFC4 measure type, e.g. `"IfcThermalConductivityMeasure"`.
+- fn `QuantitySpec::from_revit_spec` — The spec for a Revit `SpecTypeId` name; first in table order when
+- fn `QuantitySpec::from_ifc_measure` — The spec for an IFC measure type name; first in table order when
+- fn `QuantitySpec::display_units` — Units this quantity can be typed in or shown in. Never empty; the
+- fn `QuantitySpec::default_unit` — Default display unit (also the unit of a bare number typed as text).
+- fn `QuantitySpec::unit` — The display unit named `text` (exact match first, then ignoring case).
+- fn `QuantitySpec::to_storage` — Convert `value` given in `unit` to the storage unit. An empty unit
+- fn `QuantitySpec::eq_values` — `true` if two stored values are equal within tolerance: lengths use
+- fn `QuantitySpec::format` — Format a stored value in the default display unit with up to six
+- fn `QuantitySpec::parse` — Read user / agent text such as `"0.8 W/mK"`, `"1200 kg/m3"`,
+
 ### `ferro_core::math::tol`
 
 Global tolerances (D-06). Never compare `f64` with `==`; use these.
@@ -391,10 +426,12 @@ Global tolerances (D-06). Never compare `f64` with `==`; use these.
 - const `SHORT_CURVE_TOL` — Shortest allowed edge or curve (mm). Revit: `ShortCurveTolerance` ≈ 0.8 mm.
 - const `ANGLE_TOL` — Two directions within this angle (radians) are parallel.
 - const `PARAM_TOL` — Curve parameter equality on the normalised range [0, 1].
+- const `QUANTITY_REL_TOL` — Relative tolerance for quantity values other than lengths and angles
 - fn `eq_len` — `true` if two lengths (mm) are equal within [`VERTEX_TOL`].
 - fn `is_zero_len` — `true` if a length (mm) is zero within [`VERTEX_TOL`].
 - fn `eq_angle` — `true` if two angles (radians) are equal within [`ANGLE_TOL`].
 - fn `eq_param` — `true` if two normalised curve parameters are equal within [`PARAM_TOL`].
+- fn `eq_quantity` — `true` if two quantity values in the same storage unit are equal within
 
 ### `ferro_core::math::transform`
 
@@ -443,9 +480,8 @@ Model layer (Foundation Spec ch. 3): the `Document` and its `Element`s.
 
 ### `ferro_core::model::bim`
 
-BIM element data (Foundation Spec ch. 3, D-41, D-70): materials, system family types with compound structures, walls, floors and hosted openings. Geometry is derived by regeneration (`model::generate`) and stored on the element as a cache; parameters are the source of truth.
+BIM element data (Foundation Spec ch. 3, D-41, D-70): system family types with compound structures, walls, floors and hosted openings. `Material` lives in `model::material` and is re-exported here. Geometry is derived by regeneration (`model::generate`) and stored on the element as a cache; parameters are the source of truth.
 
-- struct `Material` — A material (D-08 / Q-E8). Appearance follows glTF PBR; physical data and
 - enum `LayerFunction` — Function of a layer in a compound structure (Revit: `MaterialFunctionAssignment`).
 - struct `CompoundLayer`
 - struct `CompoundStructure` — Layers listed from the exterior face to the interior face (Revit:
@@ -473,12 +509,13 @@ BIM element data (Foundation Spec ch. 3, D-41, D-70): materials, system family t
 
 - const `EXTENT_LIMIT_MM` — Geometry must stay within this distance of the Internal Origin (D-05).
 - struct `ProjectOrigins` — Revit's three-point system (D-04). Positions are relative to the
-- struct `ProjectInfo`
+- struct `ProjectInfo` — Project-wide information (Revit: `ProjectInfo` plus parameter bindings).
 - struct `Document` — The project container (Revit: `Document`). Cheap to clone: elements live in
 - fn `Document::new`
 - fn `Document::from_parts` — Assemble a document from loaded parts (opening a file, importing).
 - fn `Document::project`
 - fn `Document::version`
+- fn `Document::parameter_definition` — The definition of a parameter key: the built-in one for `ferro.*`
 - fn `Document::get`
 - fn `Document::contains`
 - fn `Document::len`
@@ -535,12 +572,70 @@ Regeneration of derived BIM geometry (Foundation Spec §4.4, D-41).
 - struct `ElementId` — Document-local element id. Never reused within a document (D-13).
 - struct `Uid` — Stable, globally unique id (UUID, normally v7). Survives save, copy between
 - fn `Uid::v7` — Build a version-7 UUID from a Unix time in milliseconds and random
-- fn `Uid::version`
+- fn `Uid::from_name` — Build a deterministic version-8 UUID from a name: the 128-bit
+- fn `Uid::version` — UUID version number (7 for new elements, 8 for name-based ids).
+
+### `ferro_core::model::material`
+
+`Material` and its assets (ADR 0004 §3, D-66). A material is an element (category `Materials`). Besides its display colour it may carry optional assets, as Revit does (Appearance / Physical / Thermal assets):
+
+- struct `Material` — A material (Revit: `Material`). `color` and `roughness` are the OpenPBR
+- const `DEFAULT_ROUGHNESS` — Default `roughness` of a material created without one.
+- fn `Material::new` — A material with only a colour (sRGB 0..1) and roughness (0..1), no assets.
+- fn `Material::density_kg_m3` — Density in kg/m³: the physical asset's, else the thermal asset's.
+- fn `Material::validate` — Check value ranges. Fails with a message naming the first bad field
+- fn `is_currency_code` — `true` for three upper-case ASCII letters (ISO 4217 form, e.g. `VND`).
+- struct `AppearanceAsset` — OpenPBR Surface parameters (OpenPBR 1.1, Academy Software Foundation)
+- struct `ImageMapping` — How an image is laid on faces: real-world size of one tile (Revit:
+- struct `PhysicalAsset` — Mechanical data (Revit: Physical / structural asset; IFC:
+- struct `ThermalAsset` — Thermal data (Revit: Thermal asset; IFC: `Pset_MaterialThermal`). SI units.
+- enum `MaterialUnit` — Unit a GWP figure or a price refers to (EPD "declared unit").
+- fn `MaterialUnit::as_str` — Stable short name: `m3`, `kg` or `m2`.
+- struct `EnvironmentalAsset` — Embodied carbon from an EPD (EN 15804 life-cycle modules). Global warming
+- fn `EnvironmentalAsset::gwp_stages` — The stages as `(key, value)` pairs in life-cycle order; keys are the
+- struct `CostAsset` — Unit price for estimates.
 
 ### `ferro_core::model::parameter`
 
-- enum `ParamValue` — A typed parameter value (D-15). Lengths in mm, angles in radians,
+- enum `ParamValue` — A typed parameter value (D-15, ADR 0004 §2). Lengths in mm, angles in
 - fn `ParamValue::type_name` — Short type name, matches the serde tag.
+- fn `ParamValue::spec` — The physical quantity of this value: `Length` / `Angle` / `Area` /
+- fn `ParamValue::as_quantity` — The spec and the value in storage units, for any quantity-like
+- fn `ParamValue::is_finite` — `false` if a numeric value is NaN or infinite. Commands reject such
+- fn `ParamValue::display` — The value for display, e.g. `"0.8 W/(m·K)"` for quantities (default
+
+### `ferro_core::model::parameter_definition`
+
+Parameter definitions (ADR 0004 §2.3, Foundation Spec §3.5): what a parameter key means, as data with a `Uid`, like a Revit shared parameter.
+
+- enum `ParameterDataType` — What values a parameter holds (Revit: data type / `ForgeTypeId` spec).
+- fn `ParameterDataType::accepts` — `true` if `value` has this data type (see [`ParamValue::spec`]).
+- fn `ParameterDataType::describe` — Short name for messages, e.g. `"quantity (density)"`, `"text"`.
+- enum `ParameterGroup` — Where a parameter is shown in the properties panel (Revit: `GroupTypeId`).
+- fn `ParameterGroup::revit_group` — Name of the Revit `GroupTypeId` property, e.g. `"Geometry"` for
+- enum `ParameterBinding` — Whether the parameter is set per element or per type (D-15; Revit:
+- struct `IfcPropertyMapping` — Where a parameter goes in IFC: a property in a property set, e.g.
+- struct `ParameterDefinition` — The definition of a parameter key (ADR 0004 §2.3). File keys are stable.
+- fn `ParameterDefinition::uid_for_key` — The deterministic `Uid` of the definition of `key`:
+- fn `ParameterDefinition::accepts` — `true` if `value` fits this definition's data type.
+- fn `ParameterDefinition::is_builtin_key` — `true` for keys reserved for Ferro's built-in definitions
+- fn `builtin_definitions` — Definitions of every built-in key in [`keys`], sorted by key. Pure and
+- fn `builtin_definition` — The built-in definition of `key`, or `None` if `key` is not built in.
+
+### `ferro_core::model::structure_quantities`
+
+Quantities of a wall / floor type derived from its `CompoundStructure` and the assets of its layer materials (ADR 0004 §3): thermal transmittance (U-value), mass, embodied carbon and cost, all per m² of wall / floor.
+
+- const `RSE_M2K_W` — External surface resistance Rse (m²·K/W), ISO 6946:2017 Table 7, any
+- enum `HeatFlow` — Direction of heat flow through the element, which sets the internal
+- fn `HeatFlow::rsi_m2k_w` — Internal surface resistance Rsi (m²·K/W), ISO 6946:2017 Table 7.
+- enum `StructureQuantity` — A quantity derived from the layers.
+- enum `GapReason` — Why a layer could not contribute to a quantity.
+- struct `LayerGap` — One layer that lacks data for one quantity.
+- struct `StructureQuantities` — Per-m² quantities of a compound structure. Each value is `None` unless
+- fn `StructureQuantities::from_structure` — Compute the quantities of `structure`, looking layer materials up with
+- fn `StructureQuantities::from_type` — Quantities of a wall type (heat flow horizontal) or floor type (heat
+- fn `StructureQuantities::is_complete` — `true` if every quantity could be computed.
 
 ### `ferro_core::ops`
 
@@ -555,7 +650,6 @@ Milestone 2 commands: materials, system family types, walls, floors and hosted o
 - const `DEFAULT_FLOOR_TYPE` — Name of the floor type created on demand when none is given.
 - const `DEFAULT_WALL_HEIGHT` — Default unconnected wall height (mm).
 - fn `parse_color` — Parse `#rrggbb` / `rrggbb` into linear-ish 0..1 sRGB components.
-- struct `CreateMaterial` — Create a material with a base colour (`"#rrggbb"`).
 - struct `CreateWallType` — Create a wall type: one layer of `thickness`, or explicit `layers` listed
 - struct `CreateFloorType` — Create a floor type (layers from top to bottom).
 - struct `CreateWall` — Create a straight wall from `start` to `end` (z is ignored; the base is
@@ -586,7 +680,7 @@ Core commands (milestone 1) and the dispatch enum; BIM commands live in `bim_com
 - struct `CopyElements` — Copy elements, offset by a vector (mm). `count` > 1 makes a linear array.
 - struct `DeleteElements` — Delete elements.
 - struct `SetName` — Rename an element (`null` clears the name).
-- struct `SetParameter` — Set a typed parameter (D-15). Computed keys are read-only.
+- struct `SetParameter` — Set a typed parameter (D-15). Computed keys are read-only. Quantities are
 - struct `SetCategory` — Classify directly edited geometry as a BIM category (D-12, ADR 0004),
 - struct `SetProjectName` — Rename the project.
 - fn `AnyCommand::from_tool` — Build from a tool name and JSON arguments (MCP).
@@ -634,6 +728,20 @@ Switching an element's geometry source (ADR 0004 §1): freeze a parametric wall 
 - fn `recognise_wall` — Recognise a straight wall: a box with horizontal top and bottom and a
 - fn `recognise_floor` — Recognise a floor: a vertical prism; the outline and holes are those of
 
+### `ferro_core::ops::material_commands`
+
+Material commands (ADR 0004 §3): `create_material` and `set_material`. Each `NAME` is also the MCP tool name. Asset values use the units named in their fields (`model::material`).
+
+- struct `CreateMaterial` — Create a material with a base colour (`"#rrggbb"`), optional roughness
+- enum `MaterialAsset` — An asset of a material, named as in the file and tool arguments.
+- struct `SetMaterial` — Edit a material; omitted fields keep their value. `color` / `roughness`
+
+### `ferro_core::ops::parameter_commands`
+
+Commands on parameter definitions (ADR 0004 §2.3). Each `NAME` is also the MCP tool name.
+
+- struct `SetParameterDefinition` — Add or replace a project parameter definition (Revit: create a shared /
+
 ### `ferro_core::ops::session`
 
 - enum `ActorKind` — Who performed a change (D-29). Agents are first-class actors (D-44).
@@ -678,6 +786,7 @@ Switching an element's geometry source (ADR 0004 §1): freeze a parametric wall 
 - fn `Transaction::delete` — Delete an element. Hosted elements (doors, windows) are deleted with
 - fn `Transaction::warn`
 - fn `Transaction::project_name`
+- fn `Transaction::put_parameter_definition` — Add or replace (by key) a project parameter definition, keeping the
 
 ### `ferro_core::topo`
 
@@ -901,3 +1010,9 @@ Ferro Link (D-65): lets an agent drive the Ferro app that is open on the same co
 - fn `send` — Send one request to the app and wait for its answer.
 - fn `read_request` — Read one request line from a client (app side).
 - fn `write_response` — Write one response line (app side).
+
+### `ferro_tools::parameter`
+
+`set_parameter` values at the edge (ADR 0004 §2): agents may give quantities with units, which are converted here to storage units (`ParamValue::Quantity`, SI; mm for length, rad for angle).
+
+- fn `param_value` — Convert an agent `set_parameter` value to the kernel's `ParamValue` JSON.

@@ -62,6 +62,22 @@ Milestone 2 implements the system families `Wall` and `Floor` with `WallType`
 / `FloorType` (a `CompoundStructure` of `CompoundLayer`s), `Material`, and the
 hosted `Opening` (door / window). Types and materials are elements. See ADR 0001.
 
+A `Material` (ADR 0004 §3) has a colour (OpenPBR `base_color`), a roughness
+(`specular_roughness`) and optional assets: `appearance` (further OpenPBR
+parameters, image mappings), `physical` (density, Young's modulus, Poisson
+ratio, strengths, thermal expansion), `thermal` (conductivity, specific heat,
+density, emissivity, solar absorptance, vapour resistance factor),
+`environmental` (GWP per EN 15804 stage, declared unit, EPD source) and
+`cost` (unit price, ISO 4217 currency, unit). Asset values are SI with the
+unit in the field name (`conductivity_w_mk`); unknown values are absent,
+never zero. A wall / floor type derives `StructureQuantities` from its
+layers when read (not stored, since they depend on the materials):
+U-value by ISO 6946 (Rsi 0.13 / 0.10 / 0.17 m²·K/W for horizontal / upward /
+downward heat flow, Rse 0.04; wall types horizontal, floor types downward),
+mass, GWP A1–A3 and cost per m². A quantity is only given when every layer
+has the data; the layers that lack it are listed. Layers thinner than
+`VERTEX_TOL` add no resistance or mass, but per-m² GWP and prices apply.
+
 `Category` is a closed Rust `enum` (adding one is a spec change). Each category
 declares its Revit `BuiltInCategory` and IFC class (chapter 6).
 
@@ -87,7 +103,8 @@ All data on elements is held in **typed parameters**, never free-form strings.
 | Property | Values | Revit |
 |---|---|---|
 | Key | Stable string id, e.g. `ferro.wall.unconnected_height` | `BuiltInParameter` / shared GUID |
-| Storage | `Length`, `Angle`, `Area`, `Volume`, `Number`, `Integer`, `Bool`, `Text`, `ElementRef` | `StorageType` + spec |
+| Storage | `Quantity { spec, value }` (ADR 0004 §2; `Length`, `Angle`, `Area`, `Volume`, `Number` kept for older files), `Integer`, `Bool`, `Text`, `Tags`, `ElementRef` | `StorageType` + spec |
+| Definition | `ParameterDefinition` with a `Uid`: built-in registry, or project definitions in `ProjectInfo` | shared parameter / binding |
 | Scope | **Instance** or **Type** | instance / type parameter |
 | Origin | **Built-in** (defined by Ferro), **Shared** (defined in a shared parameter file, has a GUID), **Project** (user, this document only) | same |
 | Read-only | `true` when computed (e.g. `area`) | `IsReadOnly` |

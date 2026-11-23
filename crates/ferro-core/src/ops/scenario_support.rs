@@ -38,10 +38,6 @@ pub fn id(o: &Outcome) -> ElementId {
     serde_json::from_value(o.output["element"].clone()).expect("element in output")
 }
 
-pub fn ids(o: &Outcome) -> Vec<ElementId> {
-    serde_json::from_value(o.output["elements"].clone()).expect("elements in output")
-}
-
 pub fn face_of(o: &Outcome) -> FaceId {
     serde_json::from_value(o.output["face"].clone()).expect("face in output")
 }

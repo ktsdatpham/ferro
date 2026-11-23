@@ -4,12 +4,16 @@
 //! lengths accept numbers (mm) or strings ("3m", "300cm", "10'"), angles are
 //! in degrees, points are [x, y, z] in mm.
 
+use ferro_core::model::structure_quantities::StructureQuantities;
 use ferro_core::model::{keys, Category, ElementBody};
 use ferro_core::ops::{AnyCommand, ExecContext, Failure};
 use ferro_core::{Angle, Document, ElementId, Length, Session};
 use serde_json::{json, Map, Value};
 
 pub mod link;
+mod parameter;
+
+pub use parameter::param_value;
 
 const LENGTH_FIELDS: [&str; 12] = [
     "radius",
@@ -53,6 +57,77 @@ fn wall_props(mut extra: Value) -> Value {
     }
     extra
 }
+/// Material asset properties (`create_material`, `set_material`) added to
+/// `base`. With `partial`, no asset field is required (merge patch).
+fn material_props(mut base: Value, partial: bool) -> Value {
+    let num = |d: &str| json!({"type": ["number", "null"], "description": d});
+    let unit = json!({"type":"string","enum":["m3","kg","m2"],"description":"Per cubic metre, kilogram or square metre of material"});
+    let image = json!({"type":["object","null"],"description":"Image laid on faces at real-world size (placeholder, not rendered yet)","properties":{"path":{"type":"string"},"width_mm":{"type":"number"},"height_mm":{"type":"number"},"rotation_rad":{"type":"number"}},"required":["path","width_mm","height_mm"]});
+    let req = |r: &[&str]| -> Value {
+        if partial {
+            json!([])
+        } else {
+            json!(r)
+        }
+    };
+    let assets = json!({
+        "appearance": {"type":"object","description":"OpenPBR surface parameters beyond colour (= base_color) and roughness (= specular_roughness)","properties":{
+            "base_metalness": num("0..1, OpenPBR base_metalness"),
+            "specular_ior": num("Index of refraction, default 1.5"),
+            "transmission_weight": num("0..1, glass ≈ 1"),
+            "emission_color": {"type":["array","null"],"items":{"type":"number"},"minItems":3,"maxItems":3,"description":"sRGB 0..1"},
+            "emission_luminance": num("cd/m² (nits)"),
+            "geometry_opacity": num("0..1, 1 = opaque"),
+            "coat_weight": num("0..1, varnish / lacquer"),
+            "base_color_image": image.clone(),
+            "normal_image": image}},
+        "physical": {"type":"object","description":"Mechanical data, SI units","properties":{
+            "density_kg_m3": num("kg/m³"),
+            "youngs_modulus_pa": num("Young's modulus, Pa (concrete ≈ 3.1e10)"),
+            "poisson_ratio": num("-1..0.5"),
+            "compressive_strength_pa": num("Pa"),
+            "tensile_strength_pa": num("Pa"),
+            "thermal_expansion_per_k": num("1/K")}},
+        "thermal": {"type":"object","description":"Thermal data, SI units; conductivity gives wall / floor U-values","properties":{
+            "conductivity_w_mk": num("λ, W/(m·K), > 0"),
+            "specific_heat_j_kgk": num("J/(kg·K)"),
+            "density_kg_m3": num("kg/m³ (used when physical has none)"),
+            "emissivity": num("0..1"),
+            "solar_absorptance": num("0..1"),
+            "vapour_resistance_factor": num("μ, ≥ 1")}},
+        "environmental": {"type":"object","description":"Embodied carbon (GWP-total, EN 15804 stages) in kg CO2e per declared unit","properties":{
+            "declared_unit": unit.clone(),
+            "gwp_a1_a3": num("Product stage A1-A3"),
+            "gwp_a4": num("A4 transport"),
+            "gwp_a5": num("A5 installation"),
+            "gwp_b": num("B1-B7 use"),
+            "gwp_c": num("C1-C4 end of life"),
+            "gwp_d": num("D beyond system boundary"),
+            "epd_source": {"type":["string","null"],"description":"EPD number / database"}},
+            "required": req(&["declared_unit"])},
+        "cost": {"type":"object","description":"Unit price","properties":{
+            "unit_price": {"type":"number"},
+            "currency": {"type":"string","description":"ISO 4217, e.g. VND, USD"},
+            "unit": unit},
+            "required": req(&["unit_price", "currency", "unit"])},
+    });
+    if let (Some(b), Some(a)) = (base.as_object_mut(), assets.as_object()) {
+        for (k, v) in a {
+            b.insert(k.clone(), v.clone());
+        }
+    }
+    base
+}
+
+/// Comma-separated quantity spec ids, for tool descriptions.
+fn spec_ids() -> String {
+    ferro_core::QuantitySpec::ALL
+        .iter()
+        .map(|s| s.id())
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
 fn tool(name: &str, description: &str, props: Value, required: &[&str]) -> Value {
     json!({"name": name, "description": description, "inputSchema": {"type": "object", "properties": props, "required": required}})
 }
@@ -83,16 +158,27 @@ pub fn list() -> Vec<Value> {
             json!({"elements": ids("Element ids")}), &["elements"]),
         tool("set_name", "Rename an element (null clears).",
             json!({"element": id("Element id"), "name": {"type":["string","null"]}}), &["element", "name"]),
-        tool("set_parameter", "Set a typed parameter. Key format namespace.group.name (e.g. ferro.common.comments, acme.fengshui.score). Value: {\"type\": \"length\"|\"angle\"|\"area\"|\"volume\"|\"number\"|\"integer\"|\"bool\"|\"text\"|\"tags\"|\"element_ref\", \"value\": ...}. Lengths in mm, angles in radians here. Computed keys (ferro.form.area, ferro.form.volume) are read-only.",
-            json!({"element": id("Element id"), "key": {"type":"string"}, "value": {"type":"object"}}), &["element", "key", "value"]),
+        tool("set_parameter", &format!("Set a typed parameter. Key format namespace.group.name (e.g. ferro.common.comments, acme.energy.conductivity). Value forms: (1) a quantity with a unit as text: \"0.8 W/mK\", \"1200 kg/m3\", \"35 MPa\", \"0.25 W/m2K\", \"20 °C\", \"120 kgCO2e\", \"3m\" (if the key has a quantity definition, a bare number in text uses its default unit); (2) {{\"spec\": \"density\", \"value\": 1200, \"unit\": \"kg/m3\"}} (no unit = SI storage unit; length mm, angle rad); (3) {{\"type\": \"text\"|\"integer\"|\"bool\"|\"tags\"|\"element_ref\"|\"number\", \"value\": ...}}; also plain numbers, booleans and string arrays (tags). Specs: {}. Fails if the key's definition has another type. Computed keys (ferro.form.*, ferro.dimensions.*) are read-only.", spec_ids()),
+            json!({"element": id("Element id"), "key": {"type":"string"}, "value": {"type":["object","string","number","boolean","array"]}}), &["element", "key", "value"]),
+        tool("set_parameter_definition", "Define a project parameter key (like a Revit shared parameter): data type, group, instance / type binding, description and optional IFC property set mapping. Values set later must fit the type. Built-in ferro.* keys cannot be defined. Returns {key, uid}; pass `uid` (a Revit shared parameter GUID) to match an existing Revit parameter.",
+            json!({"key": {"type":"string"},
+                   "data_type": {"type":["string","object"], "description": format!("\"text\"|\"integer\"|\"bool\"|\"tags\"|\"element_ref\" or {{\"quantity\": \"<spec>\"}}, e.g. {{\"quantity\": \"u_value\"}}. Specs: {}", spec_ids())},
+                   "group": {"type":"string","enum":["constraints","dimensions","identity_data","materials","analysis","structural","data"]},
+                   "binding": {"type":"string","enum":["instance","type"]},
+                   "description": {"type":"string"},
+                   "uid": {"type":"string","description":"Optional UUID (8-4-4-4-12)"},
+                   "ifc": {"type":"object","properties":{"property_set":{"type":"string"},"property":{"type":"string"}},"required":["property_set","property"]}}),
+            &["key", "data_type"]),
         tool("set_category", "Classify directly edited geometry (a Form, or a frozen wall / floor) as a BIM category: a free-form wall keeps its shape and becomes a Wall with type, materials and parameters, exported to Revit / IFC as a wall. A type that no longer fits is removed.",
             json!({"element": id("Element with direct geometry"), "category": {"type":"string","enum": Category::ALL.iter().filter(|c| c.classifiable_form()).map(|c| c.to_string()).collect::<Vec<_>>()}}), &["element", "category"]),
         tool("set_geometry_source", "Switch where an element's geometry comes from. 'direct': freeze a parametric wall / floor so it can be edited freely like a SketchUp group (keeps category, type, parameters; hosted doors / windows freeze with it). 'parametric': turn a directly edited wall (rectangular box) or floor (flat slab with vertical sides) back into a parametric one, using a type of the same thickness; fails with ferro.model.not_recognised or ferro.model.no_matching_type. Returns {element, changed}.",
             json!({"element": id("Element id"), "source": {"type":"string","enum":["direct","parametric"]}}), &["element", "source"]),
         tool("set_project_name", "Rename the project.", json!({"name":{"type":"string"}}), &["name"]),
         // BIM elements (milestone 2).
-        tool("create_material", "Create a material with a base colour. Returns {element}.",
-            json!({"name": {"type":"string"}, "color": {"type":"string","description":"#rrggbb"}, "roughness": {"type":"number","minimum":0,"maximum":1}}), &["name", "color"]),
+        tool("create_material", "Create a material with a base colour and optional assets (all optional, SI units named in each field): appearance (OpenPBR), physical, thermal, environmental (GWP from an EPD), cost. Wall / floor types using it then report U-value, mass, carbon and cost per m² (get_element on the type). Returns {element}.",
+            material_props(json!({"name": {"type":"string"}, "color": {"type":"string","description":"#rrggbb"}, "roughness": {"type":"number","minimum":0,"maximum":1,"description":"OpenPBR specular_roughness, default 0.8"}}), false), &["name", "color"]),
+        tool("set_material", "Edit a material; omitted fields keep their value. Each asset is a partial update: given fields are set, fields set to null are cleared, others kept (e.g. {\"material\": 3, \"thermal\": {\"conductivity_w_mk\": 0.8}}). `clear` removes whole assets. Unknown field names fail.",
+            material_props(json!({"material": id("Material id"), "color": {"type":"string","description":"#rrggbb"}, "roughness": {"type":"number","minimum":0,"maximum":1}, "clear": {"type":"array","items":{"type":"string","enum":["appearance","physical","thermal","environmental","cost"]},"description":"Assets to remove before applying the updates"}}), true), &["material"]),
         tool("create_wall_type", "Create a wall type: either one layer of `thickness` (+ optional material id) or `layers` listed from the exterior face to the interior face, each {function: structure|substrate|insulation|finish|membrane, thickness, material?}.",
             json!({"name": {"type":"string"}, "thickness": length(), "material": id("Optional material id"), "layers": layers()}), &["name"]),
         tool("create_floor_type", "Create a floor type (layers from top to bottom), like create_wall_type.",
@@ -283,14 +369,25 @@ pub fn summary_of(doc: &Document, category: Option<&str>, only: Option<&[Element
                 ElementBody::Material(mat) => {
                     let [r, g, b] = mat.color.map(|c| (c * 255.0).round() as u8);
                     m.insert("color".into(), json!(format!("#{r:02x}{g:02x}{b:02x}")));
+                    m.insert("roughness".into(), json!(mat.roughness));
+                    // Assets as stored (SI units named in each field).
+                    if let Ok(Value::Object(all)) = serde_json::to_value(mat) {
+                        for (k, v) in all {
+                            if k != "color" && k != "roughness" {
+                                m.insert(k, v);
+                            }
+                        }
+                    }
                 }
                 ElementBody::WallType(t) => {
                     m.insert("thickness_mm".into(), json!(t.structure.thickness()));
                     m.insert("layers".into(), json!(t.structure.layers));
+                    type_quantities(doc, e.id, &mut m);
                 }
                 ElementBody::FloorType(t) => {
                     m.insert("thickness_mm".into(), json!(t.structure.thickness()));
                     m.insert("layers".into(), json!(t.structure.layers));
+                    type_quantities(doc, e.id, &mut m);
                 }
                 ElementBody::Wall(w) => {
                     m.insert("type".into(), json!(e.type_id));
@@ -321,6 +418,29 @@ pub fn summary_of(doc: &Document, category: Option<&str>, only: Option<&[Element
     json!({"project": doc.project().name, "elements": items})
 }
 
+/// Computed, read-only quantities of a wall / floor type from its layer
+/// materials: U-value (W/m²K, ISO 6946 surface resistances), mass (kg/m²),
+/// GWP A1–A3 (kg CO2e/m²), cost per m², and the layers that lack data.
+/// A value is null when some layer lacks the data for it.
+fn type_quantities(doc: &Document, id: ElementId, m: &mut Map<String, Value>) {
+    if let Some(q) = StructureQuantities::from_type(doc, id) {
+        let r = |x: Option<f64>, k: f64| x.map(|v| (v * k).round() / k);
+        m.insert(
+            "quantities".into(),
+            json!({
+                "u_value_w_m2k": r(q.u_value_w_m2k, 1e4),
+                "thermal_resistance_m2k_w": r(q.thermal_resistance_m2k_w, 1e4),
+                "heat_flow": q.heat_flow,
+                "mass_kg_m2": r(q.mass_kg_m2, 1e3),
+                "gwp_a1_a3_kgco2e_m2": r(q.gwp_a1_a3_kgco2e_m2, 1e3),
+                "cost_per_m2": r(q.cost_per_m2, 1e2),
+                "currency": q.currency,
+                "missing": q.gaps,
+            }),
+        );
+    }
+}
+
 /// Computed dimensions of walls and floors in metres.
 fn bim_dims(e: &ferro_core::Element, m: &mut Map<String, Value>) {
     use ferro_core::ParamValue;
@@ -349,7 +469,11 @@ pub fn detail(doc: &Document, id: ElementId) -> Result<Value, String> {
     let e = doc
         .get(id)
         .ok_or_else(|| format!("element {id} not found"))?;
-    let mut v = summary_one(e);
+    // Start from the summary row: type data, material assets, quantities.
+    let mut v = summary_of(doc, None, Some(&[id]))["elements"]
+        .get(0)
+        .cloned()
+        .unwrap_or_else(|| summary_one(e));
     if let Some(g) = e.geometry() {
         let faces: Vec<Value> = g
             .face_ids()
@@ -366,6 +490,16 @@ pub fn detail(doc: &Document, id: ElementId) -> Result<Value, String> {
         }
     }
     v["parameters"] = json!(e.params);
+    // Quantities in display units, e.g. "0.8 W/(m·K)" (key order, deterministic).
+    let shown: Map<String, Value> = e
+        .params
+        .iter()
+        .filter(|(_, p)| p.spec().is_some())
+        .map(|(k, p)| (k.clone(), json!(p.display())))
+        .collect();
+    if !shown.is_empty() {
+        v["parameters_display"] = Value::Object(shown);
+    }
     Ok(v)
 }
 
@@ -388,10 +522,23 @@ pub fn call(
 ) -> Option<Result<Value, Value>> {
     let err = |m: String| Err(json!({"error": m}));
     if AnyCommand::NAMES.contains(&name) {
-        let norm = match normalize(args) {
+        let mut norm = match normalize(args) {
             Ok(v) => v,
             Err(m) => return Some(err(m)),
         };
+        if name == "set_parameter" {
+            let key = norm
+                .get("key")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_string();
+            if let Some(v) = norm.get("value").cloned() {
+                match param_value(session.doc(), &key, &v) {
+                    Ok(v) => norm["value"] = v,
+                    Err(m) => return Some(err(m)),
+                }
+            }
+        }
         let cmd = match AnyCommand::from_tool(name, &norm) {
             Ok(c) => c,
             Err(m) => return Some(err(m)),
@@ -497,4 +644,73 @@ pub fn file_tools() -> Vec<Value> {
             &["path"],
         ),
     ]
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ferro_core::ops::SequentialIds;
+    use ferro_core::QuantitySpec;
+
+    fn session() -> Session {
+        Session::new(Document::new("T"), Box::new(SequentialIds::new(1)))
+    }
+
+    fn ok(s: &mut Session, name: &str, args: Value) -> Value {
+        call(s, &ExecContext::user(), name, &args)
+            .expect("handled")
+            .unwrap_or_else(|e| panic!("{name}: {e}"))
+    }
+
+    #[test]
+    fn set_parameter_takes_quantities_with_units_and_definitions() {
+        let mut s = session();
+        let b = ok(
+            &mut s,
+            "create_box",
+            json!({"origin": [0, 0, 0], "width": "1m", "depth": "1m", "height": "1m"}),
+        )["result"]["element"]
+            .as_u64()
+            .unwrap();
+        ok(
+            &mut s,
+            "set_parameter",
+            json!({"element": b, "key": "acme.energy.k", "value": "0.8 W/mK"}),
+        );
+        ok(
+            &mut s,
+            "set_parameter_definition",
+            json!({"key": "acme.energy.u", "data_type": {"quantity": "u_value"}}),
+        );
+        // Bare number in text = default unit of the defined spec.
+        ok(
+            &mut s,
+            "set_parameter",
+            json!({"element": b, "key": "acme.energy.u", "value": "0.25"}),
+        );
+        let e = s.doc().get(ElementId(b)).unwrap();
+        assert_eq!(
+            e.param("acme.energy.u").and_then(|p| p.as_quantity()),
+            Some((QuantitySpec::UValue, 0.25))
+        );
+        // A unit of another spec is refused at the edge.
+        let r = call(
+            &mut s,
+            &ExecContext::user(),
+            "set_parameter",
+            &json!({"element": b, "key": "acme.energy.u", "value": "1200 kg/m3"}),
+        )
+        .expect("handled")
+        .unwrap_err();
+        assert!(r["error"].as_str().unwrap().contains("W/(m²·K)"), "{r}");
+        let d = detail(s.doc(), ElementId(b)).unwrap();
+        assert_eq!(
+            d["parameters_display"]["acme.energy.k"],
+            json!("0.8 W/(m·K)")
+        );
+        assert_eq!(
+            d["parameters_display"]["acme.energy.u"],
+            json!("0.25 W/(m²·K)")
+        );
+    }
 }

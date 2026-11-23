@@ -17,6 +17,9 @@ for the same concept.
 | `Category` | Fixed classification | Kind, Class, Layer |
 | `Family` / `FamilyType` | Definition / named type | Template, Style, Preset, Component (for this) |
 | `Parameter` | Typed data on an element | Property, Attribute, Tag, Field |
+| `ParameterDefinition` | What a parameter key means (data type, group, binding, mapping), with a `Uid` (Revit shared parameter) | ParamDef, Schema, Field definition |
+| `QuantitySpec` | Physical quantity of a value (length, density, U-value…), Revit `SpecTypeId` | UnitType, Measure (as a type), Dimension (for this) |
+| `DisplayUnit` | A unit a quantity is typed in or shown in | Unit (alone), DisplayFormat |
 | `Level` | Named elevation | Storey, Floor (as a datum), Story |
 | `Grid` | Named plan datum | Axis line |
 | `ReferencePlane` | Named alignment plane | Guide, Construction plane |
@@ -35,6 +38,10 @@ for the same concept.
 | `Regenerate` | Rebuild dependents | Update, Refresh, Recompute |
 | `Host` / hosted | Containment relation | Parent / child (for this) |
 | `Material` | Appearance + physical data, an element | Texture, Shader (for this) |
+| `AppearanceAsset`, `PhysicalAsset`, `ThermalAsset`, `EnvironmentalAsset`, `CostAsset` | Optional data groups of a `Material` (Revit: Appearance / Physical / Thermal asset); appearance follows OpenPBR | Properties, Shader, Profile (for this) |
+| `ImageMapping` | An image laid on faces at a real-world tile size (mm) | Texture (as a type), UV map |
+| `MaterialUnit` | Unit a GWP figure or price refers to: m³, kg or m² of material (EPD "declared unit") | Measure, Uom |
+| `StructureQuantities` | U-value, mass, GWP and cost per m² of a `CompoundStructure`, from its layer materials | Build-up data, Assembly properties |
 | `CompoundStructure` / `CompoundLayer` | Layers of a wall / floor type | Build-up, Layer (alone), Ply |
 | `WallType` / `FloorType` | System family types | WallStyle, Assembly |
 | `Opening` | Door or window hosted by a wall | Hole, Cutout, Insert (as a type) |

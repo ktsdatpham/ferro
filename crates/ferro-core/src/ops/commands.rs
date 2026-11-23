@@ -6,6 +6,7 @@
 use super::bim_commands::*;
 use super::form_commands::*;
 use super::geometry_source::*;
+use super::parameter_commands::*;
 use super::{CommandError, Transaction};
 use crate::algo::{push_pull_face, PushPullMode};
 use crate::geom::{polygon, Plane};
@@ -494,7 +495,13 @@ impl Command for SetName {
     }
 }
 
-/// Set a typed parameter (D-15). Computed keys are read-only.
+/// Set a typed parameter (D-15). Computed keys are read-only. Quantities are
+/// in storage units (`ParamValue::Quantity`, ADR 0004 §2).
+///
+/// Fails with `ferro.model.invalid_parameter_key`,
+/// `ferro.model.read_only_parameter`, `ferro.model.invalid_parameter_value`
+/// (NaN / infinite number) or `ferro.model.parameter_type_mismatch` (the key
+/// has a definition whose data type the value does not fit).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SetParameter {
     pub element: ElementId,
@@ -516,6 +523,27 @@ impl Command for SetParameter {
                 "ferro.model.read_only_parameter",
                 format!("{} is computed and read-only", self.key),
             ));
+        }
+        if !self.value.is_finite() {
+            return Err(CommandError::new(
+                "ferro.model.invalid_parameter_value",
+                format!("{} must be a finite number", self.key),
+            )
+            .on(self.element));
+        }
+        if let Some(def) = tx.doc().parameter_definition(&self.key) {
+            if !def.accepts(&self.value) {
+                return Err(CommandError::new(
+                    "ferro.model.parameter_type_mismatch",
+                    format!(
+                        "{} holds {}, not {}",
+                        self.key,
+                        def.data_type.describe(),
+                        self.value.type_name()
+                    ),
+                )
+                .on(self.element));
+            }
         }
         if let ParamValue::ElementRef(r) = &self.value {
             tx.element(*r)?;
@@ -656,6 +684,8 @@ any_command!(
     EraseEdges,
     EraseFaces,
     SetGeometrySource,
+    SetMaterial,
+    SetParameterDefinition,
 );
 
 impl AnyCommand {
