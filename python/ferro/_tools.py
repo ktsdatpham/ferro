@@ -334,21 +334,107 @@ def set_project_name(*, name: str) -> Dict[str, Any]:
     return _call("set_project_name", {"name": name})
 
 
-def create_material(*, name: str, color: str, roughness: Optional[float] = None) -> Dict[str, Any]:
-    """Create a material with a base colour. Returns {element}.
+def create_material(
+    *,
+    name: str,
+    color: str,
+    appearance: Optional[Dict[str, Any]] = None,
+    cost: Optional[Dict[str, Any]] = None,
+    environmental: Optional[Dict[str, Any]] = None,
+    physical: Optional[Dict[str, Any]] = None,
+    roughness: Optional[float] = None,
+    thermal: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """Create a material with a base colour and optional assets (all optional, SI units
+    named in each field): appearance (OpenPBR), physical, thermal, environmental (GWP
+    from an EPD), cost. Wall / floor types using it then report U-value, mass, carbon
+    and cost per m² (get_element on the type). Returns {element}.
 
     Args:
         name: Text.
         color: #rrggbb.
-        roughness: minimum=0. maximum=1. Optional.
+        appearance: OpenPBR surface parameters beyond colour (= base_color) and
+            roughness (= specular_roughness). Optional.
+        cost: Unit price. Optional.
+        environmental: Embodied carbon (GWP-total, EN 15804 stages) in kg CO2e per
+            declared unit. Optional.
+        physical: Mechanical data, SI units. Optional.
+        roughness: OpenPBR specular_roughness, default 0.8. minimum=0. maximum=1.
+            Optional.
+        thermal: Thermal data, SI units; conductivity gives wall / floor U-values.
+            Optional.
 
     Returns:
         The tool's JSON body. Raises FerroError on failure.
     """
     args: Dict[str, Any] = {"name": name, "color": color}
+    if appearance is not None:
+        args["appearance"] = appearance
+    if cost is not None:
+        args["cost"] = cost
+    if environmental is not None:
+        args["environmental"] = environmental
+    if physical is not None:
+        args["physical"] = physical
     if roughness is not None:
         args["roughness"] = roughness
+    if thermal is not None:
+        args["thermal"] = thermal
     return _call("create_material", args)
+
+
+def set_material(
+    *,
+    material: ElementId,
+    appearance: Optional[Dict[str, Any]] = None,
+    clear: Optional[Sequence[Literal["appearance", "physical", "thermal", "environmental", "cost"]]] = None,
+    color: Optional[str] = None,
+    cost: Optional[Dict[str, Any]] = None,
+    environmental: Optional[Dict[str, Any]] = None,
+    physical: Optional[Dict[str, Any]] = None,
+    roughness: Optional[float] = None,
+    thermal: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """Edit a material; omitted fields keep their value. Each asset is a partial update:
+    given fields are set, fields set to null are cleared, others kept (e.g. {"material":
+    3, "thermal": {"conductivity_w_mk": 0.8}}). `clear` removes whole assets. Unknown
+    field names fail.
+
+    Args:
+        material: Material id.
+        appearance: OpenPBR surface parameters beyond colour (= base_color) and
+            roughness (= specular_roughness). Optional.
+        clear: Assets to remove before applying the updates. Optional.
+        color: #rrggbb. Optional.
+        cost: Unit price. Optional.
+        environmental: Embodied carbon (GWP-total, EN 15804 stages) in kg CO2e per
+            declared unit. Optional.
+        physical: Mechanical data, SI units. Optional.
+        roughness: minimum=0. maximum=1. Optional.
+        thermal: Thermal data, SI units; conductivity gives wall / floor U-values.
+            Optional.
+
+    Returns:
+        The tool's JSON body. Raises FerroError on failure.
+    """
+    args: Dict[str, Any] = {"material": material}
+    if appearance is not None:
+        args["appearance"] = appearance
+    if clear is not None:
+        args["clear"] = clear
+    if color is not None:
+        args["color"] = color
+    if cost is not None:
+        args["cost"] = cost
+    if environmental is not None:
+        args["environmental"] = environmental
+    if physical is not None:
+        args["physical"] = physical
+    if roughness is not None:
+        args["roughness"] = roughness
+    if thermal is not None:
+        args["thermal"] = thermal
+    return _call("set_material", args)
 
 
 def create_wall_type(
@@ -1229,6 +1315,7 @@ TOOL_NAMES = (
     "set_geometry_source",
     "set_project_name",
     "create_material",
+    "set_material",
     "create_wall_type",
     "create_floor_type",
     "create_wall",

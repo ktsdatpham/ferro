@@ -87,6 +87,16 @@ Ferro Link server (D-65): agents (ferro-mcp, the in-app chat) send tool calls; t
 - fn `LinkServer::set_project` — Keep `link.json` in sync with the open project's name.
 - fn `ask_ui` — Hand a request to the UI thread and wait for its answer.
 
+### `ferro_app::material_editor`
+
+Minimal material editor for the Materials panel (ADR 0004 §3): colour, roughness and the thermal / physical / environmental / cost numbers. The panel edits a draft; Apply turns it into one `set_material` command (and `set_name` if the name changed). Values are typed in the units shown and converted to the stored SI units here, at the UI edge.
+
+- enum `DraftAction` — What the user did in the editor this frame.
+- struct `MaterialDraft` — Editable copy of a material; numbers are kept as typed text.
+- fn `MaterialDraft::from_material` — A draft showing the current values of material `id`.
+- fn `MaterialDraft::to_command` — The `set_material` command for this draft. Fails with a message
+- fn `MaterialDraft::ui` — Draw the editor; returns what the user clicked.
+
 ### `ferro_app::render`
 
 Offscreen wgpu renderer for the viewport (D-48). Draws into its own colour (4× MSAA, resolved) and depth targets; the app shows the result as an egui image. Independent of egui, so it can be tested headless.
@@ -443,9 +453,8 @@ Model layer (Foundation Spec ch. 3): the `Document` and its `Element`s.
 
 ### `ferro_core::model::bim`
 
-BIM element data (Foundation Spec ch. 3, D-41, D-70): materials, system family types with compound structures, walls, floors and hosted openings. Geometry is derived by regeneration (`model::generate`) and stored on the element as a cache; parameters are the source of truth.
+BIM element data (Foundation Spec ch. 3, D-41, D-70): system family types with compound structures, walls, floors and hosted openings. `Material` lives in `model::material` and is re-exported here. Geometry is derived by regeneration (`model::generate`) and stored on the element as a cache; parameters are the source of truth.
 
-- struct `Material` — A material (D-08 / Q-E8). Appearance follows glTF PBR; physical data and
 - enum `LayerFunction` — Function of a layer in a compound structure (Revit: `MaterialFunctionAssignment`).
 - struct `CompoundLayer`
 - struct `CompoundStructure` — Layers listed from the exterior face to the interior face (Revit:
@@ -537,10 +546,45 @@ Regeneration of derived BIM geometry (Foundation Spec §4.4, D-41).
 - fn `Uid::v7` — Build a version-7 UUID from a Unix time in milliseconds and random
 - fn `Uid::version`
 
+### `ferro_core::model::material`
+
+`Material` and its assets (ADR 0004 §3, D-66). A material is an element (category `Materials`). Besides its display colour it may carry optional assets, as Revit does (Appearance / Physical / Thermal assets):
+
+- struct `Material` — A material (Revit: `Material`). `color` and `roughness` are the OpenPBR
+- const `DEFAULT_ROUGHNESS` — Default `roughness` of a material created without one.
+- fn `Material::new` — A material with only a colour (sRGB 0..1) and roughness (0..1), no assets.
+- fn `Material::density_kg_m3` — Density in kg/m³: the physical asset's, else the thermal asset's.
+- fn `Material::validate` — Check value ranges. Fails with a message naming the first bad field
+- fn `is_currency_code` — `true` for three upper-case ASCII letters (ISO 4217 form, e.g. `VND`).
+- struct `AppearanceAsset` — OpenPBR Surface parameters (OpenPBR 1.1, Academy Software Foundation)
+- struct `ImageMapping` — How an image is laid on faces: real-world size of one tile (Revit:
+- struct `PhysicalAsset` — Mechanical data (Revit: Physical / structural asset; IFC:
+- struct `ThermalAsset` — Thermal data (Revit: Thermal asset; IFC: `Pset_MaterialThermal`). SI units.
+- enum `MaterialUnit` — Unit a GWP figure or a price refers to (EPD "declared unit").
+- fn `MaterialUnit::as_str` — Stable short name: `m3`, `kg` or `m2`.
+- struct `EnvironmentalAsset` — Embodied carbon from an EPD (EN 15804 life-cycle modules). Global warming
+- fn `EnvironmentalAsset::gwp_stages` — The stages as `(key, value)` pairs in life-cycle order; keys are the
+- struct `CostAsset` — Unit price for estimates.
+
 ### `ferro_core::model::parameter`
 
 - enum `ParamValue` — A typed parameter value (D-15). Lengths in mm, angles in radians,
 - fn `ParamValue::type_name` — Short type name, matches the serde tag.
+
+### `ferro_core::model::structure_quantities`
+
+Quantities of a wall / floor type derived from its `CompoundStructure` and the assets of its layer materials (ADR 0004 §3): thermal transmittance (U-value), mass, embodied carbon and cost, all per m² of wall / floor.
+
+- const `RSE_M2K_W` — External surface resistance Rse (m²·K/W), ISO 6946:2017 Table 7, any
+- enum `HeatFlow` — Direction of heat flow through the element, which sets the internal
+- fn `HeatFlow::rsi_m2k_w` — Internal surface resistance Rsi (m²·K/W), ISO 6946:2017 Table 7.
+- enum `StructureQuantity` — A quantity derived from the layers.
+- enum `GapReason` — Why a layer could not contribute to a quantity.
+- struct `LayerGap` — One layer that lacks data for one quantity.
+- struct `StructureQuantities` — Per-m² quantities of a compound structure. Each value is `None` unless
+- fn `StructureQuantities::from_structure` — Compute the quantities of `structure`, looking layer materials up with
+- fn `StructureQuantities::from_type` — Quantities of a wall type (heat flow horizontal) or floor type (heat
+- fn `StructureQuantities::is_complete` — `true` if every quantity could be computed.
 
 ### `ferro_core::ops`
 
@@ -555,7 +599,6 @@ Milestone 2 commands: materials, system family types, walls, floors and hosted o
 - const `DEFAULT_FLOOR_TYPE` — Name of the floor type created on demand when none is given.
 - const `DEFAULT_WALL_HEIGHT` — Default unconnected wall height (mm).
 - fn `parse_color` — Parse `#rrggbb` / `rrggbb` into linear-ish 0..1 sRGB components.
-- struct `CreateMaterial` — Create a material with a base colour (`"#rrggbb"`).
 - struct `CreateWallType` — Create a wall type: one layer of `thickness`, or explicit `layers` listed
 - struct `CreateFloorType` — Create a floor type (layers from top to bottom).
 - struct `CreateWall` — Create a straight wall from `start` to `end` (z is ignored; the base is
@@ -633,6 +676,14 @@ Switching an element's geometry source (ADR 0004 §1): freeze a parametric wall 
 - struct `RecognisedFloor` — A floor recognised from a solid.
 - fn `recognise_wall` — Recognise a straight wall: a box with horizontal top and bottom and a
 - fn `recognise_floor` — Recognise a floor: a vertical prism; the outline and holes are those of
+
+### `ferro_core::ops::material_commands`
+
+Material commands (ADR 0004 §3): `create_material` and `set_material`. Each `NAME` is also the MCP tool name. Asset values use the units named in their fields (`model::material`).
+
+- struct `CreateMaterial` — Create a material with a base colour (`"#rrggbb"`), optional roughness
+- enum `MaterialAsset` — An asset of a material, named as in the file and tool arguments.
+- struct `SetMaterial` — Edit a material; omitted fields keep their value. `color` / `roughness`
 
 ### `ferro_core::ops::session`
 
