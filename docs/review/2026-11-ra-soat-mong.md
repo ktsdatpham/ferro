@@ -1,7 +1,7 @@
 # Rà soát móng Ferro: những gì phải làm ngay từ đầu
 
 - **Ngày:** 2026-11-23
-- **Trạng thái:** Đề xuất. Chờ chủ dự án duyệt; mỗi mục được duyệt sẽ thành một ADR (tiếng Anh) và thay thế các `D-xx` liên quan.
+- **Trạng thái:** Đã duyệt 2026-11-23 → ADR 0004, Milestone 5. Hình tự do sang Revit mặc định là loadable family; bộ phím mặc định là Ferro (lai); kernel mặt cong chờ kết quả đánh giá.
 - **Phạm vi:** đối chiếu 75 quyết định đã chốt (`docs/foundation/README.md`) với cách các hệ thống lớn đang làm, tìm chỗ nào phải sửa *trước khi* xây thêm. Được phép đề xuất đập cả quyết định đã chốt.
 
 ## 0. Tóm tắt
