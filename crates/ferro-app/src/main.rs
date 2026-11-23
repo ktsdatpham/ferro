@@ -10,12 +10,15 @@ mod camera;
 mod keymap;
 mod link;
 mod render;
+mod report;
 mod scene;
 mod tools;
 
 use eframe::egui;
 
 fn main() -> eframe::Result {
+    report::install_panic_hook();
+    report::record("start");
     let open = std::env::args().nth(1).map(std::path::PathBuf::from);
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()

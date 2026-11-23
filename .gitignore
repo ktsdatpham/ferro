@@ -10,3 +10,4 @@ revit-addin/obj/
 .claude/
 __pycache__/
 *.egg-info/
+target-*/

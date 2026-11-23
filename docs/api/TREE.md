@@ -99,6 +99,23 @@ Offscreen wgpu renderer for the viewport (D-48). Draws into its own colour (4× 
 - fn `Renderer::render` — Render a frame. Returns `true` if the output texture was (re)created,
 - fn `Renderer::output_view`
 
+### `ferro_app::report`
+
+Problem reports (ADR 0003 §4, M5-12.5).
+
+- const `LOG_LINES` — Lines kept in the session log.
+- const `ISSUES_URL` — Where problems are reported.
+- fn `record` — Add a line to the session log (oldest lines drop off).
+- fn `session_log` — The session log, oldest first.
+- fn `report_text` — A report: app version, platform and the session log, plus an optional
+- fn `reports_dir` — `~/.ferro/reports` (or `$FERRO_HOME/reports`).
+- fn `save` — Save a report file in [`reports_dir`]; returns its path.
+- fn `pending_crashes` — Crash reports left by a previous session, oldest first.
+- fn `dismiss` — Mark a crash report as handled (renamed so it is not offered again).
+- fn `install_panic_hook` — Install a panic hook that writes a crash report, then runs the default
+- fn `issue_url` — A prefilled "new issue" URL. Long bodies are cut (at a character
+- fn `open_url` — Open a URL in the user's browser.
+
 ### `ferro_app::scene`
 
 Turns a `Document` into GPU vertex lists. Meshes are cached per element and reused while the element's storage is shared between versions (D-24), so previews only re-mesh what changed.

@@ -75,7 +75,8 @@ Legend: `[ ]` open · `[~]` in progress · `[x]` done · `✓` verified ·
   - [x] M5-12.3 PR template; `AGENTS.md` points to the tree, the map and the check @lead
     - accept: `.github/pull_request_template.md` exists; `AGENTS.md` step 0 and "Every PR" mention them
   - [ ] M5-12.4 UI languages (`tr!`, `en.ftl`, `vi.ftl`)
-  - [ ] M5-12.5 Problem reports (local log, prefilled issue)
+  - [x] M5-12.5 Problem reports (local log, prefilled issue) @lead
+    - accept: `cargo test -p ferro-app report` passes; Help > Report a problem shows the log (command names and codes only), Open GitHub issue opens a prefilled URL; a panic writes `~/.ferro/reports/crash-*.md` that is offered on the next start
 - [ ] **M5-13 Code layout by discipline** (after M5-3 / M5-4 land): `model::bim` split into `model::architecture::{wall, floor, opening, …}`, room for `structure`, `mep`, `analysis`, `site`, like Revit's `DB.Architecture` / `DB.Structure`
 
 - [ ] **M5-14 Python SDK** (ADR 0005)

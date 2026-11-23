@@ -166,6 +166,9 @@ pub struct FerroApp {
     keys: KeyResolver,
     /// Command palette query, when open (Ctrl+K).
     palette: Option<String>,
+    /// Problem report being reviewed by the user (Help > Report a problem,
+    /// or a crash report from the last session).
+    report: Option<ReportDraft>,
     /// Direction of the last edge hovered: reference for parallel /
     /// perpendicular inference (SketchUp: hover an edge to teach it).
     ref_dir: Option<ferro_core::UnitVec3>,
@@ -230,6 +233,10 @@ impl FerroApp {
             keymap: Keymap::scheme(KeyScheme::Ferro),
             keys: KeyResolver::default(),
             palette: None,
+            report: crate::report::pending_crashes().pop().and_then(|p| {
+                let text = std::fs::read_to_string(&p).ok()?;
+                Some(ReportDraft::new(text, Some(p)))
+            }),
             ref_dir: None,
             autonomy: Autonomy::Propose,
             proposal: None,
@@ -255,8 +262,12 @@ impl FerroApp {
     // ------------------------------------------------------------ helpers
 
     fn say(&mut self, text: impl Into<String>, error: bool) {
+        let text = text.into();
+        if error {
+            crate::report::record(format!("error shown: {}", first_code(&text)));
+        }
         self.status = Some(Status {
-            text: text.into(),
+            text,
             error,
             at: Instant::now(),
         });
@@ -284,7 +295,18 @@ impl FerroApp {
             _ => None,
         };
         let name = cmd.name();
-        match self.session.execute(cmd, &self.ctx()) {
+        let result = self.session.execute(cmd, &self.ctx());
+        crate::report::record(match &result {
+            Ok(_) => format!("{name} ok"),
+            Err(f) => format!(
+                "{name} failed {}",
+                f.iter()
+                    .map(|x| x.code.as_str())
+                    .collect::<Vec<_>>()
+                    .join(",")
+            ),
+        });
+        match result {
             Ok(o) => {
                 if let Some(w) = o.warnings.first() {
                     self.say(format!("{name}: {}", w.message), false);
@@ -1007,6 +1029,75 @@ impl FerroApp {
         }
     }
 
+    /// Review and send a problem report. Nothing leaves the computer unless
+    /// the user presses "Open GitHub issue" (and then submits it there).
+    fn report_ui(&mut self, ctx: &egui::Context) {
+        let Some(mut d) = self.report.take() else {
+            return;
+        };
+        let mut keep = true;
+        let crash = d.crash_file.is_some();
+        egui::Window::new(if crash {
+            "Ferro closed unexpectedly last time"
+        } else {
+            "Report a problem"
+        })
+        .collapsible(false)
+        .default_width(560.0)
+        .show(ctx, |ui| {
+            ui.label("Describe what you were doing. The report below holds the app version, your system and the recent commands — no model data. Read it before sending.");
+            ui.add(
+                egui::TextEdit::multiline(&mut d.what)
+                    .hint_text("What happened? What did you expect?")
+                    .desired_rows(3)
+                    .desired_width(f32::INFINITY),
+            );
+            egui::ScrollArea::vertical().max_height(260.0).show(ui, |ui| {
+                ui.add(
+                    egui::TextEdit::multiline(&mut d.body)
+                        .font(egui::TextStyle::Monospace)
+                        .desired_width(f32::INFINITY),
+                );
+            });
+            ui.horizontal(|ui| {
+                let full = format!("{}
+
+{}", d.what.trim(), d.body);
+                if ui.button("Open GitHub issue").clicked() {
+                    let saved = crate::report::save(&full, "report");
+                    let title = if crash { "Crash report" } else { "Problem report" };
+                    match crate::report::open_url(&crate::report::issue_url(title, &full)) {
+                        Ok(()) => self.say(
+                            match saved {
+                                Some(p) => format!("Report saved to {}", p.display()),
+                                None => "Opened the issue page".into(),
+                            },
+                            false,
+                        ),
+                        Err(e) => self.say(format!("Could not open the browser: {e}"), true),
+                    }
+                    keep = false;
+                }
+                if ui.button("Copy").clicked() {
+                    ui.ctx().copy_text(full.clone());
+                }
+                if ui.button("Save file").clicked() {
+                    if let Some(p) = crate::report::save(&full, "report") {
+                        self.say(format!("Report saved to {}", p.display()), false);
+                    }
+                }
+                if ui.button(if crash { "Don't send" } else { "Cancel" }).clicked() {
+                    keep = false;
+                }
+            });
+        });
+        if keep {
+            self.report = Some(d);
+        } else if let Some(p) = &d.crash_file {
+            crate::report::dismiss(p);
+        }
+    }
+
     /// Ctrl+K: type a tool name or shortcut, Enter runs the first match.
     fn palette_ui(&mut self, ctx: &egui::Context) {
         let Some(mut q) = self.palette.take() else {
@@ -1230,6 +1321,10 @@ impl FerroApp {
                 ui.radio_value(&mut self.autonomy, Autonomy::Apply, "Apply directly");
             });
             ui.menu_button("Help", |ui| {
+                if ui.button("Report a problem…").clicked() {
+                    self.report = Some(ReportDraft::new(String::new(), None));
+                    ui.close();
+                }
                 if ui.button("About Ferro").clicked() {
                     self.show_about = true;
                 }
@@ -2819,6 +2914,7 @@ impl eframe::App for FerroApp {
         self.poll_chat();
         self.shortcuts(&ctx);
         self.palette_ui(&ctx);
+        self.report_ui(&ctx);
         let title = format!(
             "Ferro — {}{}",
             self.path
@@ -2850,5 +2946,40 @@ impl eframe::App for FerroApp {
         egui::CentralPanel::no_frame().show(ui, |ui| self.viewport(ui, frame));
         self.windows(&ctx);
         self.chat_window(&ctx);
+    }
+}
+
+/// A problem report the user is reviewing.
+struct ReportDraft {
+    /// The user's description.
+    what: String,
+    /// Version, platform, session log (or the saved crash report).
+    body: String,
+    /// Crash report file this draft came from (dismissed when closed).
+    crash_file: Option<PathBuf>,
+}
+
+impl ReportDraft {
+    fn new(crash_text: String, crash_file: Option<PathBuf>) -> ReportDraft {
+        ReportDraft {
+            what: String::new(),
+            body: if crash_text.is_empty() {
+                crate::report::report_text("(see above)")
+            } else {
+                crash_text
+            },
+            crash_file,
+        }
+    }
+}
+
+/// The failure code at the start of a status message, if any
+/// (`"ferro.model.x: …"`), else a short tag: messages may contain names.
+fn first_code(text: &str) -> &str {
+    let head = text.split([':', ' ']).next().unwrap_or("");
+    if head.starts_with("ferro.") {
+        head
+    } else {
+        "message"
     }
 }
