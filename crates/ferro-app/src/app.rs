@@ -1,7 +1,9 @@
 //! The Ferro window: menus, workspaces, toolbar, viewport, levels and
 //! properties panels, status bar with the value box (Q-R7, Q-R11, Q-R13).
 
+use crate::ai::{self, AiSettings, ChatEvent, Provider};
 use crate::camera::{FrameCamera, OrbitCamera};
+use crate::link::{self, LinkServer};
 use crate::render::{FrameData, Renderer, Vertex};
 use crate::scene::{self, line_vertex, SceneCache};
 use crate::tools::{SelectOp, ToolCtx, ToolEvent, ToolKind, ToolState};
@@ -9,13 +11,57 @@ use eframe::egui::{self, Color32, Key, PointerButton, Pos2, Rect, RichText, Sens
 use eframe::wgpu;
 use ferro_core::model::{keys, Category, ElementBody};
 use ferro_core::ops::commands::*;
+use ferro_core::ops::Actor;
 use ferro_core::ops::{ExecContext, Failure};
 use ferro_core::{AnyCommand, Document, ElementId, Length, ParamValue, Point3, Session};
 use ferro_io::FroStore;
 use ferro_snap::{snap, Projector, SnapKind, SnapResult, SnapScene, SnapSettings};
+use ferro_tools::link::{AgentInfo, LinkRequest, LinkResponse};
+use serde_json::{json, Value};
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
+use std::sync::mpsc::Receiver;
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
+
+/// How much an AI agent may do on its own (D-26 autonomy slider).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Autonomy {
+    /// Agent changes collect into one proposal the user accepts or rejects.
+    Propose,
+    /// Agent changes apply immediately (each is still one undo step).
+    Apply,
+}
+
+/// Changes an agent made that wait for the user's decision.
+struct Proposal {
+    agent: String,
+    steps: usize,
+}
+
+#[derive(Debug, Clone)]
+enum ChatLine {
+    User(String),
+    Assistant(String),
+    Tool {
+        name: String,
+        ok: bool,
+        summary: String,
+    },
+    Error(String),
+}
+
+struct Chat {
+    open: bool,
+    input: String,
+    lines: Vec<ChatLine>,
+    history: Arc<Mutex<Vec<Value>>>,
+    busy: bool,
+    rx: Option<Receiver<ChatEvent>>,
+    settings: AiSettings,
+    show_settings: bool,
+    settings_note: String,
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Workspace {
@@ -46,7 +92,7 @@ impl Workspace {
     fn roadmap(self) -> Option<&'static str> {
         match self {
             Workspace::Sketch => None,
-            Workspace::Bim => Some("Walls, floors, roofs, doors, windows and rooms arrive in milestone 2–3. Today: classify Forms as BIM categories in Properties."),
+            Workspace::Bim => Some("Walls, floors, doors and windows are live. Push/Pull a wall's top to change its height, its end to change its length. Roofs, rooms and stairs arrive in milestone 3."),
             Workspace::Render => Some("Materials, sun & sky, PBR, AI render and video timeline arrive in milestone 5."),
             Workspace::Presentation => Some("Boards, diagrams and styles arrive in milestone 4."),
             Workspace::Review => Some("Comments, option comparison and branches arrive in milestone 4."),
@@ -84,6 +130,10 @@ pub struct FerroApp {
     show_about: bool,
     show_agents: bool,
     last_snap: Option<SnapResult>,
+    link: LinkServer,
+    autonomy: Autonomy,
+    proposal: Option<Proposal>,
+    chat: Chat,
 }
 
 fn now_ms() -> u64 {
@@ -123,6 +173,20 @@ impl FerroApp {
             show_about: false,
             show_agents: false,
             last_snap: None,
+            link: LinkServer::start("Untitled", cc.egui_ctx.clone()),
+            autonomy: Autonomy::Propose,
+            proposal: None,
+            chat: Chat {
+                open: false,
+                input: String::new(),
+                lines: Vec::new(),
+                history: Arc::new(Mutex::new(Vec::new())),
+                busy: false,
+                rx: None,
+                settings: AiSettings::load(),
+                show_settings: false,
+                settings_note: String::new(),
+            },
         };
         if let Some(p) = open {
             app.open_path(p);
@@ -152,6 +216,10 @@ impl FerroApp {
     }
 
     fn run(&mut self, cmd: AnyCommand) -> bool {
+        // Editing while a proposal is open accepts it first.
+        if self.proposal.is_some() {
+            self.accept_proposal();
+        }
         let name = cmd.name();
         match self.session.execute(cmd, &self.ctx()) {
             Ok(o) => {
@@ -176,6 +244,9 @@ impl FerroApp {
     }
 
     fn autosave(&mut self) {
+        if self.session.in_group() {
+            return;
+        }
         if let Some(store) = &mut self.store {
             match store.sync(&self.saved, self.session.doc(), self.session.journal()) {
                 Ok(_) => self.saved = self.session.doc().clone(),
@@ -189,6 +260,10 @@ impl FerroApp {
 
     fn undo(&mut self) {
         self.tool.cancel();
+        if self.proposal.is_some() {
+            self.reject_proposal();
+            return;
+        }
         match self.session.undo() {
             Some(c) => {
                 self.say(c.transaction_name, false);
@@ -200,6 +275,9 @@ impl FerroApp {
 
     fn redo(&mut self) {
         self.tool.cancel();
+        if self.proposal.is_some() {
+            return;
+        }
         match self.session.redo() {
             Some(c) => {
                 self.say(c.transaction_name, false);
@@ -434,7 +512,7 @@ impl FerroApp {
         if pressed(Key::Backspace) {
             if !self.vcb.is_empty() {
                 self.vcb.pop();
-            } else if self.tool.kind == ToolKind::Polygon && self.tool.is_active() {
+            } else if self.tool.kind.is_chain() && self.tool.is_active() {
                 self.tool.backspace();
             } else {
                 self.delete_selection();
@@ -451,6 +529,10 @@ impl FerroApp {
                 (Key::P, ToolKind::PushPull),
                 (Key::M, ToolKind::Move),
                 (Key::E, ToolKind::Eraser),
+                (Key::W, ToolKind::Wall),
+                (Key::F, ToolKind::Floor),
+                (Key::D, ToolKind::Door),
+                (Key::N, ToolKind::Window),
             ] {
                 if pressed(k) {
                     self.set_tool(t);
@@ -551,9 +633,23 @@ impl FerroApp {
                 }
             });
             ui.menu_button("AI", |ui| {
+                if ui.button("AI chat…").clicked() {
+                    self.chat.open = true;
+                }
+                if ui.button("Chat settings…").clicked() {
+                    self.chat.show_settings = true;
+                }
                 if ui.button("Connect an AI agent (MCP)…").clicked() {
                     self.show_agents = true;
                 }
+                ui.separator();
+                ui.label(RichText::new("Agent changes").weak());
+                ui.radio_value(
+                    &mut self.autonomy,
+                    Autonomy::Propose,
+                    "Propose (I review first)",
+                );
+                ui.radio_value(&mut self.autonomy, Autonomy::Apply, "Apply directly");
             });
             ui.menu_button("Help", |ui| {
                 if ui.button("About Ferro").clicked() {
@@ -575,6 +671,10 @@ impl FerroApp {
     fn toolbar(&mut self, ui: &mut egui::Ui) {
         ui.add_space(4.0);
         for k in ToolKind::ALL {
+            if k == ToolKind::Wall {
+                ui.separator();
+                ui.label(RichText::new("BIM").strong());
+            }
             let selected = self.tool.kind == k;
             let b = egui::Button::new(RichText::new(k.label()).size(15.0))
                 .right_text(RichText::new(k.icon()).weak().size(11.0))
@@ -589,11 +689,9 @@ impl FerroApp {
             }
         }
         if self.workspace == Workspace::Bim {
-            ui.separator();
-            ui.label(RichText::new("BIM tools").strong());
-            for t in ["Wall", "Floor", "Roof", "Door", "Window", "Room"] {
+            for t in ["Roof", "Room", "Stair"] {
                 ui.add_enabled(false, egui::Button::new(t).min_size(Vec2::new(120.0, 26.0)))
-                    .on_disabled_hover_text("Arrives in milestone 2–3");
+                    .on_disabled_hover_text("Arrives in milestone 3");
             }
         }
     }
@@ -1112,7 +1210,7 @@ impl FerroApp {
         }
         if ctx.input(|i| i.key_pressed(Key::Enter))
             && !ctx.egui_wants_keyboard_input()
-            && (self.tool.is_active() || self.tool.kind == ToolKind::Polygon)
+            && (self.tool.is_active() || self.tool.kind.is_chain())
         {
             self.apply_vcb();
         }
@@ -1331,12 +1429,362 @@ impl FerroApp {
         }
     }
 
+    // ------------------------------------------------------------ agents
+
+    fn accept_proposal(&mut self) {
+        if let Some(p) = self.proposal.take() {
+            self.session.end_group();
+            self.say(
+                format!("Accepted {} change(s) from {}", p.steps, p.agent),
+                false,
+            );
+            self.autosave();
+        }
+    }
+
+    fn reject_proposal(&mut self) {
+        if let Some(p) = self.proposal.take() {
+            self.session.cancel_group();
+            self.selection.retain(|id| self.session.doc().contains(*id));
+            self.say(format!("Rejected the proposal from {}", p.agent), false);
+        }
+    }
+
+    /// Answer queued Ferro Link calls (MCP agents and the chat panel).
+    fn process_agent_calls(&mut self) {
+        let name = self.session.doc().project().name.clone();
+        self.link.set_project(&name);
+        for p in self.link.drain() {
+            let resp = self.agent_call(p.req);
+            let _ = p.reply.send(resp);
+        }
+    }
+
+    fn agent_call(&mut self, req: LinkRequest) -> LinkResponse {
+        let info = req.agent.clone().unwrap_or(AgentInfo {
+            name: "agent".into(),
+            version: String::new(),
+        });
+        let ctx = ExecContext {
+            actor: Actor::agent(info.name.clone(), info.version.clone()),
+            prompt: req.prompt.clone(),
+            timestamp_ms: now_ms(),
+        };
+        let answer = |r: Result<Value, Value>| match r {
+            Ok(body) => LinkResponse { ok: true, body },
+            Err(body) => LinkResponse { ok: false, body },
+        };
+        let tool = req.tool.as_str();
+        match tool {
+            "link_status" => {
+                return answer(Ok(
+                    json!({"linked": true, "project": self.session.doc().project().name, "autonomy": if self.autonomy == Autonomy::Propose { "propose" } else { "apply" }}),
+                ))
+            }
+            "save_document" => {
+                if self.proposal.is_some() {
+                    return answer(Err(
+                        json!({"error": "the user is still reviewing your proposal; it is saved once accepted"}),
+                    ));
+                }
+                if self.path.is_none() {
+                    return answer(Err(
+                        json!({"error": "this project has no file yet; ask the user to use File > Save As"}),
+                    ));
+                }
+                self.save();
+                return answer(Ok(json!({"saved": self.path})));
+            }
+            "new_document" | "open_document" | "export_obj" | "export_glb" => {
+                return answer(Err(
+                    json!({"error": format!("{tool} is not available while linked to the open app; ask the user to do it in Ferro")}),
+                ));
+            }
+            "undo" | "redo" if self.proposal.is_some() => {
+                return answer(Err(
+                    json!({"error": "your changes are an open proposal; the user accepts or rejects them"}),
+                ));
+            }
+            _ => {}
+        }
+        let is_command = AnyCommand::NAMES.contains(&tool);
+        if is_command && self.autonomy == Autonomy::Propose && self.proposal.is_none() {
+            self.session
+                .begin_group(format!("AI proposal ({})", info.name), ctx.clone());
+            self.proposal = Some(Proposal {
+                agent: info.name.clone(),
+                steps: 0,
+            });
+        }
+        let r = ferro_tools::call(&mut self.session, &ctx, tool, &req.args)
+            .unwrap_or_else(|| Err(json!({"error": format!("unknown tool: {tool}")})));
+        if is_command {
+            match (&r, &mut self.proposal) {
+                (Ok(_), Some(p)) => {
+                    p.steps += 1;
+                    self.say(format!("{} proposes: {tool}", info.name), false);
+                }
+                (Ok(_), None) => {
+                    self.say(format!("{}: {tool}", info.name), false);
+                    self.autosave();
+                }
+                (Err(_), Some(p)) if p.steps == 0 => {
+                    self.session.cancel_group();
+                    self.proposal = None;
+                }
+                _ => {}
+            }
+        }
+        answer(r)
+    }
+
+    fn proposal_bar(&mut self, ui: &mut egui::Ui) {
+        let Some(p) = &self.proposal else { return };
+        let text = format!(
+            "{} proposes {} change(s). Review them in the viewport.",
+            p.agent, p.steps
+        );
+        ui.horizontal(|ui| {
+            ui.label(
+                RichText::new("AI")
+                    .strong()
+                    .color(Color32::from_rgb(120, 60, 200)),
+            );
+            ui.label(text);
+            if ui.button("Accept").clicked() {
+                self.accept_proposal();
+            }
+            if ui.button("Reject").clicked() {
+                self.reject_proposal();
+            }
+        });
+    }
+
+    fn send_chat(&mut self, ctx: &egui::Context) {
+        let text = self.chat.input.trim().to_string();
+        if text.is_empty() || self.chat.busy {
+            return;
+        }
+        self.chat.input.clear();
+        self.chat.lines.push(ChatLine::User(text.clone()));
+        self.chat.busy = true;
+        let (tx, rx) = std::sync::mpsc::channel();
+        self.chat.rx = Some(rx);
+        let settings = self.chat.settings.clone();
+        let history = self.chat.history.clone();
+        let queue = self.link.sender();
+        let repaint = ctx.clone();
+        std::thread::spawn(move || {
+            let exec = |name: &str, args: &Value| {
+                let req = LinkRequest {
+                    token: String::new(),
+                    tool: name.to_string(),
+                    args: args.clone(),
+                    agent: Some(AgentInfo {
+                        name: "Ferro chat".into(),
+                        version: settings.model.clone(),
+                    }),
+                    prompt: Some(text.clone()),
+                };
+                let r = link::ask_ui(&queue, &repaint, req);
+                if r.ok {
+                    Ok(r.body)
+                } else {
+                    Err(r.body)
+                }
+            };
+            let mut emit = |e: ChatEvent| {
+                let _ = tx.send(e);
+                repaint.request_repaint();
+            };
+            let result = match history.lock() {
+                Ok(mut h) => {
+                    ai::run_turn(&settings, &mut h, &text, &ai::http_post, &exec, &mut emit)
+                }
+                Err(_) => Err("chat state is unavailable".into()),
+            };
+            if let Err(m) = result {
+                emit(ChatEvent::Error(m));
+                emit(ChatEvent::Done);
+            }
+        });
+    }
+
+    fn poll_chat(&mut self) {
+        let Some(rx) = &self.chat.rx else { return };
+        let events: Vec<ChatEvent> = rx.try_iter().collect();
+        for e in events {
+            match e {
+                ChatEvent::Assistant(t) => self.chat.lines.push(ChatLine::Assistant(t)),
+                ChatEvent::Tool { name, ok, summary } => {
+                    self.chat.lines.push(ChatLine::Tool { name, ok, summary })
+                }
+                ChatEvent::Error(m) => self.chat.lines.push(ChatLine::Error(m)),
+                ChatEvent::Done => {
+                    self.chat.busy = false;
+                    self.chat.rx = None;
+                }
+            }
+        }
+    }
+
+    fn chat_window(&mut self, ctx: &egui::Context) {
+        let mut open = self.chat.open;
+        let mut send = false;
+        let mut settings = false;
+        egui::Window::new("AI chat")
+            .open(&mut open)
+            .default_pos([160.0, 80.0])
+            .default_size([400.0, 540.0])
+            .min_height(320.0)
+            .show(ctx, |ui| {
+                if !self.chat.settings.is_ready() {
+                    ui.label("Connect a model to chat: your own Anthropic key, or any OpenAI-compatible endpoint such as a local Ollama.");
+                    if ui.button("Chat settings…").clicked() {
+                        settings = true;
+                    }
+                    return;
+                }
+                ui.horizontal(|ui| {
+                    ui.label(RichText::new(&self.chat.settings.model).weak());
+                    if ui.small_button("Settings").clicked() {
+                        settings = true;
+                    }
+                    if ui
+                        .add_enabled(!self.chat.busy, egui::Button::new("Clear").small())
+                        .clicked()
+                    {
+                        self.chat.lines.clear();
+                        if let Ok(mut h) = self.chat.history.lock() {
+                            h.clear();
+                        }
+                    }
+                });
+                ui.separator();
+                let input_h = 64.0;
+                egui::ScrollArea::vertical()
+                    .stick_to_bottom(true)
+                    .auto_shrink([false, false])
+                    .max_height((ui.available_height() - input_h).max(80.0))
+                    .show(ui, |ui| {
+                        for l in &self.chat.lines {
+                            match l {
+                                ChatLine::User(t) => {
+                                    ui.label(RichText::new(t).strong());
+                                }
+                                ChatLine::Assistant(t) => {
+                                    ui.label(t);
+                                }
+                                ChatLine::Tool { name, ok, summary } => {
+                                    let c = if *ok {
+                                        Color32::from_rgb(40, 140, 70)
+                                    } else {
+                                        Color32::from_rgb(200, 40, 40)
+                                    };
+                                    ui.label(RichText::new(format!("tool {name} {summary}")).small().color(c));
+                                }
+                                ChatLine::Error(m) => {
+                                    ui.label(RichText::new(m).color(Color32::from_rgb(200, 40, 40)));
+                                }
+                            }
+                            ui.add_space(4.0);
+                        }
+                        if self.chat.busy {
+                            ui.spinner();
+                        }
+                    });
+                ui.separator();
+                ui.horizontal(|ui| {
+                    let r = ui.add(
+                        egui::TextEdit::multiline(&mut self.chat.input)
+                            .desired_rows(2)
+                            .desired_width(ui.available_width() - 60.0)
+                            .hint_text("e.g. Draw a 10 × 8 m house with 3 m walls, a door and two windows"),
+                    );
+                    let enter = r.has_focus()
+                        && ui.input(|i| i.key_pressed(Key::Enter) && !i.modifiers.shift);
+                    if ui
+                        .add_enabled(!self.chat.busy, egui::Button::new("Send"))
+                        .clicked()
+                        || enter
+                    {
+                        send = true;
+                    }
+                });
+            });
+        self.chat.open = open;
+        if settings {
+            self.chat.show_settings = true;
+        }
+        if send {
+            // Enter leaves a newline in the multiline box; drop it.
+            self.chat.input = self.chat.input.trim_end_matches('\n').to_string();
+            self.send_chat(ctx);
+        }
+        let mut show = self.chat.show_settings;
+        egui::Window::new("Chat settings")
+            .open(&mut show)
+            .resizable(false)
+            .show(ctx, |ui| {
+                let s = &mut self.chat.settings;
+                egui::Grid::new("ai_settings").num_columns(2).show(ui, |ui| {
+                    ui.label("Provider");
+                    let before = s.provider;
+                    egui::ComboBox::from_id_salt("provider")
+                        .selected_text(match s.provider {
+                            Provider::Anthropic => "Anthropic",
+                            Provider::OpenaiCompatible => "OpenAI-compatible",
+                        })
+                        .show_ui(ui, |ui| {
+                            ui.selectable_value(&mut s.provider, Provider::Anthropic, "Anthropic");
+                            ui.selectable_value(&mut s.provider, Provider::OpenaiCompatible, "OpenAI-compatible");
+                        });
+                    if s.provider != before {
+                        *s = match s.provider {
+                            Provider::Anthropic => AiSettings::default(),
+                            Provider::OpenaiCompatible => AiSettings {
+                                provider: Provider::OpenaiCompatible,
+                                model: "llama3.1".into(),
+                                api_key: String::new(),
+                                base_url: "http://localhost:11434/v1".into(),
+                            },
+                        };
+                    }
+                    ui.end_row();
+                    ui.label("Model");
+                    ui.text_edit_singleline(&mut s.model);
+                    ui.end_row();
+                    ui.label("Endpoint");
+                    ui.text_edit_singleline(&mut s.base_url);
+                    ui.end_row();
+                    ui.label("API key");
+                    ui.add(egui::TextEdit::singleline(&mut s.api_key).password(true));
+                    ui.end_row();
+                });
+                ui.label(
+                    RichText::new("The key is stored in plain text in ~/.ferro/settings.json on this computer.")
+                        .small()
+                        .italics(),
+                );
+                if ui.button("Save").clicked() {
+                    self.chat.settings_note = match self.chat.settings.save() {
+                        Ok(()) => "Saved.".into(),
+                        Err(e) => format!("Could not save: {e}"),
+                    };
+                }
+                if !self.chat.settings_note.is_empty() {
+                    ui.label(&self.chat.settings_note);
+                }
+            });
+        self.chat.show_settings = show;
+    }
+
     fn windows(&mut self, ctx: &egui::Context) {
         egui::Window::new("About Ferro").open(&mut self.show_about).resizable(false).show(ctx, |ui| {
             ui.heading(format!("Ferro {}", env!("CARGO_PKG_VERSION")));
             ui.label("Open-source, AI-native 3D design tool for architects.");
             ui.label("Licence: MPL-2.0 · github.com/ktsdatpham/ferro");
-            ui.label("Milestone 1: sketch modelling, levels, push/pull, undo, .fro files, OBJ/glTF export, MCP for AI agents.");
+            ui.label("Sketch modelling, levels, push/pull, walls, floors, doors and windows with types and materials, .fro files, OBJ/glTF export, MCP agents, Ferro Link and an in-app AI chat.");
         });
         let mcp = std::env::current_exe()
             .ok()
@@ -1351,13 +1799,18 @@ impl FerroApp {
             })
             .map(|p| p.display().to_string())
             .unwrap_or_else(|| "ferro-mcp".into());
+        let link_note = match self.link.port() {
+            Some(p) => format!("Ferro Link is on (127.0.0.1:{p})."),
+            None => "Ferro Link could not start; agents will work on their own copy.".into(),
+        };
         egui::Window::new("Connect an AI agent").open(&mut self.show_agents).resizable(true).show(ctx, |ui| {
+            ui.label(RichText::new(&link_note).strong());
             ui.label("Ferro speaks MCP. Add this server to Claude Desktop, Claude Code, Cursor or any MCP client:");
             let cfg = serde_json::json!({"mcpServers": {"ferro": {"command": mcp}}});
             let mut text = serde_json::to_string_pretty(&cfg).unwrap_or_default();
             ui.add(egui::TextEdit::multiline(&mut text).code_editor().desired_rows(6));
-            ui.label("The agent can create levels, boxes, faces, push/pull, move, classify and save .fro files, which you then open here.");
-            ui.label(RichText::new("Live editing of the open window through Ferro Link arrives in milestone 2.").italics());
+            ui.label("While this window is open, the agent edits the model you are looking at (Ferro Link). Its changes appear as a proposal you accept or reject; switch to \"Apply directly\" in the AI menu to skip the review.");
+            ui.label(RichText::new("Without the app open, ferro-mcp works on its own copy and saves .fro files.").italics());
         });
     }
 }
@@ -1371,6 +1824,8 @@ fn failure_text(f: &[Failure]) -> String {
 impl eframe::App for FerroApp {
     fn ui(&mut self, ui: &mut egui::Ui, frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
+        self.process_agent_calls();
+        self.poll_chat();
         self.shortcuts(&ctx);
         let title = format!(
             "Ferro — {}{}",
@@ -1388,6 +1843,9 @@ impl eframe::App for FerroApp {
         ctx.send_viewport_cmd(egui::ViewportCommand::Title(title));
 
         egui::Panel::top("menu").show(ui, |ui| self.menu(ui));
+        if self.proposal.is_some() {
+            egui::Panel::top("proposal").show(ui, |ui| self.proposal_bar(ui));
+        }
         egui::Panel::bottom("status").show(ui, |ui| self.status_bar(ui));
         egui::Panel::left("tools")
             .resizable(false)
@@ -1399,5 +1857,6 @@ impl eframe::App for FerroApp {
             .show(ui, |ui| self.side_panel(ui));
         egui::CentralPanel::no_frame().show(ui, |ui| self.viewport(ui, frame));
         self.windows(&ctx);
+        self.chat_window(&ctx);
     }
 }

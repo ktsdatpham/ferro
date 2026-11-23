@@ -9,24 +9,22 @@ Each milestone should ship something a designer can actually try.
 - [x] `ferro-mcp`: MCP server over stdio with 7 tools
 - [x] `ferro-ffi`: C ABI + Revit C# stub
 
-## Milestone 1: Viewport + SketchUp basics
+## Milestone 1: Viewport + SketchUp basics ✅ (v0.1.0)
 
-- [ ] Window with `winit`, renderer with `wgpu` (Metal on Mac/iOS, DX12 on Windows, Vulkan on Linux)
-- [ ] Orbit / pan / zoom camera, ground grid, axes
-- [ ] Line, Rectangle and Push/Pull tools with mouse input
-- [ ] Type exact values while drawing (VCB, e.g. `4000,3000` or `3m`)
-- [ ] Inference snapping: endpoints, midpoints, on-axis, parallel
-- [ ] Undo / redo (command pattern in `ferro-core`)
-- [ ] Save / open `.fro` files
-- [ ] **Kernel upgrade:** replace the face list with a half-edge mesh so push-pull works on faces of existing solids
+- [x] Window and wgpu renderer, orbit / pan / zoom, grid, axes
+- [x] Rectangle, Polygon, Push/Pull, Move / copy, Eraser; type exact values while drawing
+- [x] Inference snapping; undo / redo; `.fro` files with autosave; OBJ / glTF export
+- [x] Half-edge kernel with persistent ids; MCP server on kernel commands
 
-## Milestone 2: AI inside the app
+## Milestone 2: BIM elements + AI inside the app ✅
 
-- [ ] The app runs the MCP server in-process; agents edit the open document live
-- [ ] Chat panel (bring your own API key, or a local model)
-- [ ] Tools for selections ("make the selected face 500 mm taller")
-- [ ] Grouping / components, so agents can work at the object level
-- [ ] Screenshot tool so agents can see the viewport
+- [x] Walls (straight, curved, mitred corners), floors, doors, windows (`docs/milestones/M2.md`)
+- [x] Wall / floor types with layers, materials; computed quantities
+- [x] Semantic push/pull on BIM elements (height, length, opening size)
+- [x] Ferro Link: agents edit the open document live; changes arrive as a proposal
+- [x] Chat panel (bring your own API key, or a local model)
+- [ ] Tools for selections ("make the selected face 500 mm taller") → M3
+- [ ] Screenshot tool so agents can see the viewport → M3
 
 ## Milestone 3: Revit link
 

@@ -7,8 +7,8 @@ use super::{CommandError, Transaction};
 use crate::geom::{Arc, Curve, Line};
 use crate::math::{tol, Length, Point2, Point3, Vec2, Vec3};
 use crate::model::bim::{
-    CompoundStructure, Floor, FloorType, Layer, LayerFunction, LocationLine, Material, Opening,
-    OpeningKind, Wall, WallTop, WallType,
+    CompoundLayer, CompoundStructure, Floor, FloorType, LayerFunction, LocationLine, Material,
+    Opening, OpeningKind, Wall, WallTop, WallType,
 };
 use crate::model::generate::{self, WallLayout};
 use crate::model::{Category, Element, ElementBody, ElementId};
@@ -101,14 +101,14 @@ impl Command for CreateMaterial {
 
 fn structure(
     tx: &Transaction,
-    layers: &Option<Vec<Layer>>,
+    layers: &Option<Vec<CompoundLayer>>,
     thickness: Option<Length>,
     material: Option<ElementId>,
 ) -> Result<CompoundStructure, CommandError> {
     let st = match (layers, thickness) {
         (Some(l), _) if !l.is_empty() => CompoundStructure { layers: l.clone() },
         (_, Some(t)) => CompoundStructure {
-            layers: vec![Layer {
+            layers: vec![CompoundLayer {
                 function: LayerFunction::Structure,
                 thickness: t,
                 material,
@@ -157,7 +157,7 @@ pub struct CreateWallType {
     #[serde(default)]
     pub material: Option<ElementId>,
     #[serde(default)]
-    pub layers: Option<Vec<Layer>>,
+    pub layers: Option<Vec<CompoundLayer>>,
 }
 
 impl Command for CreateWallType {
@@ -186,7 +186,7 @@ pub struct CreateFloorType {
     #[serde(default)]
     pub material: Option<ElementId>,
     #[serde(default)]
-    pub layers: Option<Vec<Layer>>,
+    pub layers: Option<Vec<CompoundLayer>>,
 }
 
 impl Command for CreateFloorType {

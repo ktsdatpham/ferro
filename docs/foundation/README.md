@@ -128,7 +128,9 @@ decision requires a new ADR in [`../decisions/`](../decisions/).
 Milestone 1 rebuilt the prototype on this spec (`docs/milestones/M1.md`):
 `Point3` / `Vec3`, `Document` / `Element`, typed parameters, half-edge topology
 with persistent ids and lineage, commands + transactions, `Uid`, levels and
-origins are all in place. Remaining gaps are tracked as milestone 2 items:
-design options and views as elements (D-32, D-33), AI proposal mode (D-26),
-exact single curved faces (D-39), layer / glossary lints and CI performance
-budgets (D-19, D-20, D-62).
+origins are all in place. Milestone 2 (`docs/milestones/M2.md`, ADR 0001) added
+walls, floors, doors and windows with types and materials, Ferro Link, AI
+proposals and the in-app chat. Open items: explicit joins and T-joins, openings
+in curved walls, design options and views as elements (D-32, D-33), exact
+single curved faces (D-39), layer / glossary lints and CI performance budgets
+(D-19, D-20, D-62).

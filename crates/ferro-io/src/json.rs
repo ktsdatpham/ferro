@@ -15,6 +15,35 @@ const REF_FIELDS: [&str; 6] = [
     "phase_demolished",
 ];
 
+/// Element references stored inside the category-specific body: a wall's top
+/// level and the materials of a type's layers.
+fn body_refs(obj: &mut Map<String, Value>) -> Vec<&mut Value> {
+    let mut out = Vec::new();
+    let Some(body) = obj.get_mut("body").and_then(Value::as_object_mut) else {
+        return out;
+    };
+    let mut top_level = None;
+    let mut layers = None;
+    for (k, v) in body.iter_mut() {
+        match k.as_str() {
+            "top" => top_level = v.get_mut("level"),
+            "structure" => layers = v.get_mut("layers").and_then(Value::as_array_mut),
+            _ => {}
+        }
+    }
+    if let Some(l) = top_level {
+        out.push(l);
+    }
+    if let Some(ls) = layers {
+        for l in ls {
+            if let Some(m) = l.get_mut("material").filter(|m| !m.is_null()) {
+                out.push(m);
+            }
+        }
+    }
+    out
+}
+
 /// Element → JSON with references rewritten as uids and the local id dropped.
 pub(crate) fn element_to_value(
     e: &Element,
@@ -29,6 +58,14 @@ pub(crate) fn element_to_value(
                 IoError::new("ferro.io.dangling_reference", format!("{f} → #{r}"))
             })?;
             obj.insert(f.into(), Value::String(uid.to_string()));
+        }
+    }
+    for r in body_refs(obj) {
+        if let Some(id) = r.as_u64() {
+            let uid = uid_of.get(&ElementId(id)).ok_or_else(|| {
+                IoError::new("ferro.io.dangling_reference", format!("body → #{id}"))
+            })?;
+            *r = Value::String(uid.to_string());
         }
     }
     if let Some(params) = obj.get_mut("params").and_then(Value::as_object_mut) {
@@ -76,6 +113,11 @@ pub(crate) fn elements_from_values(values: Vec<Value>) -> Result<Vec<Element>, I
         for f in REF_FIELDS {
             if let Some(s) = obj.get(f).and_then(Value::as_str).map(str::to_string) {
                 obj.insert(f.into(), json!(lookup(&s)?));
+            }
+        }
+        for r in body_refs(obj) {
+            if let Some(s) = r.as_str().map(str::to_string) {
+                *r = json!(lookup(&s)?);
             }
         }
         if let Some(params) = obj.get_mut("params").and_then(Value::as_object_mut) {
@@ -177,6 +219,59 @@ pub(crate) mod tests {
                 e.level_id.map(|l| s.doc().get(l).unwrap().uid)
             );
         }
+    }
+
+    #[test]
+    fn bim_elements_roundtrip_with_body_references() {
+        let mut s = Session::new(Document::new("BIM"), Box::new(SequentialIds::new(1)));
+        let ctx = ExecContext::user();
+        // A level first so ids shift when the file is reloaded in uid order.
+        for (name, args) in [
+            ("create_material", json!({"name":"Brick","color":"#aa5533"})),
+            ("create_level", json!({"name":"L1","elevation":0})),
+            ("create_level", json!({"name":"Roof","elevation":3200})),
+            (
+                "create_wall_type",
+                json!({"name":"Brick 200","thickness":200,"material":1}),
+            ),
+            (
+                "create_walls",
+                json!({"points":[{"x":0,"y":0,"z":0},{"x":6000,"y":0,"z":0},{"x":6000,"y":4000,"z":0}],"level":2,"top_level":3,"wall_type":4}),
+            ),
+            (
+                "create_opening",
+                json!({"wall":5,"kind":"window","position":3000}),
+            ),
+            (
+                "create_floor",
+                json!({"points":[{"x":0,"y":0},{"x":6000,"y":0},{"x":6000,"y":4000}],"level":2}),
+            ),
+        ] {
+            s.execute(AnyCommand::from_tool(name, &args).unwrap(), &ctx)
+                .unwrap_or_else(|f| panic!("{name}: {f:?}"));
+        }
+        let text = document_to_json(s.doc()).unwrap();
+        let back = document_from_json(&text).unwrap();
+        assert_eq!(back.len(), s.doc().len());
+        for e in s.doc().elements() {
+            let b = back.find_uid(e.uid).unwrap();
+            assert_eq!(b.category, e.category);
+            assert_eq!(b.params, e.params);
+            assert_eq!(b.geometry(), e.geometry());
+        }
+        // The wall's top level and the type's material still point at the
+        // same elements by uid.
+        let wall = s.doc().elements().find(|e| e.as_wall().is_some()).unwrap();
+        let wb = back.find_uid(wall.uid).unwrap();
+        let top = |doc: &Document, e: &ferro_core::Element| match &e.as_wall().unwrap().top {
+            ferro_core::model::bim::WallTop::Level { level, .. } => doc.get(*level).unwrap().uid,
+            _ => panic!("expected level top"),
+        };
+        assert_eq!(top(s.doc(), wall), top(&back, wb));
+        assert_eq!(
+            back.get(wb.host_id.unwrap_or(wb.id)).map(|e| e.uid),
+            Some(wall.uid)
+        );
     }
 
     #[test]

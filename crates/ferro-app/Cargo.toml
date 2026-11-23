@@ -14,8 +14,12 @@ path = "src/main.rs"
 ferro-core = { path = "../ferro-core" }
 ferro-io = { path = "../ferro-io" }
 ferro-snap = { path = "../ferro-snap" }
+ferro-tools = { path = "../ferro-tools" }
 eframe = { version = "0.37", default-features = false, features = ["wgpu", "default_fonts", "x11", "wayland"] }
 rfd = "0.18"
 glam = "0.34"
 bytemuck = { version = "1", features = ["derive"] }
 serde_json.workspace = true
+serde.workspace = true
+uuid = { version = "1", features = ["v4"] }
+ureq = { version = "3", features = ["json"] }

@@ -79,6 +79,13 @@ After commands run and before commit, the document **regenerates**:
 Revit equivalent: `Document.Regenerate()` and the internal element dependency
 graph.
 
+**Milestone 2 implementation** (ADR 0001): walls, floors and openings store
+parameters plus a derived `geometry` cache. When a transaction touches a level,
+type, wall, floor or opening, `model::generate::regenerate` rebuilds every BIM
+element and writes only those whose geometry changed. Straight walls sharing an
+end point are mitred; openings cut their host. The dependency graph replaces
+this global pass when models grow.
+
 ## 4.5 Failures
 
 Commands and regeneration report problems as `Failure`s, not panics:

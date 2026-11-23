@@ -58,6 +58,10 @@ Family kinds:
 | **Loadable family** | Defined in a separate file, placed as instances (later milestone) | `.rfa` families |
 | **Form** | Free-form geometry edited directly with SketchUp/Rhino-style tools | In-place mass / generic model |
 
+Milestone 2 implements the system families `Wall` and `Floor` with `WallType`
+/ `FloorType` (a `CompoundStructure` of `CompoundLayer`s), `Material`, and the
+hosted `Opening` (door / window). Types and materials are elements. See ADR 0001.
+
 `Category` is a closed Rust `enum` (adding one is a spec change). Each category
 declares its Revit `BuiltInCategory` and IFC class (chapter 6).
 
@@ -134,7 +138,9 @@ a command. Geometry is derived from location + parameters + type.
   (wall, roof, floor). Deleting the host deletes or orphans hosted elements per
   category rule, reported as a failure (chapter 4).
 - **Joins** (wall-to-wall, floor-to-wall) are explicit relationships stored on
-  the document, not hidden geometry hacks.
+  the document, not hidden geometry hacks. Until those land, milestone 2 infers
+  L-joins from coincident wall ends (ADR 0001); hosted openings are deleted
+  with their host.
 - **Groups** (later) are elements referencing members; a group is not a Form.
 
 ## 3.9 Out of scope for v1 (but reserved)

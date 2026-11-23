@@ -35,7 +35,7 @@ pub enum LayerFunction {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct Layer {
+pub struct CompoundLayer {
     pub function: LayerFunction,
     pub thickness: Length,
     #[serde(default)]
@@ -46,13 +46,13 @@ pub struct Layer {
 /// `CompoundStructure`).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct CompoundStructure {
-    pub layers: Vec<Layer>,
+    pub layers: Vec<CompoundLayer>,
 }
 
 impl CompoundStructure {
     pub fn single(thickness: Length) -> Self {
         CompoundStructure {
-            layers: vec![Layer {
+            layers: vec![CompoundLayer {
                 function: LayerFunction::Structure,
                 thickness,
                 material: None,
@@ -164,6 +164,8 @@ pub enum OpeningKind {
 /// A door or window hosted by a wall (`Element::host_id`), cutting it.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Opening {
+    /// Serialised as `opening_kind`: `kind` is the element body's own tag.
+    #[serde(rename = "opening_kind")]
     pub kind: OpeningKind,
     /// Distance along the host wall's location curve from its start to the
     /// opening centre (mm).

@@ -4,8 +4,10 @@
 
 #![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
 
+mod ai;
 mod app;
 mod camera;
+mod link;
 mod render;
 mod scene;
 mod tools;
