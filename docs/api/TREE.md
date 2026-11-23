@@ -36,6 +36,14 @@ The Ferro window: menus, workspaces, toolbar, viewport, levels and properties pa
 - struct `FerroApp`
 - fn `FerroApp::new`
 
+### `ferro_app::app::design_options`
+
+Design options in the app (ADR 0006, M5-23.9): the combination the view shows (app state until views become elements, M5-22), "edit in option", and the Design options panel.
+
+- struct `DesignOptionsState` — Design-option view state of the app (not saved).
+- fn `is_option_command` — `true` for commands on option sets / options themselves, which always
+- fn `view_doc` — The document the view shows, borrowing only the two fields (for call
+
 ### `ferro_app::app::phases`
 
 Phases in the app (ADR 0006, M5-23): the active view's phase and phase filter (stored in the view element, M5-22 / M5-23.8), the simple renovation buttons, phase pickers in Properties and the per-status graphics handed to the scene.
@@ -631,9 +639,43 @@ The change format (M5-26, F10 of the foundation review, D-34, D-55, ADR 0006): e
 - fn `relationship_value` — A relationship row as JSON with its element and phase references as
 - fn `relationship_from_value` — Read a row written by [`relationship_value`]; `id_of` maps a uid string
 - fn `escape` — RFC 6901 escaping of one path segment (`~` → `~0`, `/` → `~1`).
+- fn `unescape_segment` — RFC 6901 unescaping of one path segment (`~1` → `/`, `~0` → `~`).
 - fn `diff` — The edits that turn `a` into `b`, sorted by path. `diff(a, a)` is empty.
 - fn `apply` — Apply edits to `doc`. Elements keep their `ElementId`; new elements get
+- type `Partition` — Edits that apply (in order) and edits that do not, each with the reason.
+- fn `partition_applicable` — Split `changes` into those that apply to `doc` one after the other and
 - fn `conflicts` — Paths where `ours` and `theirs` disagree: both edit the same path with
+
+### `ferro_core::model::design_option`
+
+Design options (ADR 0006 §Design options, M5-23.9): option sets, options as layers of changes over the shared model, and combinations.
+
+- const `FIRST_OPTION_NAME` — Name given to the first option of a new option set.
+- struct `OptionSet` — A set of mutually exclusive alternatives (Revit: `Option Set`). Sets are
+- enum `OptionStatus` — Lifecycle of a design option.
+- fn `OptionStatus::as_str` — Stable snake_case name.
+- struct `DesignOption` — One alternative of an option set (Revit: `DesignOption`): a layer of
+- struct `DesignOptionError` — A design-option rule broken, with a stable code (`ferro.model.*`) and
+- struct `Combination` — One option per set. Sets not named use their primary option; sets
+- fn `Combination::primary` — The primary combination (every set shows its primary option).
+- fn `Combination::with` — This combination with `option` chosen for its set.
+- fn `Combination::chosen` — The option shown for every set with open options, in set order.
+- fn `Element::as_option_set` — The option-set data, if this element is an option set.
+- fn `Element::as_design_option` — The design-option data, if this element is a design option.
+- fn `Document::option_sets` — Option sets in order (by `order`, then id).
+- fn `Document::design_options` — Options of a set in order (open, accepted and archived).
+- fn `Document::primary_option` — The primary option of a set; `None` when the set has no open option.
+- fn `Document::has_open_design_options` — `true` if some option is open (combinations then matter).
+- fn `Document::secondary_options` — Open options that are not the primary of their set.
+- fn `check_layer` — Check a layer against the shared model `doc`: every path addresses an
+- fn `added_uids` — Uids of the elements a layer adds (whole-element sets of uids that are
+- struct `LayerCounts` — What a layer does to the shared model: elements added, shared elements
+- fn `layer_counts` — Count what a layer adds, removes and overrides in `doc`.
+- fn `apply_layers` — Elements of `doc` as seen with the layers of `options` (each an open
+- fn `is_derived_path` — `true` for paths of derived data that a layer must not store: the
+- fn `layer_from_edit` — The layer that turns `base` into `edited` (both seen in the same
+- fn `stale_layers` — Open options whose layer no longer applies to the shared model, each
+- fn `check_design_options` — Structural rules of option sets: every option is hosted by an option
 
 ### `ferro_core::model::document`
 
@@ -659,6 +701,7 @@ The change format (M5-26, F10 of the foundation review, D-34, D-55, ADR 0006): e
 - fn `Document::find_uid`
 - fn `Document::levels` — Levels sorted by elevation.
 - fn `Document::same_element` — `true` if `other` shares this element's storage (unchanged since).
+- fn `Document::next_element_id` — The id the next new element gets (ids are never reused).
 
 ### `ferro_core::model::element`
 
@@ -911,6 +954,21 @@ Core commands (milestone 1) and the dispatch enum; BIM commands live in `bim_com
 - struct `SetProjectName` — Rename the project.
 - fn `AnyCommand::from_tool` — Build from a tool name and JSON arguments (MCP).
 
+### `ferro_core::ops::design_option_commands`
+
+Design-option commands (ADR 0006 §Design options, M5-23.9) and the change-list command `apply_changes` (M5-26.2). Each `NAME` is also the MCP tool name.
+
+- fn `resolve_options` — The document as seen with exactly the layers of `options` (at most one
+- fn `resolve` — The document as seen in `combination` (ADR 0006 §3): the shared model
+- struct `CreateOptionSet` — Create an option set (Revit: *Option Set*) with its first option
+- struct `SetOptionSet` — Rename an option set or move it to `position` (0 = first; past the end
+- struct `DeleteOptionSet` — Delete an option set with all its options (open, accepted and archived;
+- struct `CreateDesignOption` — Add an option to a set, after its other options; empty, or with a copy
+- struct `SetDesignOption` — Edit an open design option: rename it, make it the primary option of
+- struct `DeleteDesignOption` — Delete a design option (open, accepted or archived) with its layer. The
+- struct `AcceptDesignOption` — Accept a design option (ADR 0006 §4): its layer is merged into the
+- struct `ApplyChanges` — Apply a change list (the change format, M5-26: `[{op: set, path,
+
 ### `ferro_core::ops::events`
 
 - struct `DocumentChanged` — Emitted after every commit, undo and redo (§4.6). Renderer, UI, MCP and the
@@ -1015,7 +1073,9 @@ Commands on the relationship table (ADR 0004 §5, M5-5.1).
 - fn `Session::redo_name`
 - fn `Session::replace_document` — Replace the document (open file); clears history.
 - fn `Session::execute` — Run one command as one transaction (or inside the open group).
+- fn `Session::execute_in_option` — Run a command inside a design option (ADR 0006, "edit in option"):
 - fn `Session::preview` — Evaluate a command on a copy without changing the session (tool
+- fn `Session::preview_on` — [`Session::preview`] on any document, e.g. one resolved for a
 - fn `Session::begin_group` — Start a group: following commands become one undo step (a gesture,
 - fn `Session::end_group` — Commit the group as one undo step.
 - fn `Session::cancel_group` — Discard everything done since `begin_group`.
@@ -1156,7 +1216,8 @@ Mesh export. Both formats are written Y-up in metres (the glTF convention, also 
 IFC4 export (D-75, milestone 3): STEP physical file (ISO 10303-21), Reference View style.
 
 - fn `ifc_guid` — IFC GlobalId (22 characters) of a 128-bit uid.
-- fn `export_ifc` — Serialise a document as an IFC4 file.
+- fn `export_ifc` — Serialise a document as an IFC4 file (primary combination of its design
+- fn `export_ifc_combination` — IFC4 export of the document as seen in a design-option `combination`
 - fn `export_ifc_phase` — IFC4 export of the document as it is in `phase` (`None` = the last
 
 ### `ferro_io::json`
@@ -1328,6 +1389,17 @@ Shared tool surface (D-17, D-44) for MCP and Ferro Link: every kernel command is
 - fn `phase_quantities` — `get_phase_quantities`: [`PhaseQuantities`] in m³ / m², keyed by category
 - fn `call` — Run a command or read-only tool against a session. Ok = JSON result,
 - fn `file_tools` — File tools offered by a standalone tool host (ferro-mcp without an open app).
+
+### `ferro_tools::design_option`
+
+Design-option tools (ADR 0006, M5-23.9) and the change-format tools (M5-26.2): tool definitions, `list_design_options`, `diff_documents` and the combination argument shared by read tools.
+
+- fn `combination_schema` — JSON schema of a combination argument.
+- fn `tools` — Tool definitions for design options and change lists.
+- fn `combination_arg` — Read a combination argument: `None` for `"shared"` (or a missing value
+- fn `seen` — The document as seen in a combination (`None` = shared model). Both
+- fn `list_design_options` — `list_design_options`.
+- fn `diff_documents` — `diff_documents {from, to}`.
 
 ### `ferro_tools::link`
 

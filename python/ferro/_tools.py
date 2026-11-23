@@ -37,6 +37,7 @@ def create_level(
     *,
     name: str,
     elevation: Length,
+    in_design_option: Optional[int] = None,
     is_building_storey: Optional[bool] = None,
 ) -> Dict[str, Any]:
     """Create a level (named elevation, e.g. a storey). Elements placed on a level move
@@ -45,28 +46,42 @@ def create_level(
     Args:
         name: Text.
         elevation: Length: number = millimetres, or a string with units ("3m", "300cm").
+        in_design_option: Optional design option id: make this change inside that option
+            (its layer), not in the shared model. Optional.
         is_building_storey: Default true. Optional.
 
     Returns:
         The tool's JSON body. Raises FerroError on failure.
     """
     args: Dict[str, Any] = {"name": name, "elevation": elevation}
+    if in_design_option is not None:
+        args["in_design_option"] = in_design_option
     if is_building_storey is not None:
         args["is_building_storey"] = is_building_storey
     return _call("create_level", args)
 
 
-def set_level_elevation(*, level: ElementId, elevation: Length) -> Dict[str, Any]:
+def set_level_elevation(
+    *,
+    level: ElementId,
+    elevation: Length,
+    in_design_option: Optional[int] = None,
+) -> Dict[str, Any]:
     """Change a level's elevation. Elements on that level move with it.
 
     Args:
         level: Level element id.
         elevation: Length: number = millimetres, or a string with units ("3m", "300cm").
+        in_design_option: Optional design option id: make this change inside that option
+            (its layer), not in the shared model. Optional.
 
     Returns:
         The tool's JSON body. Raises FerroError on failure.
     """
-    return _call("set_level_elevation", {"level": level, "elevation": elevation})
+    args: Dict[str, Any] = {"level": level, "elevation": elevation}
+    if in_design_option is not None:
+        args["in_design_option"] = in_design_option
+    return _call("set_level_elevation", args)
 
 
 def create_rectangle(
@@ -74,6 +89,7 @@ def create_rectangle(
     origin: Point,
     width: Length,
     depth: Length,
+    in_design_option: Optional[int] = None,
     level: Optional[ElementId] = None,
     name: Optional[str] = None,
 ) -> Dict[str, Any]:
@@ -85,6 +101,8 @@ def create_rectangle(
             units); Z is up.
         width: Length: number = millimetres, or a string with units ("3m", "300cm").
         depth: Length: number = millimetres, or a string with units ("3m", "300cm").
+        in_design_option: Optional design option id: make this change inside that option
+            (its layer), not in the shared model. Optional.
         level: Optional level id. Optional.
         name: Text. Optional.
 
@@ -92,6 +110,8 @@ def create_rectangle(
         The tool's JSON body. Raises FerroError on failure.
     """
     args: Dict[str, Any] = {"origin": origin, "width": width, "depth": depth}
+    if in_design_option is not None:
+        args["in_design_option"] = in_design_option
     if level is not None:
         args["level"] = level
     if name is not None:
@@ -102,6 +122,7 @@ def create_rectangle(
 def create_polygon(
     *,
     points: Sequence[Point],
+    in_design_option: Optional[int] = None,
     level: Optional[ElementId] = None,
     name: Optional[str] = None,
     relative_to_level: Optional[bool] = None,
@@ -110,6 +131,8 @@ def create_polygon(
 
     Args:
         points: List of points [x, y, z] in millimetres. Each: Vertex. minItems=3.
+        in_design_option: Optional design option id: make this change inside that option
+            (its layer), not in the shared model. Optional.
         level: Optional level id. Optional.
         name: Text. Optional.
         relative_to_level: True or False. Optional.
@@ -118,6 +141,8 @@ def create_polygon(
         The tool's JSON body. Raises FerroError on failure.
     """
     args: Dict[str, Any] = {"points": points}
+    if in_design_option is not None:
+        args["in_design_option"] = in_design_option
     if level is not None:
         args["level"] = level
     if name is not None:
@@ -133,6 +158,7 @@ def create_box(
     width: Length,
     depth: Length,
     height: Length,
+    in_design_option: Optional[int] = None,
     level: Optional[ElementId] = None,
     name: Optional[str] = None,
 ) -> Dict[str, Any]:
@@ -145,6 +171,8 @@ def create_box(
         width: Length: number = millimetres, or a string with units ("3m", "300cm").
         depth: Length: number = millimetres, or a string with units ("3m", "300cm").
         height: Length: number = millimetres, or a string with units ("3m", "300cm").
+        in_design_option: Optional design option id: make this change inside that option
+            (its layer), not in the shared model. Optional.
         level: Optional level id. Optional.
         name: Text. Optional.
 
@@ -152,6 +180,8 @@ def create_box(
         The tool's JSON body. Raises FerroError on failure.
     """
     args: Dict[str, Any] = {"origin": origin, "width": width, "depth": depth, "height": height}
+    if in_design_option is not None:
+        args["in_design_option"] = in_design_option
     if level is not None:
         args["level"] = level
     if name is not None:
@@ -159,7 +189,13 @@ def create_box(
     return _call("create_box", args)
 
 
-def push_pull_face(*, element: ElementId, face: int, distance: Length) -> Dict[str, Any]:
+def push_pull_face(
+    *,
+    element: ElementId,
+    face: int,
+    distance: Length,
+    in_design_option: Optional[int] = None,
+) -> Dict[str, Any]:
     """Push / pull a face along its normal (SketchUp Push/Pull). Negative distance
     pushes inward. On a Form it edits geometry; on a wall, floor, door or window it
     edits parameters instead (top face → height, end face → length, side face → moves
@@ -169,25 +205,40 @@ def push_pull_face(*, element: ElementId, face: int, distance: Length) -> Dict[s
         element: Form element id.
         face: Face id within the Form.
         distance: Length: number = millimetres, or a string with units ("3m", "300cm").
+        in_design_option: Optional design option id: make this change inside that option
+            (its layer), not in the shared model. Optional.
 
     Returns:
         The tool's JSON body. Raises FerroError on failure.
     """
-    return _call("push_pull_face", {"element": element, "face": face, "distance": distance})
+    args: Dict[str, Any] = {"element": element, "face": face, "distance": distance}
+    if in_design_option is not None:
+        args["in_design_option"] = in_design_option
+    return _call("push_pull_face", args)
 
 
-def move_elements(*, elements: Sequence[ElementId], vector: Point) -> Dict[str, Any]:
+def move_elements(
+    *,
+    elements: Sequence[ElementId],
+    vector: Point,
+    in_design_option: Optional[int] = None,
+) -> Dict[str, Any]:
     """Move elements by a vector.
 
     Args:
         elements: Element ids.
         vector: Displacement. Point [x, y] or [x, y, z] in millimetres (or strings with
             units); Z is up.
+        in_design_option: Optional design option id: make this change inside that option
+            (its layer), not in the shared model. Optional.
 
     Returns:
         The tool's JSON body. Raises FerroError on failure.
     """
-    return _call("move_elements", {"elements": elements, "vector": vector})
+    args: Dict[str, Any] = {"elements": elements, "vector": vector}
+    if in_design_option is not None:
+        args["in_design_option"] = in_design_option
+    return _call("move_elements", args)
 
 
 def rotate_elements(
@@ -195,6 +246,7 @@ def rotate_elements(
     elements: Sequence[ElementId],
     center: Point,
     angle: float,
+    in_design_option: Optional[int] = None,
 ) -> Dict[str, Any]:
     """Rotate elements about a vertical axis through `center`. Angle in degrees,
     counter-clockwise positive.
@@ -204,11 +256,16 @@ def rotate_elements(
         center: Axis point. Point [x, y] or [x, y, z] in millimetres (or strings with
             units); Z is up.
         angle: Degrees.
+        in_design_option: Optional design option id: make this change inside that option
+            (its layer), not in the shared model. Optional.
 
     Returns:
         The tool's JSON body. Raises FerroError on failure.
     """
-    return _call("rotate_elements", {"elements": elements, "center": center, "angle": angle})
+    args: Dict[str, Any] = {"elements": elements, "center": center, "angle": angle}
+    if in_design_option is not None:
+        args["in_design_option"] = in_design_option
+    return _call("rotate_elements", args)
 
 
 def copy_elements(
@@ -216,6 +273,7 @@ def copy_elements(
     elements: Sequence[ElementId],
     vector: Point,
     count: Optional[int] = None,
+    in_design_option: Optional[int] = None,
 ) -> Dict[str, Any]:
     """Copy elements offset by a vector; count > 1 makes a linear array. Returns new
     ids.
@@ -225,6 +283,8 @@ def copy_elements(
         vector: Offset per copy. Point [x, y] or [x, y, z] in millimetres (or strings
             with units); Z is up.
         count: minimum=1. maximum=1000. Optional.
+        in_design_option: Optional design option id: make this change inside that option
+            (its layer), not in the shared model. Optional.
 
     Returns:
         The tool's JSON body. Raises FerroError on failure.
@@ -232,35 +292,62 @@ def copy_elements(
     args: Dict[str, Any] = {"elements": elements, "vector": vector}
     if count is not None:
         args["count"] = count
+    if in_design_option is not None:
+        args["in_design_option"] = in_design_option
     return _call("copy_elements", args)
 
 
-def delete_elements(*, elements: Sequence[ElementId]) -> Dict[str, Any]:
+def delete_elements(
+    *,
+    elements: Sequence[ElementId],
+    in_design_option: Optional[int] = None,
+) -> Dict[str, Any]:
     """Delete elements. References from other elements are cleared with a warning.
 
     Args:
         elements: Element ids.
+        in_design_option: Optional design option id: make this change inside that option
+            (its layer), not in the shared model. Optional.
 
     Returns:
         The tool's JSON body. Raises FerroError on failure.
     """
-    return _call("delete_elements", {"elements": elements})
+    args: Dict[str, Any] = {"elements": elements}
+    if in_design_option is not None:
+        args["in_design_option"] = in_design_option
+    return _call("delete_elements", args)
 
 
-def set_name(*, element: ElementId, name: Optional[str]) -> Dict[str, Any]:
+def set_name(
+    *,
+    element: ElementId,
+    name: Optional[str],
+    in_design_option: Optional[int] = None,
+) -> Dict[str, Any]:
     """Rename an element (null clears).
 
     Args:
         element: Element id.
         name: Text (None clears).
+        in_design_option: Optional design option id: make this change inside that option
+            (its layer), not in the shared model. Optional.
 
     Returns:
         The tool's JSON body. Raises FerroError on failure.
     """
-    return _call("set_name", {"element": element, "name": name})
+    args: Dict[str, Any] = {"element": element, "name": name}
+    if in_design_option is not None:
+        args["in_design_option"] = in_design_option
+    return _call("set_name", args)
 
 
-def set_parameter(*, element: ElementId, key: str, value: Any) -> Dict[str, Any]:
+def set_parameter(
+    *,
+    element: ElementId,
+    key: str,
+    value: Any,
+    in_design_option: Optional[int] = None,
+) -> Dict[str, Any]:
     """Set a typed parameter. Key format namespace.group.name (e.g.
     ferro.common.comments, acme.energy.conductivity). Value forms: (1) a quantity with a
     unit as text: "0.8 W/mK", "1200 kg/m3", "35 MPa", "0.25 W/m2K", "20 °C", "120
@@ -278,11 +365,16 @@ def set_parameter(*, element: ElementId, key: str, value: Any) -> Dict[str, Any]
         element: Element id.
         key: Text.
         value: JSON object.
+        in_design_option: Optional design option id: make this change inside that option
+            (its layer), not in the shared model. Optional.
 
     Returns:
         The tool's JSON body. Raises FerroError on failure.
     """
-    return _call("set_parameter", {"element": element, "key": key, "value": value})
+    args: Dict[str, Any] = {"element": element, "key": key, "value": value}
+    if in_design_option is not None:
+        args["in_design_option"] = in_design_option
+    return _call("set_parameter", args)
 
 
 def set_parameter_definition(
@@ -293,6 +385,7 @@ def set_parameter_definition(
     description: Optional[str] = None,
     group: Optional[Literal["constraints", "dimensions", "identity_data", "materials", "analysis", "structural", "data"]] = None,
     ifc: Optional[Dict[str, Any]] = None,
+    in_design_option: Optional[int] = None,
     uid: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Define a project parameter key (like a Revit shared parameter): data type, group,
@@ -313,6 +406,8 @@ def set_parameter_definition(
         group: One of: constraints, dimensions, identity_data, materials, analysis,
             structural, data. Optional.
         ifc: JSON object. Optional.
+        in_design_option: Optional design option id: make this change inside that option
+            (its layer), not in the shared model. Optional.
         uid: Optional UUID (8-4-4-4-12). Optional.
 
     Returns:
@@ -327,6 +422,8 @@ def set_parameter_definition(
         args["group"] = group
     if ifc is not None:
         args["ifc"] = ifc
+    if in_design_option is not None:
+        args["in_design_option"] = in_design_option
     if uid is not None:
         args["uid"] = uid
     return _call("set_parameter_definition", args)
@@ -336,6 +433,7 @@ def set_category(
     *,
     element: int,
     category: Literal["forms", "walls", "floors", "roofs", "ceilings", "columns", "doors", "windows", "stairs", "railings", "furniture", "generic_models"],
+    in_design_option: Optional[int] = None,
 ) -> Dict[str, Any]:
     """Classify directly edited geometry (a Form, or a frozen wall / floor) as a BIM
     category: a free-form wall keeps its shape and becomes a Wall with type, materials
@@ -346,17 +444,23 @@ def set_category(
         element: Element with direct geometry.
         category: One of: forms, walls, floors, roofs, ceilings, columns, doors,
             windows, stairs, railings, furniture, generic_models.
+        in_design_option: Optional design option id: make this change inside that option
+            (its layer), not in the shared model. Optional.
 
     Returns:
         The tool's JSON body. Raises FerroError on failure.
     """
-    return _call("set_category", {"element": element, "category": category})
+    args: Dict[str, Any] = {"element": element, "category": category}
+    if in_design_option is not None:
+        args["in_design_option"] = in_design_option
+    return _call("set_category", args)
 
 
 def set_geometry_source(
     *,
     element: ElementId,
     source: Literal["direct", "parametric"],
+    in_design_option: Optional[int] = None,
 ) -> Dict[str, Any]:
     """Switch where an element's geometry comes from. 'direct': freeze a parametric wall
     / floor so it can be edited freely like a SketchUp group (keeps category, type,
@@ -369,17 +473,23 @@ def set_geometry_source(
     Args:
         element: Element id.
         source: One of: direct, parametric.
+        in_design_option: Optional design option id: make this change inside that option
+            (its layer), not in the shared model. Optional.
 
     Returns:
         The tool's JSON body. Raises FerroError on failure.
     """
-    return _call("set_geometry_source", {"element": element, "source": source})
+    args: Dict[str, Any] = {"element": element, "source": source}
+    if in_design_option is not None:
+        args["in_design_option"] = in_design_option
+    return _call("set_geometry_source", args)
 
 
 def set_project_units(
     *,
     spec: Literal["length", "area", "volume", "angle", "mass", "density", "force", "moment", "pressure", "stress", "thermal_conductivity", "thermal_resistance", "u_value", "heat_capacity", "temperature", "power", "illuminance", "flow", "currency", "carbon_mass", "time", "ratio", "number"],
     decimals: Optional[int] = None,
+    in_design_option: Optional[int] = None,
     unit: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Choose how a quantity is shown and typed in this project, e.g. {spec: length,
@@ -392,6 +502,8 @@ def set_project_units(
             heat_capacity, temperature, power, illuminance, flow, currency, carbon_mass,
             time, ratio, number.
         decimals: minimum=0. maximum=9. Optional.
+        in_design_option: Optional design option id: make this change inside that option
+            (its layer), not in the shared model. Optional.
         unit: A unit of that quantity, e.g. mm, m, ft, W/(m·K). Optional.
 
     Returns:
@@ -400,6 +512,8 @@ def set_project_units(
     args: Dict[str, Any] = {"spec": spec}
     if decimals is not None:
         args["decimals"] = decimals
+    if in_design_option is not None:
+        args["in_design_option"] = in_design_option
     if unit is not None:
         args["unit"] = unit
     return _call("set_project_units", args)
@@ -409,6 +523,7 @@ def set_site_location(
     *,
     clear: Optional[bool] = None,
     elevation: Optional[Length] = None,
+    in_design_option: Optional[int] = None,
     latitude: Optional[float] = None,
     longitude: Optional[float] = None,
     place: Optional[str] = None,
@@ -424,6 +539,8 @@ def set_site_location(
         clear: True or False. Optional.
         elevation: Length: number = millimetres, or a string with units ("3m", "300cm").
             Optional.
+        in_design_option: Optional design option id: make this change inside that option
+            (its layer), not in the shared model. Optional.
         latitude: Degrees, -90..90. Optional.
         longitude: Degrees, -180..180. Optional.
         place: Text. Optional.
@@ -438,6 +555,8 @@ def set_site_location(
         args["clear"] = clear
     if elevation is not None:
         args["elevation"] = elevation
+    if in_design_option is not None:
+        args["in_design_option"] = in_design_option
     if latitude is not None:
         args["latitude"] = latitude
     if longitude is not None:
@@ -451,11 +570,17 @@ def set_site_location(
     return _call("set_site_location", args)
 
 
-def set_project_currency(*, currency: Optional[str] = None) -> Dict[str, Any]:
+def set_project_currency(
+    *,
+    currency: Optional[str] = None,
+    in_design_option: Optional[int] = None,
+) -> Dict[str, Any]:
     """Set the currency for costs (ISO 4217, e.g. VND, USD); null clears it.
 
     Args:
         currency: Text (None clears). Optional.
+        in_design_option: Optional design option id: make this change inside that option
+            (its layer), not in the shared model. Optional.
 
     Returns:
         The tool's JSON body. Raises FerroError on failure.
@@ -463,19 +588,26 @@ def set_project_currency(*, currency: Optional[str] = None) -> Dict[str, Any]:
     args: Dict[str, Any] = {}
     if currency is not None:
         args["currency"] = currency
+    if in_design_option is not None:
+        args["in_design_option"] = in_design_option
     return _call("set_project_currency", args)
 
 
-def set_project_name(*, name: str) -> Dict[str, Any]:
+def set_project_name(*, name: str, in_design_option: Optional[int] = None) -> Dict[str, Any]:
     """Rename the project.
 
     Args:
         name: Text.
+        in_design_option: Optional design option id: make this change inside that option
+            (its layer), not in the shared model. Optional.
 
     Returns:
         The tool's JSON body. Raises FerroError on failure.
     """
-    return _call("set_project_name", {"name": name})
+    args: Dict[str, Any] = {"name": name}
+    if in_design_option is not None:
+        args["in_design_option"] = in_design_option
+    return _call("set_project_name", args)
 
 
 def create_material(
@@ -485,6 +617,7 @@ def create_material(
     appearance: Optional[Dict[str, Any]] = None,
     cost: Optional[Dict[str, Any]] = None,
     environmental: Optional[Dict[str, Any]] = None,
+    in_design_option: Optional[int] = None,
     physical: Optional[Dict[str, Any]] = None,
     roughness: Optional[float] = None,
     thermal: Optional[Dict[str, Any]] = None,
@@ -502,6 +635,8 @@ def create_material(
         cost: Unit price. Optional.
         environmental: Embodied carbon (GWP-total, EN 15804 stages) in kg CO2e per
             declared unit. Optional.
+        in_design_option: Optional design option id: make this change inside that option
+            (its layer), not in the shared model. Optional.
         physical: Mechanical data, SI units. Optional.
         roughness: OpenPBR specular_roughness, default 0.8. minimum=0. maximum=1.
             Optional.
@@ -518,6 +653,8 @@ def create_material(
         args["cost"] = cost
     if environmental is not None:
         args["environmental"] = environmental
+    if in_design_option is not None:
+        args["in_design_option"] = in_design_option
     if physical is not None:
         args["physical"] = physical
     if roughness is not None:
@@ -535,6 +672,7 @@ def set_material(
     color: Optional[str] = None,
     cost: Optional[Dict[str, Any]] = None,
     environmental: Optional[Dict[str, Any]] = None,
+    in_design_option: Optional[int] = None,
     physical: Optional[Dict[str, Any]] = None,
     roughness: Optional[float] = None,
     thermal: Optional[Dict[str, Any]] = None,
@@ -553,6 +691,8 @@ def set_material(
         cost: Unit price. Optional.
         environmental: Embodied carbon (GWP-total, EN 15804 stages) in kg CO2e per
             declared unit. Optional.
+        in_design_option: Optional design option id: make this change inside that option
+            (its layer), not in the shared model. Optional.
         physical: Mechanical data, SI units. Optional.
         roughness: minimum=0. maximum=1. Optional.
         thermal: Thermal data, SI units; conductivity gives wall / floor U-values.
@@ -572,6 +712,8 @@ def set_material(
         args["cost"] = cost
     if environmental is not None:
         args["environmental"] = environmental
+    if in_design_option is not None:
+        args["in_design_option"] = in_design_option
     if physical is not None:
         args["physical"] = physical
     if roughness is not None:
@@ -584,6 +726,7 @@ def set_material(
 def create_wall_type(
     *,
     name: str,
+    in_design_option: Optional[int] = None,
     layers: Optional[Sequence[Dict[str, Any]]] = None,
     material: Optional[ElementId] = None,
     thickness: Optional[Length] = None,
@@ -594,6 +737,8 @@ def create_wall_type(
 
     Args:
         name: Text.
+        in_design_option: Optional design option id: make this change inside that option
+            (its layer), not in the shared model. Optional.
         layers: Each item: {function: Literal["structure", "substrate", "insulation",
             "finish", "membrane"], material?: ElementId, thickness: length mm}.
             Optional.
@@ -605,6 +750,8 @@ def create_wall_type(
         The tool's JSON body. Raises FerroError on failure.
     """
     args: Dict[str, Any] = {"name": name}
+    if in_design_option is not None:
+        args["in_design_option"] = in_design_option
     if layers is not None:
         args["layers"] = layers
     if material is not None:
@@ -617,6 +764,7 @@ def create_wall_type(
 def create_floor_type(
     *,
     name: str,
+    in_design_option: Optional[int] = None,
     layers: Optional[Sequence[Dict[str, Any]]] = None,
     material: Optional[ElementId] = None,
     thickness: Optional[Length] = None,
@@ -625,6 +773,8 @@ def create_floor_type(
 
     Args:
         name: Text.
+        in_design_option: Optional design option id: make this change inside that option
+            (its layer), not in the shared model. Optional.
         layers: Each item: {function: Literal["structure", "substrate", "insulation",
             "finish", "membrane"], material?: ElementId, thickness: length mm}.
             Optional.
@@ -636,6 +786,8 @@ def create_floor_type(
         The tool's JSON body. Raises FerroError on failure.
     """
     args: Dict[str, Any] = {"name": name}
+    if in_design_option is not None:
+        args["in_design_option"] = in_design_option
     if layers is not None:
         args["layers"] = layers
     if material is not None:
@@ -651,6 +803,7 @@ def create_wall(
     end: Point,
     base_offset: Optional[Length] = None,
     height: Optional[Length] = None,
+    in_design_option: Optional[int] = None,
     level: Optional[ElementId] = None,
     location_line: Optional[Literal["wall_centerline", "core_centerline", "finish_exterior", "finish_interior"]] = None,
     name: Optional[str] = None,
@@ -673,6 +826,8 @@ def create_wall(
             "300cm"). Optional.
         height: Length: number = millimetres, or a string with units ("3m", "300cm").
             Optional.
+        in_design_option: Optional design option id: make this change inside that option
+            (its layer), not in the shared model. Optional.
         level: Base level id. Optional.
         location_line: One of: wall_centerline, core_centerline, finish_exterior,
             finish_interior. Optional.
@@ -690,6 +845,8 @@ def create_wall(
         args["base_offset"] = base_offset
     if height is not None:
         args["height"] = height
+    if in_design_option is not None:
+        args["in_design_option"] = in_design_option
     if level is not None:
         args["level"] = level
     if location_line is not None:
@@ -711,6 +868,7 @@ def create_walls(
     base_offset: Optional[Length] = None,
     closed: Optional[bool] = None,
     height: Optional[Length] = None,
+    in_design_option: Optional[int] = None,
     level: Optional[ElementId] = None,
     location_line: Optional[Literal["wall_centerline", "core_centerline", "finish_exterior", "finish_interior"]] = None,
     name: Optional[str] = None,
@@ -728,6 +886,8 @@ def create_walls(
         closed: True or False. Optional.
         height: Length: number = millimetres, or a string with units ("3m", "300cm").
             Optional.
+        in_design_option: Optional design option id: make this change inside that option
+            (its layer), not in the shared model. Optional.
         level: Base level id. Optional.
         location_line: One of: wall_centerline, core_centerline, finish_exterior,
             finish_interior. Optional.
@@ -747,6 +907,8 @@ def create_walls(
         args["closed"] = closed
     if height is not None:
         args["height"] = height
+    if in_design_option is not None:
+        args["in_design_option"] = in_design_option
     if level is not None:
         args["level"] = level
     if location_line is not None:
@@ -769,6 +931,7 @@ def create_arc_wall(
     end: Point,
     base_offset: Optional[Length] = None,
     height: Optional[Length] = None,
+    in_design_option: Optional[int] = None,
     level: Optional[ElementId] = None,
     location_line: Optional[Literal["wall_centerline", "core_centerline", "finish_exterior", "finish_interior"]] = None,
     name: Optional[str] = None,
@@ -790,6 +953,8 @@ def create_arc_wall(
             "300cm"). Optional.
         height: Length: number = millimetres, or a string with units ("3m", "300cm").
             Optional.
+        in_design_option: Optional design option id: make this change inside that option
+            (its layer), not in the shared model. Optional.
         level: Base level id. Optional.
         location_line: One of: wall_centerline, core_centerline, finish_exterior,
             finish_interior. Optional.
@@ -807,6 +972,8 @@ def create_arc_wall(
         args["base_offset"] = base_offset
     if height is not None:
         args["height"] = height
+    if in_design_option is not None:
+        args["in_design_option"] = in_design_option
     if level is not None:
         args["level"] = level
     if location_line is not None:
@@ -822,30 +989,50 @@ def create_arc_wall(
     return _call("create_arc_wall", args)
 
 
-def set_wall_height(*, wall: ElementId, height: Length) -> Dict[str, Any]:
+def set_wall_height(
+    *,
+    wall: ElementId,
+    height: Length,
+    in_design_option: Optional[int] = None,
+) -> Dict[str, Any]:
     """Give a wall a fixed (unconnected) height.
 
     Args:
         wall: Wall id.
         height: Length: number = millimetres, or a string with units ("3m", "300cm").
+        in_design_option: Optional design option id: make this change inside that option
+            (its layer), not in the shared model. Optional.
 
     Returns:
         The tool's JSON body. Raises FerroError on failure.
     """
-    return _call("set_wall_height", {"wall": wall, "height": height})
+    args: Dict[str, Any] = {"wall": wall, "height": height}
+    if in_design_option is not None:
+        args["in_design_option"] = in_design_option
+    return _call("set_wall_height", args)
 
 
-def set_element_type(*, element: ElementId, element_type: ElementId) -> Dict[str, Any]:
+def set_element_type(
+    *,
+    element: ElementId,
+    element_type: ElementId,
+    in_design_option: Optional[int] = None,
+) -> Dict[str, Any]:
     """Change the type of a wall (wall type) or floor (floor type).
 
     Args:
         element: Wall or floor id.
         element_type: Type id.
+        in_design_option: Optional design option id: make this change inside that option
+            (its layer), not in the shared model. Optional.
 
     Returns:
         The tool's JSON body. Raises FerroError on failure.
     """
-    return _call("set_element_type", {"element": element, "element_type": element_type})
+    args: Dict[str, Any] = {"element": element, "element_type": element_type}
+    if in_design_option is not None:
+        args["in_design_option"] = in_design_option
+    return _call("set_element_type", args)
 
 
 def create_floor(
@@ -853,6 +1040,7 @@ def create_floor(
     points: Sequence[Point],
     floor_type: Optional[ElementId] = None,
     holes: Optional[Sequence[Sequence[Point]]] = None,
+    in_design_option: Optional[int] = None,
     level: Optional[ElementId] = None,
     name: Optional[str] = None,
     offset: Optional[Length] = None,
@@ -866,6 +1054,8 @@ def create_floor(
             minItems=3.
         floor_type: Optional floor type id. Optional.
         holes: List of point lists [x, y, z] in millimetres. Optional.
+        in_design_option: Optional design option id: make this change inside that option
+            (its layer), not in the shared model. Optional.
         level: Optional level id. Optional.
         name: Text. Optional.
         offset: Length: number = millimetres, or a string with units ("3m", "300cm").
@@ -879,6 +1069,8 @@ def create_floor(
         args["floor_type"] = floor_type
     if holes is not None:
         args["holes"] = holes
+    if in_design_option is not None:
+        args["in_design_option"] = in_design_option
     if level is not None:
         args["level"] = level
     if name is not None:
@@ -894,6 +1086,7 @@ def create_opening(
     kind: Literal["door", "window"],
     position: Length,
     height: Optional[Length] = None,
+    in_design_option: Optional[int] = None,
     name: Optional[str] = None,
     sill: Optional[Length] = None,
     width: Optional[Length] = None,
@@ -908,6 +1101,8 @@ def create_opening(
         position: Length: number = millimetres, or a string with units ("3m", "300cm").
         height: Length: number = millimetres, or a string with units ("3m", "300cm").
             Optional.
+        in_design_option: Optional design option id: make this change inside that option
+            (its layer), not in the shared model. Optional.
         name: Text. Optional.
         sill: Length: number = millimetres, or a string with units ("3m", "300cm").
             Optional.
@@ -920,6 +1115,8 @@ def create_opening(
     args: Dict[str, Any] = {"wall": wall, "kind": kind, "position": position}
     if height is not None:
         args["height"] = height
+    if in_design_option is not None:
+        args["in_design_option"] = in_design_option
     if name is not None:
         args["name"] = name
     if sill is not None:
@@ -933,6 +1130,7 @@ def set_opening(
     *,
     opening: ElementId,
     height: Optional[Length] = None,
+    in_design_option: Optional[int] = None,
     position: Optional[Length] = None,
     sill: Optional[Length] = None,
     width: Optional[Length] = None,
@@ -944,6 +1142,8 @@ def set_opening(
         opening: Door or window id.
         height: Length: number = millimetres, or a string with units ("3m", "300cm").
             Optional.
+        in_design_option: Optional design option id: make this change inside that option
+            (its layer), not in the shared model. Optional.
         position: Length: number = millimetres, or a string with units ("3m", "300cm").
             Optional.
         sill: Length: number = millimetres, or a string with units ("3m", "300cm").
@@ -957,6 +1157,8 @@ def set_opening(
     args: Dict[str, Any] = {"opening": opening}
     if height is not None:
         args["height"] = height
+    if in_design_option is not None:
+        args["in_design_option"] = in_design_option
     if position is not None:
         args["position"] = position
     if sill is not None:
@@ -972,6 +1174,7 @@ def set_wall(
     base_offset: Optional[Length] = None,
     end: Optional[Point] = None,
     height: Optional[Length] = None,
+    in_design_option: Optional[int] = None,
     location_line: Optional[Literal["wall_centerline", "core_centerline", "finish_exterior", "finish_interior"]] = None,
     mid: Optional[Point] = None,
     start: Optional[Point] = None,
@@ -989,6 +1192,8 @@ def set_wall(
             up. Optional.
         height: Length: number = millimetres, or a string with units ("3m", "300cm").
             Optional.
+        in_design_option: Optional design option id: make this change inside that option
+            (its layer), not in the shared model. Optional.
         location_line: One of: wall_centerline, core_centerline, finish_exterior,
             finish_interior. Optional.
         mid: Point on the arc (curved walls). Point [x, y] or [x, y, z] in millimetres
@@ -1009,6 +1214,8 @@ def set_wall(
         args["end"] = end
     if height is not None:
         args["height"] = height
+    if in_design_option is not None:
+        args["in_design_option"] = in_design_option
     if location_line is not None:
         args["location_line"] = location_line
     if mid is not None:
@@ -1026,6 +1233,7 @@ def set_floor(
     *,
     floor: ElementId,
     holes: Optional[Sequence[Sequence[Point]]] = None,
+    in_design_option: Optional[int] = None,
     offset: Optional[Length] = None,
     points: Optional[Sequence[Point]] = None,
 ) -> Dict[str, Any]:
@@ -1035,6 +1243,8 @@ def set_floor(
     Args:
         floor: Floor id.
         holes: List of point lists [x, y, z] in millimetres. Optional.
+        in_design_option: Optional design option id: make this change inside that option
+            (its layer), not in the shared model. Optional.
         offset: Length: number = millimetres, or a string with units ("3m", "300cm").
             Optional.
         points: List of points [x, y, z] in millimetres. Each: Vertex. minItems=3.
@@ -1046,6 +1256,8 @@ def set_floor(
     args: Dict[str, Any] = {"floor": floor}
     if holes is not None:
         args["holes"] = holes
+    if in_design_option is not None:
+        args["in_design_option"] = in_design_option
     if offset is not None:
         args["offset"] = offset
     if points is not None:
@@ -1059,6 +1271,7 @@ def imprint_face(
     face: ElementId,
     points: Sequence[Point],
     closed: Optional[bool] = None,
+    in_design_option: Optional[int] = None,
 ) -> Dict[str, Any]:
     """Draw on a face of a Form (lines or a closed shape, points on the face plane): the
     face splits, like drawing on a face in SketchUp. Returns new_faces, ready for
@@ -1070,6 +1283,8 @@ def imprint_face(
         points: List of points [x, y, z] in millimetres. Each: Point on the face.
             minItems=2.
         closed: True or False. Optional.
+        in_design_option: Optional design option id: make this change inside that option
+            (its layer), not in the shared model. Optional.
 
     Returns:
         The tool's JSON body. Raises FerroError on failure.
@@ -1077,6 +1292,8 @@ def imprint_face(
     args: Dict[str, Any] = {"element": element, "face": face, "points": points}
     if closed is not None:
         args["closed"] = closed
+    if in_design_option is not None:
+        args["in_design_option"] = in_design_option
     return _call("imprint_face", args)
 
 
@@ -1086,6 +1303,7 @@ def create_circle(
     radius: Length,
     element: Optional[ElementId] = None,
     face: Optional[ElementId] = None,
+    in_design_option: Optional[int] = None,
     level: Optional[ElementId] = None,
     name: Optional[str] = None,
     normal: Optional[Point] = None,
@@ -1101,6 +1319,8 @@ def create_circle(
         radius: Length: number = millimetres, or a string with units ("3m", "300cm").
         element: Form id. Optional.
         face: Face id. Optional.
+        in_design_option: Optional design option id: make this change inside that option
+            (its layer), not in the shared model. Optional.
         level: Optional level id. Optional.
         name: Text. Optional.
         normal: Normal direction. Point [x, y] or [x, y, z] in millimetres (or strings
@@ -1115,6 +1335,8 @@ def create_circle(
         args["element"] = element
     if face is not None:
         args["face"] = face
+    if in_design_option is not None:
+        args["in_design_option"] = in_design_option
     if level is not None:
         args["level"] = level
     if name is not None:
@@ -1126,7 +1348,13 @@ def create_circle(
     return _call("create_circle", args)
 
 
-def offset_face(*, element: ElementId, face: ElementId, distance: Length) -> Dict[str, Any]:
+def offset_face(
+    *,
+    element: ElementId,
+    face: ElementId,
+    distance: Length,
+    in_design_option: Optional[int] = None,
+) -> Dict[str, Any]:
     """Offset a face's outline inwards by a distance (SketchUp Offset); the inner copy
     splits the face.
 
@@ -1134,11 +1362,16 @@ def offset_face(*, element: ElementId, face: ElementId, distance: Length) -> Dic
         element: Form id.
         face: Face id.
         distance: Length: number = millimetres, or a string with units ("3m", "300cm").
+        in_design_option: Optional design option id: make this change inside that option
+            (its layer), not in the shared model. Optional.
 
     Returns:
         The tool's JSON body. Raises FerroError on failure.
     """
-    return _call("offset_face", {"element": element, "face": face, "distance": distance})
+    args: Dict[str, Any] = {"element": element, "face": face, "distance": distance}
+    if in_design_option is not None:
+        args["in_design_option"] = in_design_option
+    return _call("offset_face", args)
 
 
 def move_geometry(
@@ -1147,6 +1380,7 @@ def move_geometry(
     vector: Point,
     edges: Optional[Sequence[int]] = None,
     faces: Optional[Sequence[int]] = None,
+    in_design_option: Optional[int] = None,
     vertices: Optional[Sequence[int]] = None,
 ) -> Dict[str, Any]:
     """Move vertices, edges or faces of a Form (connected faces stretch), e.g. move a
@@ -1158,6 +1392,8 @@ def move_geometry(
             units); Z is up.
         edges: Edge ids. Optional.
         faces: Face ids. Optional.
+        in_design_option: Optional design option id: make this change inside that option
+            (its layer), not in the shared model. Optional.
         vertices: Vertex ids. Optional.
 
     Returns:
@@ -1168,6 +1404,8 @@ def move_geometry(
         args["edges"] = edges
     if faces is not None:
         args["faces"] = faces
+    if in_design_option is not None:
+        args["in_design_option"] = in_design_option
     if vertices is not None:
         args["vertices"] = vertices
     return _call("move_geometry", args)
@@ -1179,6 +1417,7 @@ def scale_elements(
     center: Point,
     factor: Optional[float] = None,
     factors: Optional[Sequence[float]] = None,
+    in_design_option: Optional[int] = None,
 ) -> Dict[str, Any]:
     """Scale Forms about a centre: factor (uniform) or factors [x, y, z].
 
@@ -1188,6 +1427,8 @@ def scale_elements(
             units); Z is up.
         factor: Number. Optional.
         factors: minItems=3. maxItems=3. Optional.
+        in_design_option: Optional design option id: make this change inside that option
+            (its layer), not in the shared model. Optional.
 
     Returns:
         The tool's JSON body. Raises FerroError on failure.
@@ -1197,34 +1438,56 @@ def scale_elements(
         args["factor"] = factor
     if factors is not None:
         args["factors"] = factors
+    if in_design_option is not None:
+        args["in_design_option"] = in_design_option
     return _call("scale_elements", args)
 
 
-def erase_edges(*, element: ElementId, edges: Sequence[int]) -> Dict[str, Any]:
+def erase_edges(
+    *,
+    element: ElementId,
+    edges: Sequence[int],
+    in_design_option: Optional[int] = None,
+) -> Dict[str, Any]:
     """Erase edges of a Form: an edge between faces in one plane merges them; other
     edges remove their faces.
 
     Args:
         element: Form id.
         edges: Edge ids.
+        in_design_option: Optional design option id: make this change inside that option
+            (its layer), not in the shared model. Optional.
 
     Returns:
         The tool's JSON body. Raises FerroError on failure.
     """
-    return _call("erase_edges", {"element": element, "edges": edges})
+    args: Dict[str, Any] = {"element": element, "edges": edges}
+    if in_design_option is not None:
+        args["in_design_option"] = in_design_option
+    return _call("erase_edges", args)
 
 
-def erase_faces(*, element: ElementId, faces: Sequence[int]) -> Dict[str, Any]:
+def erase_faces(
+    *,
+    element: ElementId,
+    faces: Sequence[int],
+    in_design_option: Optional[int] = None,
+) -> Dict[str, Any]:
     """Erase faces of a Form (it becomes open); erasing all faces deletes it.
 
     Args:
         element: Form id.
         faces: Face ids.
+        in_design_option: Optional design option id: make this change inside that option
+            (its layer), not in the shared model. Optional.
 
     Returns:
         The tool's JSON body. Raises FerroError on failure.
     """
-    return _call("erase_faces", {"element": element, "faces": faces})
+    args: Dict[str, Any] = {"element": element, "faces": faces}
+    if in_design_option is not None:
+        args["in_design_option"] = in_design_option
+    return _call("erase_faces", args)
 
 
 def create_phase(
@@ -1232,6 +1495,7 @@ def create_phase(
     name: str,
     before: Optional[int] = None,
     end_date: Optional[str] = None,
+    in_design_option: Optional[int] = None,
     start_date: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Create a construction phase (Revit Phase), appended at the end or inserted before
@@ -1242,6 +1506,8 @@ def create_phase(
         name: Text.
         before: Optional phase to insert before. Optional.
         end_date: YYYY-MM-DD. Optional.
+        in_design_option: Optional design option id: make this change inside that option
+            (its layer), not in the shared model. Optional.
         start_date: YYYY-MM-DD. Optional.
 
     Returns:
@@ -1252,6 +1518,8 @@ def create_phase(
         args["before"] = before
     if end_date is not None:
         args["end_date"] = end_date
+    if in_design_option is not None:
+        args["in_design_option"] = in_design_option
     if start_date is not None:
         args["start_date"] = start_date
     return _call("create_phase", args)
@@ -1261,6 +1529,7 @@ def set_phase(
     *,
     phase: ElementId,
     end_date: Optional[str] = None,
+    in_design_option: Optional[int] = None,
     name: Optional[str] = None,
     position: Optional[int] = None,
     start_date: Optional[str] = None,
@@ -1272,6 +1541,8 @@ def set_phase(
     Args:
         phase: Phase id.
         end_date: Text. Optional.
+        in_design_option: Optional design option id: make this change inside that option
+            (its layer), not in the shared model. Optional.
         name: Text. Optional.
         position: minimum=0. Optional.
         start_date: Text. Optional.
@@ -1282,6 +1553,8 @@ def set_phase(
     args: Dict[str, Any] = {"phase": phase}
     if end_date is not None:
         args["end_date"] = end_date
+    if in_design_option is not None:
+        args["in_design_option"] = in_design_option
     if name is not None:
         args["name"] = name
     if position is not None:
@@ -1291,19 +1564,28 @@ def set_phase(
     return _call("set_phase", args)
 
 
-def delete_phase(*, phase: ElementId, merge_into: Optional[int] = None) -> Dict[str, Any]:
+def delete_phase(
+    *,
+    phase: ElementId,
+    in_design_option: Optional[int] = None,
+    merge_into: Optional[int] = None,
+) -> Dict[str, Any]:
     """Delete a phase. A phase used by elements needs `merge_into`: the phase just
     before or after it, which its elements then use (Revit: combine with previous /
     next).
 
     Args:
         phase: Phase id.
+        in_design_option: Optional design option id: make this change inside that option
+            (its layer), not in the shared model. Optional.
         merge_into: Neighbouring phase that takes over its elements. Optional.
 
     Returns:
         The tool's JSON body. Raises FerroError on failure.
     """
     args: Dict[str, Any] = {"phase": phase}
+    if in_design_option is not None:
+        args["in_design_option"] = in_design_option
     if merge_into is not None:
         args["merge_into"] = merge_into
     return _call("delete_phase", args)
@@ -1314,6 +1596,7 @@ def set_element_phase(
     elements: Sequence[ElementId],
     created: Optional[ElementId] = None,
     demolished: Optional[ElementId] = None,
+    in_design_option: Optional[int] = None,
 ) -> Dict[str, Any]:
     """Set the phase elements are created in and / or demolished in (Revit Phase Created
     / Phase Demolished). Omit a field to keep it, null clears it. Demolished must be the
@@ -1324,6 +1607,8 @@ def set_element_phase(
         elements: Element ids (walls, floors, doors, windows, Forms).
         created: Phase id. Optional.
         demolished: Phase id. Optional.
+        in_design_option: Optional design option id: make this change inside that option
+            (its layer), not in the shared model. Optional.
 
     Returns:
         The tool's JSON body. Raises FerroError on failure.
@@ -1333,6 +1618,8 @@ def set_element_phase(
         args["created"] = created
     if demolished is not None:
         args["demolished"] = demolished
+    if in_design_option is not None:
+        args["in_design_option"] = in_design_option
     return _call("set_element_phase", args)
 
 
@@ -1340,6 +1627,7 @@ def set_renovation_status(
     *,
     elements: Sequence[ElementId],
     status: Literal["existing", "demolish", "new"],
+    in_design_option: Optional[int] = None,
 ) -> Dict[str, Any]:
     """Simple renovation mode (ArchiCAD-like): mark elements existing, to be demolished,
     or new. Uses the first and last phase; creates "Existing" and "New Construction" if
@@ -1348,11 +1636,16 @@ def set_renovation_status(
     Args:
         elements: Element ids.
         status: One of: existing, demolish, new.
+        in_design_option: Optional design option id: make this change inside that option
+            (its layer), not in the shared model. Optional.
 
     Returns:
         The tool's JSON body. Raises FerroError on failure.
     """
-    return _call("set_renovation_status", {"elements": elements, "status": status})
+    args: Dict[str, Any] = {"elements": elements, "status": status}
+    if in_design_option is not None:
+        args["in_design_option"] = in_design_option
+    return _call("set_renovation_status", args)
 
 
 def get_phase_quantities(*, phase: Optional[int] = None) -> Dict[str, Any]:
@@ -1377,6 +1670,7 @@ def create_relationship(
     *,
     kind: Literal["join", "cut", "host", "attach", "bounds", "connect", "aggregate"],
     elements: Sequence[ElementId],
+    in_design_option: Optional[int] = None,
     phase: Optional[ElementId] = None,
 ) -> Dict[str, Any]:
     """Link elements with a relationship row (stored as data, saved, undoable). Order of
@@ -1389,28 +1683,236 @@ def create_relationship(
     Args:
         kind: One of: join, cut, host, attach, bounds, connect, aggregate.
         elements: Element ids, ordered as the kind says.
+        in_design_option: Optional design option id: make this change inside that option
+            (its layer), not in the shared model. Optional.
         phase: Optional phase id. Optional.
 
     Returns:
         The tool's JSON body. Raises FerroError on failure.
     """
     args: Dict[str, Any] = {"kind": kind, "elements": elements}
+    if in_design_option is not None:
+        args["in_design_option"] = in_design_option
     if phase is not None:
         args["phase"] = phase
     return _call("create_relationship", args)
 
 
-def delete_relationship(*, relationship: str) -> Dict[str, Any]:
+def delete_relationship(
+    *,
+    relationship: str,
+    in_design_option: Optional[int] = None,
+) -> Dict[str, Any]:
     """Remove a relationship row by uid; the elements stay. Deleting an element removes
     its rows automatically.
 
     Args:
         relationship: Relationship uid (from create_relationship or list_relationships).
+        in_design_option: Optional design option id: make this change inside that option
+            (its layer), not in the shared model. Optional.
 
     Returns:
         The tool's JSON body. Raises FerroError on failure.
     """
-    return _call("delete_relationship", {"relationship": relationship})
+    args: Dict[str, Any] = {"relationship": relationship}
+    if in_design_option is not None:
+        args["in_design_option"] = in_design_option
+    return _call("delete_relationship", args)
+
+
+def create_option_set(*, name: str) -> Dict[str, Any]:
+    """Create a design option set (Revit Option Set) with its first option "Option 1"
+    (primary, empty). Options are alternatives shown one per set; each is a layer of
+    changes over the shared model. Returns {element: set, option}.
+
+    Args:
+        name: Text.
+
+    Returns:
+        The tool's JSON body. Raises FerroError on failure.
+    """
+    return _call("create_option_set", {"name": name})
+
+
+def set_option_set(
+    *,
+    set: ElementId,
+    name: Optional[str] = None,
+    position: Optional[int] = None,
+) -> Dict[str, Any]:
+    """Rename an option set or move it to `position` (0 = first). Layers of a
+    combination apply in set order.
+
+    Args:
+        set: Option set id.
+        name: Text. Optional.
+        position: minimum=0. Optional.
+
+    Returns:
+        The tool's JSON body. Raises FerroError on failure.
+    """
+    args: Dict[str, Any] = {"set": set}
+    if name is not None:
+        args["name"] = name
+    if position is not None:
+        args["position"] = position
+    return _call("set_option_set", args)
+
+
+def delete_option_set(*, set: ElementId) -> Dict[str, Any]:
+    """Delete an option set with all its options (their layers stop being shown; the
+    shared model is unchanged).
+
+    Args:
+        set: Option set id.
+
+    Returns:
+        The tool's JSON body. Raises FerroError on failure.
+    """
+    return _call("delete_option_set", {"set": set})
+
+
+def create_design_option(
+    *,
+    set: ElementId,
+    copy_from: Optional[int] = None,
+    name: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Add an option to a set: empty, or a copy of `copy_from`'s layer. Primary only if
+    the set has no other open option. To fill it, run any command with
+    `in_design_option` set to its id. Returns {element, is_primary}.
+
+    Args:
+        set: Option set id.
+        copy_from: Option whose layer to copy. Optional.
+        name: Text. Optional.
+
+    Returns:
+        The tool's JSON body. Raises FerroError on failure.
+    """
+    args: Dict[str, Any] = {"set": set}
+    if copy_from is not None:
+        args["copy_from"] = copy_from
+    if name is not None:
+        args["name"] = name
+    return _call("create_design_option", args)
+
+
+def set_design_option(
+    *,
+    option: ElementId,
+    changes: Optional[Sequence[Dict[str, Any]]] = None,
+    is_primary: Optional[bool] = None,
+    name: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Edit an open design option: rename, make it primary (is_primary: true), or
+    replace its layer (`changes`, checked against the shared model; usually easier: run
+    commands with `in_design_option`). Change list: [{"op": "set", "path":
+    "/elements/<uid>/name", "value": ...} | {"op": "remove", "path":
+    "/elements/<uid>"}]; paths are JSON pointers into {project, elements: {uid:
+    element}, relationships: {uid: row}}, references between elements are uids.
+
+    Args:
+        option: Design option id.
+        changes: Change list: [{"op": "set", "path": "/elements/<uid>/name", "value":
+            ...} | {"op": "remove", "path": "/elements/<uid>"}]; paths are JSON pointers
+            into {project, elements: {uid: element}, relationships: {uid: row}},
+            references between elements are uids.. Optional.
+        is_primary: True or False. Optional.
+        name: Text. Optional.
+
+    Returns:
+        The tool's JSON body. Raises FerroError on failure.
+    """
+    args: Dict[str, Any] = {"option": option}
+    if changes is not None:
+        args["changes"] = changes
+    if is_primary is not None:
+        args["is_primary"] = is_primary
+    if name is not None:
+        args["name"] = name
+    return _call("set_design_option", args)
+
+
+def delete_design_option(*, option: ElementId) -> Dict[str, Any]:
+    """Delete a design option and its layer. The primary option cannot be deleted (make
+    another primary first).
+
+    Args:
+        option: Design option id.
+
+    Returns:
+        The tool's JSON body. Raises FerroError on failure.
+    """
+    return _call("delete_design_option", {"option": option})
+
+
+def accept_design_option(*, option: ElementId) -> Dict[str, Any]:
+    """Accept a design option: merge its layer into the shared model (like merging a
+    branch). The other options of its set are archived (kept, not deleted). Returns
+    {accepted, archived}.
+
+    Args:
+        option: Design option id.
+
+    Returns:
+        The tool's JSON body. Raises FerroError on failure.
+    """
+    return _call("accept_design_option", {"option": option})
+
+
+def apply_changes(*, changes: Sequence[Dict[str, Any]]) -> Dict[str, Any]:
+    """Apply a change list to the document, all or nothing (e.g. from diff_documents).
+    Change list: [{"op": "set", "path": "/elements/<uid>/name", "value": ...} | {"op":
+    "remove", "path": "/elements/<uid>"}]; paths are JSON pointers into {project,
+    elements: {uid: element}, relationships: {uid: row}}, references between elements
+    are uids.
+
+    Args:
+        changes: Change list: [{"op": "set", "path": "/elements/<uid>/name", "value":
+            ...} | {"op": "remove", "path": "/elements/<uid>"}]; paths are JSON pointers
+            into {project, elements: {uid: element}, relationships: {uid: row}},
+            references between elements are uids..
+
+    Returns:
+        The tool's JSON body. Raises FerroError on failure.
+    """
+    return _call("apply_changes", {"changes": changes})
+
+
+def list_design_options() -> Dict[str, Any]:
+    """Option sets in order with their options: id, name, primary, status (open /
+    accepted / archived), what each layer adds / removes / overrides, and failures
+    (layers that no longer apply, conflicts in the primary combination).
+
+    Returns:
+        The tool's JSON body. Raises FerroError on failure.
+    """
+    return _call("list_design_options", {})
+
+
+def diff_documents(*, from_: Optional[Any] = None, to: Optional[Any] = None) -> Dict[str, Any]:
+    """Change list from one view of the open document to another, e.g. what option B
+    changes compared with the primary combination. Feed it to apply_changes to reproduce
+    it.
+
+    Args:
+        from_: From (default "shared"): "shared" (the shared model, no option layers),
+            [] (primary combination), or option ids (one per option set; other sets show
+            their primary). Optional.
+        to: To (default [] = primary combination): "shared" (the shared model, no option
+            layers), [] (primary combination), or option ids (one per option set; other
+            sets show their primary). Optional.
+
+    Returns:
+        The tool's JSON body. Raises FerroError on failure.
+    """
+    args: Dict[str, Any] = {}
+    if from_ is not None:
+        args["from"] = from_
+    if to is not None:
+        args["to"] = to
+    return _call("diff_documents", args)
 
 
 def list_relationships(*, element: Optional[ElementId] = None) -> Dict[str, Any]:
@@ -1436,6 +1938,7 @@ def create_view(
     camera: Optional[Dict[str, Any]] = None,
     depth: Optional[Length] = None,
     display_style: Optional[Literal["shaded", "x_ray", "wireframe", "hidden_line"]] = None,
+    in_design_option: Optional[int] = None,
     level: Optional[int] = None,
     phase: Optional[int] = None,
     phase_filter: Optional[Literal["show_all", "show_complete", "show_new", "show_previous_and_demo", "show_previous_and_new", "show_demo_and_new", "no_overrides"]] = None,
@@ -1456,6 +1959,8 @@ def create_view(
         depth: Length: number = millimetres, or a string with units ("3m", "300cm").
             Optional.
         display_style: One of: shaded, x_ray, wireframe, hidden_line. Optional.
+        in_design_option: Optional design option id: make this change inside that option
+            (its layer), not in the shared model. Optional.
         level: Level of a plan view. Optional.
         phase: Phase shown by the view (null = the last phase). Optional.
         phase_filter: Revit phase filter: which statuses are shown and with status
@@ -1479,6 +1984,8 @@ def create_view(
         args["depth"] = depth
     if display_style is not None:
         args["display_style"] = display_style
+    if in_design_option is not None:
+        args["in_design_option"] = in_design_option
     if level is not None:
         args["level"] = level
     if phase is not None:
@@ -1502,6 +2009,7 @@ def set_view(
     display_style: Optional[Literal["shaded", "x_ray", "wireframe", "hidden_line"]] = None,
     hidden_tags: Optional[Sequence[str]] = None,
     hide: Optional[Sequence[int]] = None,
+    in_design_option: Optional[int] = None,
     name: Optional[str] = None,
     phase: Optional[int] = None,
     phase_filter: Optional[Literal["show_all", "show_complete", "show_new", "show_previous_and_demo", "show_previous_and_new", "show_demo_and_new", "no_overrides"]] = None,
@@ -1525,6 +2033,8 @@ def set_view(
         display_style: One of: shaded, x_ray, wireframe, hidden_line. Optional.
         hidden_tags: Tags whose elements are not shown. Optional.
         hide: Elements to hide in the view. Optional.
+        in_design_option: Optional design option id: make this change inside that option
+            (its layer), not in the shared model. Optional.
         name: Text. Optional.
         phase: Phase shown by the view (null = the last phase). Optional.
         phase_filter: Revit phase filter: which statuses are shown and with status
@@ -1554,6 +2064,8 @@ def set_view(
         args["hidden_tags"] = hidden_tags
     if hide is not None:
         args["hide"] = hide
+    if in_design_option is not None:
+        args["in_design_option"] = in_design_option
     if name is not None:
         args["name"] = name
     if phase is not None:
@@ -1573,16 +2085,21 @@ def set_view(
     return _call("set_view", args)
 
 
-def delete_view(*, view: ElementId) -> Dict[str, Any]:
+def delete_view(*, view: ElementId, in_design_option: Optional[int] = None) -> Dict[str, Any]:
     """Delete a view (deleting a level also deletes its plan views).
 
     Args:
         view: View id.
+        in_design_option: Optional design option id: make this change inside that option
+            (its layer), not in the shared model. Optional.
 
     Returns:
         The tool's JSON body. Raises FerroError on failure.
     """
-    return _call("delete_view", {"view": view})
+    args: Dict[str, Any] = {"view": view}
+    if in_design_option is not None:
+        args["in_design_option"] = in_design_option
+    return _call("delete_view", args)
 
 
 def get_selection() -> Dict[str, Any]:
@@ -1647,12 +2164,20 @@ def revit_import(*, snapshot: Dict[str, Any]) -> Dict[str, Any]:
     return _call("revit_import", {"snapshot": snapshot})
 
 
-def list_elements(*, category: Optional[str] = None) -> Dict[str, Any]:
+def list_elements(
+    *,
+    category: Optional[str] = None,
+    combination: Optional[Any] = None,
+) -> Dict[str, Any]:
     """Summarise the model: id, uid, name, category, level, faces, area (m²), volume
-    (m³). Optional category filter.
+    (m³). Optional category filter. `combination` shows the model as seen with design
+    options (elements added by an option carry design_option).
 
     Args:
         category: Text. Optional.
+        combination: Optional view (default: the shared model): "shared" (the shared
+            model, no option layers), [] (primary combination), or option ids (one per
+            option set; other sets show their primary). Optional.
 
     Returns:
         The tool's JSON body. Raises FerroError on failure.
@@ -1660,6 +2185,8 @@ def list_elements(*, category: Optional[str] = None) -> Dict[str, Any]:
     args: Dict[str, Any] = {}
     if category is not None:
         args["category"] = category
+    if combination is not None:
+        args["combination"] = combination
     return _call("list_elements", args)
 
 
@@ -1849,6 +2376,16 @@ TOOL_NAMES = (
     "get_phase_quantities",
     "create_relationship",
     "delete_relationship",
+    "create_option_set",
+    "set_option_set",
+    "delete_option_set",
+    "create_design_option",
+    "set_design_option",
+    "delete_design_option",
+    "accept_design_option",
+    "apply_changes",
+    "list_design_options",
+    "diff_documents",
     "list_relationships",
     "create_view",
     "set_view",

@@ -272,6 +272,11 @@ fn unescape(segment: &str) -> String {
     segment.replace("~1", "/").replace("~0", "~")
 }
 
+/// RFC 6901 unescaping of one path segment (`~1` → `/`, `~0` → `~`).
+pub fn unescape_segment(segment: &str) -> String {
+    unescape(segment)
+}
+
 fn segments(path: &str) -> Result<Vec<String>, ChangeError> {
     let rest = path.strip_prefix('/').ok_or_else(|| {
         ChangeError::new(
@@ -361,7 +366,8 @@ fn apply_value(root: &mut Value, change: &Change) -> Result<(), ChangeError> {
 }
 
 /// Apply edits to `doc`. Elements keep their `ElementId`; new elements get
-/// ids after the highest one, in uid order. Fails (and changes nothing)
+/// ids from the document's next free id on (never an id used before), in
+/// uid order. Fails (and changes nothing)
 /// with `ferro.change.*` on a bad path, a missing target, a reference to an
 /// element that does not exist, or data that is not a valid element.
 pub fn apply(doc: &Document, changes: &[Change]) -> Result<Document, ChangeError> {
@@ -378,7 +384,7 @@ pub fn apply(doc: &Document, changes: &[Change]) -> Result<Document, ChangeError
     // Ids: kept for existing uids, fresh for new ones.
     let old: HashMap<String, ElementId> =
         doc.elements().map(|e| (e.uid.to_string(), e.id)).collect();
-    let mut next = doc.elements().map(|e| e.id.0).max().unwrap_or(0) + 1;
+    let mut next = doc.next_element_id();
     let mut id_of: BTreeMap<String, u64> = BTreeMap::new();
     for uid in elements.keys() {
         let id = match old.get(uid) {
@@ -454,6 +460,28 @@ pub fn apply(doc: &Document, changes: &[Change]) -> Result<Document, ChangeError
     Document::from_parts(project, out)
         .and_then(|d| d.with_relationships(table))
         .map_err(|m| ChangeError::new("ferro.change.invalid", m))
+}
+
+/// Edits that apply (in order) and edits that do not, each with the reason.
+pub type Partition = (Vec<Change>, Vec<(Change, ChangeError)>);
+
+/// Split `changes` into those that apply to `doc` one after the other and
+/// those that do not (with the reason), keeping their order. Used to drop
+/// the edits of a layer that no longer apply (e.g. overrides of an element
+/// deleted since). The kept edits are then checked together; if they still
+/// fail (e.g. a reference to a removed element), that error is returned.
+pub fn partition_applicable(doc: &Document, changes: &[Change]) -> Result<Partition, ChangeError> {
+    let mut root = document_value(doc)?;
+    let (mut kept, mut dropped) = (Vec::new(), Vec::new());
+    for c in changes {
+        // `apply_value` fails before writing anything, so `root` stays valid.
+        match apply_value(&mut root, c) {
+            Ok(()) => kept.push(c.clone()),
+            Err(e) => dropped.push((c.clone(), e)),
+        }
+    }
+    apply(doc, &kept)?;
+    Ok((kept, dropped))
 }
 
 /// Paths where `ours` and `theirs` disagree: both edit the same path with

@@ -8,6 +8,7 @@
 pub mod bim;
 mod category;
 pub mod change;
+pub mod design_option;
 mod document;
 mod element;
 pub mod generate;
@@ -23,6 +24,7 @@ pub mod structure_quantities;
 pub mod view;
 
 pub use category::Category;
+pub use design_option::{Combination, DesignOption, OptionSet, OptionStatus};
 pub use document::{Document, ProjectInfo, ProjectOrigins, EXTENT_LIMIT_MM};
 pub use element::{Element, ElementBody, Form, GeometrySource, Level};
 pub use ids::{ElementId, Uid};

@@ -64,6 +64,9 @@ pub struct OpCurve {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "op", rename_all = "snake_case")]
 pub enum RevitOp {
+    /// Something the add-in should show the user; changes nothing (e.g.
+    /// design options other than the primary ones are not sent yet).
+    Warning { code: String, message: String },
     /// Delete the Revit element (skip silently if it is already gone).
     Delete {
         ferro_uid: String,
@@ -231,6 +234,7 @@ impl RevitOp {
     pub fn uid(&self) -> &str {
         match self {
             RevitOp::Delete { ferro_uid, .. } => ferro_uid,
+            RevitOp::Warning { .. } => "",
             RevitOp::Material { uid, .. }
             | RevitOp::Level { uid, .. }
             | RevitOp::WallType { uid, .. }
@@ -246,7 +250,7 @@ impl RevitOp {
 
     fn signature_mut(&mut self) -> Option<&mut String> {
         match self {
-            RevitOp::Delete { .. } => None,
+            RevitOp::Delete { .. } | RevitOp::Warning { .. } => None,
             RevitOp::Material { signature, .. }
             | RevitOp::Level { signature, .. }
             | RevitOp::WallType { signature, .. }
@@ -274,7 +278,7 @@ impl RevitOp {
 
     fn signature(&self) -> &str {
         match self {
-            RevitOp::Delete { .. } => "",
+            RevitOp::Delete { .. } | RevitOp::Warning { .. } => "",
             RevitOp::Material { signature, .. }
             | RevitOp::Level { signature, .. }
             | RevitOp::WallType { signature, .. }
@@ -376,10 +380,53 @@ fn site_location_op(doc: &Document) -> Option<RevitOp> {
 }
 
 /// Operations that bring a Revit model holding `state` up to date with
-/// `doc`. Order: deletes, site location, materials, levels and phases,
-/// types, walls, floors, openings, direct shapes. Elements whose signature
-/// is unchanged are skipped.
+/// `doc`. Order: warnings, deletes, site location, materials, levels and
+/// phases, types, walls, floors, openings, direct shapes. Elements whose
+/// signature is unchanged are skipped.
+///
+/// Design options (ADR 0006): Revit gets the primary combination. When
+/// other open options exist, a `warning` (`ferro.revit.design_options`)
+/// says they are not sent; when the primary combination cannot be resolved
+/// (conflicting or stale option layers), a `warning`
+/// (`ferro.revit.design_option_failed`) and the shared model are sent.
 pub fn plan(doc: &Document, state: &RevitState) -> Vec<RevitOp> {
+    if doc.option_sets().is_empty() {
+        return plan_resolved(doc, state);
+    }
+    let mut warnings = Vec::new();
+    let others = doc.secondary_options();
+    if !others.is_empty() {
+        warnings.push(RevitOp::Warning {
+            code: "ferro.revit.design_options".into(),
+            message: format!(
+                "only the primary design options are sent to Revit; {} other option(s) are not",
+                others.len()
+            ),
+        });
+    }
+    let combination = ferro_core::model::Combination::primary();
+    let mut out = match ferro_core::ops::design_option_commands::resolve(doc, &combination) {
+        Ok(seen) => plan_resolved(&seen, state),
+        Err(f) => {
+            warnings.push(RevitOp::Warning {
+                code: "ferro.revit.design_option_failed".into(),
+                message: format!(
+                    "the primary design options cannot be shown ({}); the shared model is sent",
+                    f.iter()
+                        .map(|x| x.code.as_str())
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                ),
+            });
+            plan_resolved(doc, state)
+        }
+    };
+    warnings.append(&mut out);
+    warnings
+}
+
+/// [`plan`] for a document whose design options are already resolved.
+fn plan_resolved(doc: &Document, state: &RevitState) -> Vec<RevitOp> {
     let uid_of = |id: ferro_core::ElementId| doc.get(id).map(|e| e.uid.to_string());
     let needs_default_level = doc.elements().any(|e| {
         e.level_id.is_none()
@@ -577,6 +624,8 @@ pub fn plan(doc: &Document, state: &RevitState) -> Vec<RevitOp> {
                     },
                 )
             }
+            // Design options are resolved before planning (see `plan`).
+            ElementBody::OptionSet(_) | ElementBody::DesignOption(_) => continue,
             // Phases go first, with the levels (elements refer to them).
             ElementBody::Phase(p) => (
                 1,
@@ -704,6 +753,43 @@ mod tests {
     use serde_json::json;
 
     #[test]
+    fn primary_design_options_are_planned_with_a_warning_for_the_others() {
+        let mut s = house();
+        let run = |s: &mut ferro_core::Session, t: &str, a: serde_json::Value| {
+            s.execute(AnyCommand::from_tool(t, &a).unwrap(), &ExecContext::user())
+                .unwrap()
+                .output
+        };
+        let o = run(&mut s, "create_option_set", json!({"name": "Roof"}));
+        let a = ferro_core::ElementId(o["option"].as_u64().unwrap());
+        let only_primary = plan(s.doc(), &RevitState::default());
+        assert!(only_primary
+            .iter()
+            .all(|o| !matches!(o, RevitOp::Warning { .. })));
+        s.execute_in_option(
+            a,
+            &ferro_core::model::Combination::primary(),
+            AnyCommand::from_tool(
+                "create_wall",
+                &json!({"start": {"x": 0, "y": 9000, "z": 0}, "end": {"x": 3000, "y": 9000, "z": 0}, "name": "Option wall"}),
+            )
+            .unwrap(),
+            &ExecContext::user(),
+        )
+        .unwrap();
+        run(&mut s, "create_design_option", json!({"set": o["element"]}));
+        let ops = plan(s.doc(), &RevitState::default());
+        assert!(
+            matches!(&ops[0], RevitOp::Warning { code, .. } if code == "ferro.revit.design_options"),
+            "{:?}",
+            ops[0]
+        );
+        assert!(ops
+            .iter()
+            .any(|o| matches!(o, RevitOp::Wall { name: Some(n), .. } if n == "Option wall")));
+    }
+
+    #[test]
     fn phases_and_element_phase_names_are_planned() {
         let mut s = house();
         // Unphased elements carry no phase fields (signatures unchanged).
@@ -775,6 +861,7 @@ mod tests {
                 RevitOp::SiteLocation { .. } => "site_location",
                 RevitOp::Phase { .. } => "phase",
                 RevitOp::Delete { .. } => "delete",
+                RevitOp::Warning { .. } => "warning",
             })
             .collect();
         let mut sorted = kinds.clone();

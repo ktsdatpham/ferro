@@ -20,6 +20,11 @@
 //!   `DEMOLISH` or `TEMPORARY` (IFC4 `PEnum_ElementStatus`). Phases are not
 //!   IFC products and are not exported themselves.
 //!
+//! * Design options (ADR 0006): the file shows the primary combination
+//!   (`export_ifc_combination` for another one); option sets and options
+//!   are not exported. An option layer that does not apply fails the export
+//!   with `ferro.io.design_option` rather than writing a wrong model.
+//!
 //! GlobalIds are the element uids in IFC's base-64 encoding, so a re-export
 //! keeps the same ids.
 
@@ -361,15 +366,49 @@ fn material_psets(w: &mut Writer, mat: usize, m: &ferro_core::model::bim::Materi
     pset(w, "Pset_FerroMaterial", p);
 }
 
-/// Serialise a document as an IFC4 file.
+/// Serialise a document as an IFC4 file (primary combination of its design
+/// options, last phase).
 pub fn export_ifc(doc: &Document) -> Result<String, IoError> {
     export_ifc_phase(doc, None)
 }
 
+/// IFC4 export of the document as seen in a design-option `combination`
+/// (the primary one by default) and `phase`.
+///
+/// Fails with `ferro.io.design_option` when the combination cannot be
+/// shown (conflicting or stale option layers, see
+/// `ferro_core::ops::design_option_commands::resolve`).
+pub fn export_ifc_combination(
+    doc: &Document,
+    combination: &ferro_core::model::Combination,
+    phase: Option<ElementId>,
+) -> Result<String, IoError> {
+    let seen = ferro_core::ops::design_option_commands::resolve(doc, combination).map_err(|f| {
+        IoError::new(
+            "ferro.io.design_option",
+            f.iter()
+                .map(|x| format!("{} ({})", x.message, x.code))
+                .collect::<Vec<_>>()
+                .join("; "),
+        )
+    })?;
+    export_resolved(&seen, phase)
+}
+
 /// IFC4 export of the document as it is in `phase` (`None` = the last
-/// phase; ignored when the document has no phases). See the module docs
-/// for how phases are written.
+/// phase; ignored when the document has no phases), primary combination.
+/// See the module docs for how phases are written.
+///
+/// Fails with `ferro.io.design_option` (see [`export_ifc_combination`]).
 pub fn export_ifc_phase(doc: &Document, phase: Option<ElementId>) -> Result<String, IoError> {
+    if doc.option_sets().is_empty() {
+        return export_resolved(doc, phase);
+    }
+    export_ifc_combination(doc, &ferro_core::model::Combination::primary(), phase)
+}
+
+/// Export a document whose design options are already resolved.
+fn export_resolved(doc: &Document, phase: Option<ElementId>) -> Result<String, IoError> {
     let export_phase = phase
         .filter(|p| doc.phase_index(*p).is_some())
         .or_else(|| doc.phases().last().map(|p| p.id));

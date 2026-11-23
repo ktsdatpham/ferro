@@ -31,10 +31,13 @@ pub enum Category {
     /// Views (D-33, M5-22): `View3D`, `PlanView`, `SectionView`. Not IFC
     /// products and not exported.
     Views,
+    /// Option sets and design options (ADR 0006). Not IFC products: the
+    /// export writes one combination.
+    DesignOptions,
 }
 
 impl Category {
-    pub const ALL: [Category; 19] = [
+    pub const ALL: [Category; 20] = [
         Category::Levels,
         Category::Grids,
         Category::ReferencePlanes,
@@ -54,6 +57,7 @@ impl Category {
         Category::Materials,
         Category::Phases,
         Category::Views,
+        Category::DesignOptions,
     ];
 
     /// Revit `BuiltInCategory` name.
@@ -78,6 +82,7 @@ impl Category {
             Category::Materials => "OST_Materials",
             Category::Phases => "OST_Phases",
             Category::Views => "OST_Views",
+            Category::DesignOptions => "OST_DesignOptions",
         }
     }
 
@@ -107,6 +112,8 @@ impl Category {
             // Not exported: views have no geometry and IFC4 has no view
             // product. `IfcAnnotation` is the nearest presentation class.
             Category::Views => "IfcAnnotation",
+            // Not exported: IFC gets one combination (ADR 0006).
+            Category::DesignOptions => "IfcGroup",
         }
     }
 
@@ -121,6 +128,7 @@ impl Category {
                 | Category::Materials
                 | Category::Phases
                 | Category::Views
+                | Category::DesignOptions
         )
     }
 }

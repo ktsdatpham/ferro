@@ -4,6 +4,7 @@
 //! radians; the MCP edge converts user units (`"3m"`, degrees).
 
 use super::bim_commands::*;
+use super::design_option_commands::*;
 use super::form_commands::*;
 use super::geometry_source::*;
 use super::parameter_commands::*;
@@ -339,9 +340,11 @@ fn transform_elements(
             | ElementBody::WallType(_)
             | ElementBody::FloorType(_)
             | ElementBody::Phase(_)
-            | ElementBody::View(_) => Err(CommandError::new(
+            | ElementBody::View(_)
+            | ElementBody::OptionSet(_)
+            | ElementBody::DesignOption(_) => Err(CommandError::new(
                 "ferro.model.not_movable",
-                "types, materials, phases and views have no location",
+                "types, materials, phases, views and design options have no location",
             )
             .on(e.id)),
             ElementBody::Wall(w) => {
@@ -719,6 +722,14 @@ any_command!(
     CreateView,
     SetView,
     DeleteView,
+    CreateOptionSet,
+    SetOptionSet,
+    DeleteOptionSet,
+    CreateDesignOption,
+    SetDesignOption,
+    DeleteDesignOption,
+    AcceptDesignOption,
+    ApplyChanges,
 );
 
 impl AnyCommand {

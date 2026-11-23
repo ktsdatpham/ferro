@@ -252,6 +252,11 @@ impl Document {
         }
     }
 
+    /// The id the next new element gets (ids are never reused).
+    pub fn next_element_id(&self) -> u64 {
+        self.next_element_id
+    }
+
     // ------------------------------------------------- crate-private writes
 
     pub(crate) fn alloc_id(&mut self) -> ElementId {

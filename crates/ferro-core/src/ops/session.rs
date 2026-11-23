@@ -168,11 +168,70 @@ impl Session {
         })
     }
 
+    /// Run a command inside a design option (ADR 0006, "edit in option"):
+    /// the command runs on the document as seen in `combination` with
+    /// `option` chosen for its set; the result, minus what the other sets
+    /// show, becomes the option's layer through one `set_design_option`
+    /// (one undo step, or part of the open group). The shared model is not
+    /// changed. Element ids in the outcome are those of the resolved
+    /// document (elements added by options exist only there).
+    ///
+    /// Fails with the command's own failures, `ferro.model.not_a_design_option`,
+    /// `ferro.model.option_not_open`, `ferro.model.option_conflict` and
+    /// `ferro.model.invalid_option_layer` (the edit touches something the
+    /// option cannot hold, e.g. an element added by another set's option, an
+    /// option set, or the project).
+    pub fn execute_in_option(
+        &mut self,
+        option: crate::model::ElementId,
+        combination: &crate::model::Combination,
+        cmd: AnyCommand,
+        ctx: &ExecContext,
+    ) -> Result<Outcome, Vec<Failure>> {
+        use super::design_option_commands::{resolve_options, SetDesignOption};
+        use crate::model::design_option::layer_from_edit;
+        let fail = |e: super::CommandError| vec![e.into_failure()];
+        let chosen = combination
+            .with(&self.doc, option)
+            .chosen(&self.doc)
+            .map_err(|e| fail(e.into()))?;
+        let others: Vec<_> = chosen.iter().copied().filter(|o| *o != option).collect();
+        let base_others = resolve_options(&self.doc, &others)?;
+        let base = resolve_options(&self.doc, &chosen)?;
+        let name = cmd.name().to_string();
+        let mut tx = Transaction::new(&name, &base, self.ids.as_mut());
+        let output = cmd.execute(&mut tx).map_err(|e| vec![e.into_failure()])?;
+        let (edited, changed, mut warnings) = tx.finish()?;
+        let changes = layer_from_edit(&base_others, &edited).map_err(|e| fail(e.into()))?;
+        let set = SetDesignOption {
+            option,
+            name: None,
+            is_primary: None,
+            changes: Some(changes),
+        };
+        let outer = self.execute(set.into(), ctx)?;
+        warnings.extend(outer.warnings);
+        Ok(Outcome {
+            output,
+            changed,
+            warnings,
+        })
+    }
+
     /// Evaluate a command on a copy without changing the session (tool
     /// previews, AI proposals). Returns the would-be document.
     pub fn preview(&self, cmd: &AnyCommand) -> Result<(Document, CommandOutput), Vec<Failure>> {
+        Self::preview_on(&self.doc, cmd)
+    }
+
+    /// [`Session::preview`] on any document, e.g. one resolved for a
+    /// design-option combination (the app's view while editing an option).
+    pub fn preview_on(
+        doc: &Document,
+        cmd: &AnyCommand,
+    ) -> Result<(Document, CommandOutput), Vec<Failure>> {
         let mut ids = SequentialIds::new(0);
-        let mut tx = Transaction::new(cmd.name(), &self.doc, &mut ids);
+        let mut tx = Transaction::new(cmd.name(), doc, &mut ids);
         let output = cmd.execute(&mut tx).map_err(|e| vec![e.into_failure()])?;
         let (doc, _, _) = tx.finish()?;
         Ok((doc, output))

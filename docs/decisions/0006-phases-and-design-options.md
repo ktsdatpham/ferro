@@ -73,3 +73,58 @@ D-32 reserves phase and design-option fields; nothing uses them yet.
   `set_element_phase`, `set_renovation_status`; query `get_phase_quantities`.
   Details in Foundation §3.10.
 
+
+## Implementation notes (M5-23.9, design options; M5-26.2, M5-26.3)
+
+- **Data.** One category `DesignOptions` with two bodies: `OptionSet
+  {order}` and `DesignOption {order, is_primary, status, changes}`. An
+  option's set is its `host_id` (containment; deleting a set deletes its
+  options, and the change format already maps `host_id` to uids). Status
+  `open` / `accepted` / `archived` (glossary `OptionStatus`). Every set with
+  open options has exactly one primary; the primary cannot be deleted.
+- **Option layers** use the M5-26 change format unchanged (M5-26.3):
+  `/elements/<uid>...` and `/relationships/<uid>...` paths (M5-5 rows
+  diff and apply like elements), never the project, option elements or
+  `design_option`; derived data (`body/geometry`, read-only computed
+  parameters) is not stored, `resolve` regenerates it. Layers are checked
+  against the shared model on every write (`ferro.model.invalid_option_layer`).
+- **Edit in option** is the editing model (not hand-written change lists):
+  `Session::execute_in_option(option, combination, command)` runs the
+  command on the document seen in the combination, then stores
+  `diff(seen without this option, edited)` as the option layer with one
+  `set_design_option`. Undo / redo, groups and the journal need nothing
+  new; the journal replays the stored layer, so it stays deterministic.
+  The app routes its commands this way while an option is being edited;
+  MCP command tools take an optional `in_design_option`.
+  `set_design_option {changes}` stays available for agents and sync.
+- **`design_option` field (D-32) stays**, as a derived index: always `None`
+  in the shared model and in files; in a document resolved for a
+  combination it names the option whose layer added the element (used by
+  the app to label and colour those elements). Membership is never stored
+  twice, so it cannot disagree with the layer. A resolved document carries
+  empty option layers, so resolving it again changes nothing.
+- **Conflicts** between the option layers of a combination
+  (`model::change::conflicts`) fail with `ferro.model.option_conflict`;
+  nothing is merged silently.
+- **Stale option layers.** A shared change that breaks an open option layer (e.g.
+  deleting an element it overrides) commits with a
+  `ferro.model.option_layer_stale` warning; the option layer is kept as it was, `resolve`
+  of that option fails with `ferro.model.invalid_option_layer`, and the app
+  offers "keep what still applies" (`change::partition_applicable`), an
+  explicit `set_design_option`.
+- **Ids.** `change::apply` now gives new elements ids from the document's
+  next free id (never a reused id). Elements added by options exist only in
+  resolved documents; their ids are stable while the shared model's next
+  id does not move.
+- **M5-26.2.** `apply_changes {changes}` is a command (validated, all or
+  nothing, keeps option rules). `diff_documents {from, to}` is a query whose
+  two sides are combinations of the open document (`"shared"`, `[]` for
+  the primary combination, or option ids): its input is clear and it is
+  what a comparison of options needs. Diffs against another file wait for
+  sync (M8).
+- **File format 5** (additive; a format 4 reader refuses the new category).
+- **Interop.** IFC exports the primary combination (`export_ifc`), the app
+  the combination shown. Revit gets the primary combination, with a
+  `warning` operation when other open options exist.
+- **New glossary terms:** `OptionSet`, `DesignOption`, option layer,
+  `OptionStatus`, `Combination`, `Change`; verbs `accept`, `apply`, `diff`.

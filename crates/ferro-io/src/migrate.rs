@@ -12,26 +12,28 @@
 //! | 3 | M5 | phases (ADR 0006): elements of category `phases` with a `{"kind":"phase"}` body; `phase_created` / `phase_demolished` filled in |
 //! | 4 | M5 | the relationship table (M5-5) |
 //! | 5 | M5 | views (D-33, M5-22): elements of category `views` with a `{"kind":"view"}` body (camera, cut, display style, hidden elements / tags as uids, phase, phase filter) |
+//! | 6 | M5 | design options (ADR 0006): elements of category `design_options` with `{"kind":"option_set"}` / `{"kind":"design_option"}` bodies (layers in the change format); `design_option` stays `null` in files |
 //!
-//! Versions 2 to 5 only add data, so older files need no rewriting; the
+//! Versions 2 to 6 only add data, so older files need no rewriting; the
 //! steps are still listed so every version has one and the chain is tested.
 //! Version 3 is needed because a format 2 reader refuses the new `phases`
 //! category and `phase` body (unknown enum variants), even though the
-//! element fields existed (always `null`) before. Version 5 likewise: a
-//! format 4 reader refuses the `views` category and `view` body.
+//! element fields existed (always `null`) before. Versions 5 and 6 likewise: a
+//! format 4 reader refuses the `views` category and `view` body, a format 5 reader the `design_options` category.
 
 use crate::IoError;
 use serde_json::Value;
 
 /// Current file format version.
-pub const FORMAT_VERSION: u32 = 5;
+pub const FORMAT_VERSION: u32 = 6;
 
 /// One migration: from version `n` to `n + 1`, on the raw JSON of the project
 /// and the elements (before they are parsed).
 type Step = fn(&mut Value, &mut [Value]) -> Result<(), IoError>;
 
 /// `STEPS[i]` migrates version `i + 1` to `i + 2`.
-const STEPS: [Step; (FORMAT_VERSION - 1) as usize] = [v1_to_v2, v2_to_v3, v3_to_v4, v4_to_v5];
+const STEPS: [Step; (FORMAT_VERSION - 1) as usize] =
+    [v1_to_v2, v2_to_v3, v3_to_v4, v4_to_v5, v5_to_v6];
 
 /// 1 → 2: additive (new optional fields and parameter types); nothing to rewrite.
 fn v1_to_v2(_project: &mut Value, _elements: &mut [Value]) -> Result<(), IoError> {
@@ -51,6 +53,11 @@ fn v3_to_v4(_project: &mut Value, _elements: &mut [Value]) -> Result<(), IoError
 
 /// 4 → 5: additive (views); nothing to rewrite.
 fn v4_to_v5(_project: &mut Value, _elements: &mut [Value]) -> Result<(), IoError> {
+    Ok(())
+}
+
+/// 5 → 6: additive (design options, ADR 0006); nothing to rewrite.
+fn v5_to_v6(_project: &mut Value, _elements: &mut [Value]) -> Result<(), IoError> {
     Ok(())
 }
 

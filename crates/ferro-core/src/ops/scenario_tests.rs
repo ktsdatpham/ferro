@@ -37,6 +37,11 @@ struct Fx {
     rel: String,
     /// A 3D view hiding nothing (M5-22).
     view: ElementId,
+    /// Option set "Roof" with options A (primary, empty) and B (wall
+    /// renamed in its layer).
+    opt_set: ElementId,
+    opt_a: ElementId,
+    opt_b: ElementId,
 }
 
 impl Fx {
@@ -129,6 +134,24 @@ impl Fx {
             "create_view",
             json!({"name": "3D", "view_type": "view_3d"}),
         ));
+        let o = run(&mut s, "create_option_set", json!({"name": "Roof"}));
+        let opt_set = id(&o);
+        let opt_a: ElementId = serde_json::from_value(o.output["option"].clone()).expect("option");
+        let opt_b = id(&run(
+            &mut s,
+            "create_design_option",
+            json!({"set": opt_set, "name": "B"}),
+        ));
+        let wall_uid = s
+            .doc()
+            .get(wall)
+            .map(|e| e.uid.to_string())
+            .unwrap_or_default();
+        run(
+            &mut s,
+            "set_design_option",
+            json!({"option": opt_b, "changes": [{"op": "set", "path": format!("/elements/{wall_uid}/name"), "value": "South B"}]}),
+        );
         check_document(s.doc()).expect("fixture is valid");
         Fx {
             s,
@@ -150,6 +173,9 @@ impl Fx {
             ph_new,
             rel,
             view,
+            opt_set,
+            opt_a,
+            opt_b,
         }
     }
 
@@ -996,6 +1022,51 @@ fn every_command_rejects_degenerate_and_wrong_inputs_with_rollback() {
             json!({"element": sheet, "faces": [9999]}),
             "ferro.topo.not_found",
         ),
+        (
+            "create_option_set",
+            json!({"name": "Roof"}),
+            "ferro.model.duplicate_name",
+        ),
+        (
+            "set_option_set",
+            json!({"set": f.opt_a, "name": "x"}),
+            "ferro.model.not_an_option_set",
+        ),
+        (
+            "delete_option_set",
+            json!({"set": wall}),
+            "ferro.model.not_an_option_set",
+        ),
+        (
+            "create_design_option",
+            json!({"set": f.opt_set, "name": ""}),
+            "ferro.model.invalid_name",
+        ),
+        (
+            "set_design_option",
+            json!({"option": f.opt_a, "is_primary": false}),
+            "ferro.model.primary_required",
+        ),
+        (
+            "set_design_option",
+            json!({"option": f.opt_b, "changes": [{"op": "set", "path": "/project/name", "value": "x"}]}),
+            "ferro.model.invalid_option_layer",
+        ),
+        (
+            "delete_design_option",
+            json!({"option": f.opt_a}),
+            "ferro.model.option_is_primary",
+        ),
+        (
+            "accept_design_option",
+            json!({"option": f.opt_set}),
+            "ferro.model.not_a_design_option",
+        ),
+        (
+            "apply_changes",
+            json!({"changes": [{"op": "remove", "path": "elements"}]}),
+            "ferro.change.bad_path",
+        ),
     ];
     let mut failures = Vec::new();
     for (tool, args, code) in cases {
@@ -1507,6 +1578,27 @@ fn valid_calls(f: &Fx) -> Vec<(&'static str, Value)> {
             json!({"view": f.view, "hide": [f.bx], "display_style": "wireframe", "phase": f.ph_new}),
         ),
         ("delete_view", json!({"view": f.view})),
+        // design options (M5-23.9) and change lists (M5-26.2)
+        ("create_option_set", json!({"name": "Facade"})),
+        (
+            "set_option_set",
+            json!({"set": f.opt_set, "name": "Roofs", "position": 0}),
+        ),
+        ("delete_option_set", json!({"set": f.opt_set})),
+        (
+            "create_design_option",
+            json!({"set": f.opt_set, "name": "C", "copy_from": f.opt_b}),
+        ),
+        (
+            "set_design_option",
+            json!({"option": f.opt_b, "is_primary": true, "name": "Flat"}),
+        ),
+        ("delete_design_option", json!({"option": f.opt_b})),
+        ("accept_design_option", json!({"option": f.opt_b})),
+        (
+            "apply_changes",
+            json!({"changes": [{"op": "set", "path": format!("/elements/{}/name", f.s.doc().get(f.bx).map(|e| e.uid.to_string()).unwrap_or_default()), "value": "Cube"}]}),
+        ),
         // a semantic push / pull on a wall (height)
         (
             "push_pull_face",
@@ -1549,6 +1641,9 @@ fn every_id_argument_accepts_any_element_kind_without_panicking() {
         "created",
         "demolished",
         "view",
+        "set",
+        "option",
+        "copy_from",
     ];
     let base = Fx::new();
     let all = base.all_ids();
