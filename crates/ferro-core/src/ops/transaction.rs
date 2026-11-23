@@ -220,6 +220,16 @@ impl<'a> Transaction<'a> {
         self.work.project_mut().name = name;
     }
 
+    /// Add or replace (by key) a project parameter definition, keeping the
+    /// list sorted by key. The caller validates it (`SetParameterDefinition`).
+    pub fn put_parameter_definition(&mut self, def: crate::model::ParameterDefinition) {
+        let defs = &mut self.work.project_mut().parameter_definitions;
+        match defs.binary_search_by(|d| d.key.as_str().cmp(&def.key)) {
+            Ok(i) => defs[i] = def,
+            Err(i) => defs.insert(i, def),
+        }
+    }
+
     /// Regenerate (§4.4), validate and produce the committed version.
     pub(crate) fn finish(
         mut self,

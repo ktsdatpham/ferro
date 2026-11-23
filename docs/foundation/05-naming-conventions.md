@@ -17,6 +17,9 @@ for the same concept.
 | `Category` | Fixed classification | Kind, Class, Layer |
 | `Family` / `FamilyType` | Definition / named type | Template, Style, Preset, Component (for this) |
 | `Parameter` | Typed data on an element | Property, Attribute, Tag, Field |
+| `ParameterDefinition` | What a parameter key means (data type, group, binding, mapping), with a `Uid` (Revit shared parameter) | ParamDef, Schema, Field definition |
+| `QuantitySpec` | Physical quantity of a value (length, density, U-value…), Revit `SpecTypeId` | UnitType, Measure (as a type), Dimension (for this) |
+| `DisplayUnit` | A unit a quantity is typed in or shown in | Unit (alone), DisplayFormat |
 | `Level` | Named elevation | Storey, Floor (as a datum), Story |
 | `Grid` | Named plan datum | Axis line |
 | `ReferencePlane` | Named alignment plane | Guide, Construction plane |

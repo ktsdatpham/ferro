@@ -15,6 +15,7 @@ mod failure;
 pub mod form_commands;
 pub mod geometry_source;
 pub mod material_commands;
+pub mod parameter_commands;
 mod session;
 mod transaction;
 

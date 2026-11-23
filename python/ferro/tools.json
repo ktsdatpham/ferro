@@ -369,7 +369,7 @@
       "name": "set_name"
     },
     {
-      "description": "Set a typed parameter. Key format namespace.group.name (e.g. ferro.common.comments, acme.fengshui.score). Value: {\"type\": \"length\"|\"angle\"|\"area\"|\"volume\"|\"number\"|\"integer\"|\"bool\"|\"text\"|\"tags\"|\"element_ref\", \"value\": ...}. Lengths in mm, angles in radians here. Computed keys (ferro.form.area, ferro.form.volume) are read-only.",
+      "description": "Set a typed parameter. Key format namespace.group.name (e.g. ferro.common.comments, acme.energy.conductivity). Value forms: (1) a quantity with a unit as text: \"0.8 W/mK\", \"1200 kg/m3\", \"35 MPa\", \"0.25 W/m2K\", \"20 °C\", \"120 kgCO2e\", \"3m\" (if the key has a quantity definition, a bare number in text uses its default unit); (2) {\"spec\": \"density\", \"value\": 1200, \"unit\": \"kg/m3\"} (no unit = SI storage unit; length mm, angle rad); (3) {\"type\": \"text\"|\"integer\"|\"bool\"|\"tags\"|\"element_ref\"|\"number\", \"value\": ...}; also plain numbers, booleans and string arrays (tags). Specs: length, area, volume, angle, mass, density, force, moment, pressure, stress, thermal_conductivity, thermal_resistance, u_value, heat_capacity, temperature, power, illuminance, flow, currency, carbon_mass, time, ratio, number. Fails if the key's definition has another type. Computed keys (ferro.form.*, ferro.dimensions.*) are read-only.",
       "inputSchema": {
         "properties": {
           "element": {
@@ -380,7 +380,13 @@
             "type": "string"
           },
           "value": {
-            "type": "object"
+            "type": [
+              "object",
+              "string",
+              "number",
+              "boolean",
+              "array"
+            ]
           }
         },
         "required": [
@@ -391,6 +397,70 @@
         "type": "object"
       },
       "name": "set_parameter"
+    },
+    {
+      "description": "Define a project parameter key (like a Revit shared parameter): data type, group, instance / type binding, description and optional IFC property set mapping. Values set later must fit the type. Built-in ferro.* keys cannot be defined. Returns {key, uid}; pass `uid` (a Revit shared parameter GUID) to match an existing Revit parameter.",
+      "inputSchema": {
+        "properties": {
+          "binding": {
+            "enum": [
+              "instance",
+              "type"
+            ],
+            "type": "string"
+          },
+          "data_type": {
+            "description": "\"text\"|\"integer\"|\"bool\"|\"tags\"|\"element_ref\" or {\"quantity\": \"<spec>\"}, e.g. {\"quantity\": \"u_value\"}. Specs: length, area, volume, angle, mass, density, force, moment, pressure, stress, thermal_conductivity, thermal_resistance, u_value, heat_capacity, temperature, power, illuminance, flow, currency, carbon_mass, time, ratio, number",
+            "type": [
+              "string",
+              "object"
+            ]
+          },
+          "description": {
+            "type": "string"
+          },
+          "group": {
+            "enum": [
+              "constraints",
+              "dimensions",
+              "identity_data",
+              "materials",
+              "analysis",
+              "structural",
+              "data"
+            ],
+            "type": "string"
+          },
+          "ifc": {
+            "properties": {
+              "property": {
+                "type": "string"
+              },
+              "property_set": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "property_set",
+              "property"
+            ],
+            "type": "object"
+          },
+          "key": {
+            "type": "string"
+          },
+          "uid": {
+            "description": "Optional UUID (8-4-4-4-12)",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "data_type"
+        ],
+        "type": "object"
+      },
+      "name": "set_parameter_definition"
     },
     {
       "description": "Classify directly edited geometry (a Form, or a frozen wall / floor) as a BIM category: a free-form wall keeps its shape and becomes a Wall with type, materials and parameters, exported to Revit / IFC as a wall. A type that no longer fits is removed.",

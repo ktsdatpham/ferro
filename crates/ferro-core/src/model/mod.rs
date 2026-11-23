@@ -13,6 +13,7 @@ pub mod generate;
 mod ids;
 pub mod material;
 mod parameter;
+mod parameter_definition;
 pub mod structure_quantities;
 
 pub use category::Category;
@@ -20,3 +21,7 @@ pub use document::{Document, ProjectInfo, ProjectOrigins, EXTENT_LIMIT_MM};
 pub use element::{Element, ElementBody, Form, GeometrySource, Level};
 pub use ids::{ElementId, Uid};
 pub use parameter::{keys, ParamValue};
+pub use parameter_definition::{
+    builtin_definition, builtin_definitions, IfcPropertyMapping, ParameterBinding,
+    ParameterDataType, ParameterDefinition, ParameterGroup,
+};

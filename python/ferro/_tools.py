@@ -260,12 +260,19 @@ def set_name(*, element: ElementId, name: Optional[str]) -> Dict[str, Any]:
     return _call("set_name", {"element": element, "name": name})
 
 
-def set_parameter(*, element: ElementId, key: str, value: Dict[str, Any]) -> Dict[str, Any]:
+def set_parameter(*, element: ElementId, key: str, value: Any) -> Dict[str, Any]:
     """Set a typed parameter. Key format namespace.group.name (e.g.
-    ferro.common.comments, acme.fengshui.score). Value: {"type":
-    "length"|"angle"|"area"|"volume"|"number"|"integer"|"bool"|"text"|"tags"|"element_ref",
-    "value": ...}. Lengths in mm, angles in radians here. Computed keys
-    (ferro.form.area, ferro.form.volume) are read-only.
+    ferro.common.comments, acme.energy.conductivity). Value forms: (1) a quantity with a
+    unit as text: "0.8 W/mK", "1200 kg/m3", "35 MPa", "0.25 W/m2K", "20 °C", "120
+    kgCO2e", "3m" (if the key has a quantity definition, a bare number in text uses its
+    default unit); (2) {"spec": "density", "value": 1200, "unit": "kg/m3"} (no unit = SI
+    storage unit; length mm, angle rad); (3) {"type":
+    "text"|"integer"|"bool"|"tags"|"element_ref"|"number", "value": ...}; also plain
+    numbers, booleans and string arrays (tags). Specs: length, area, volume, angle,
+    mass, density, force, moment, pressure, stress, thermal_conductivity,
+    thermal_resistance, u_value, heat_capacity, temperature, power, illuminance, flow,
+    currency, carbon_mass, time, ratio, number. Fails if the key's definition has
+    another type. Computed keys (ferro.form.*, ferro.dimensions.*) are read-only.
 
     Args:
         element: Element id.
@@ -276,6 +283,53 @@ def set_parameter(*, element: ElementId, key: str, value: Dict[str, Any]) -> Dic
         The tool's JSON body. Raises FerroError on failure.
     """
     return _call("set_parameter", {"element": element, "key": key, "value": value})
+
+
+def set_parameter_definition(
+    *,
+    key: str,
+    data_type: Any,
+    binding: Optional[Literal["instance", "type"]] = None,
+    description: Optional[str] = None,
+    group: Optional[Literal["constraints", "dimensions", "identity_data", "materials", "analysis", "structural", "data"]] = None,
+    ifc: Optional[Dict[str, Any]] = None,
+    uid: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Define a project parameter key (like a Revit shared parameter): data type, group,
+    instance / type binding, description and optional IFC property set mapping. Values
+    set later must fit the type. Built-in ferro.* keys cannot be defined. Returns {key,
+    uid}; pass `uid` (a Revit shared parameter GUID) to match an existing Revit
+    parameter.
+
+    Args:
+        key: Text.
+        data_type: "text"|"integer"|"bool"|"tags"|"element_ref" or {"quantity":
+            "<spec>"}, e.g. {"quantity": "u_value"}. Specs: length, area, volume, angle,
+            mass, density, force, moment, pressure, stress, thermal_conductivity,
+            thermal_resistance, u_value, heat_capacity, temperature, power, illuminance,
+            flow, currency, carbon_mass, time, ratio, number.
+        binding: One of: instance, type. Optional.
+        description: Text. Optional.
+        group: One of: constraints, dimensions, identity_data, materials, analysis,
+            structural, data. Optional.
+        ifc: JSON object. Optional.
+        uid: Optional UUID (8-4-4-4-12). Optional.
+
+    Returns:
+        The tool's JSON body. Raises FerroError on failure.
+    """
+    args: Dict[str, Any] = {"key": key, "data_type": data_type}
+    if binding is not None:
+        args["binding"] = binding
+    if description is not None:
+        args["description"] = description
+    if group is not None:
+        args["group"] = group
+    if ifc is not None:
+        args["ifc"] = ifc
+    if uid is not None:
+        args["uid"] = uid
+    return _call("set_parameter_definition", args)
 
 
 def set_category(
@@ -1311,6 +1365,7 @@ TOOL_NAMES = (
     "delete_elements",
     "set_name",
     "set_parameter",
+    "set_parameter_definition",
     "set_category",
     "set_geometry_source",
     "set_project_name",

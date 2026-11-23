@@ -38,6 +38,23 @@ impl Uid {
         Uid(ts | ver | rand_a | var | rand_b)
     }
 
+    /// Build a deterministic version-8 UUID from a name: the 128-bit
+    /// FNV-1a hash of the name's UTF-8 bytes with the version (8) and
+    /// variant (`10`) bits set. The same name always gives the same `Uid`, so
+    /// built-in definitions need no stored id. The algorithm is fixed
+    /// forever: changing it would break round-trips.
+    pub fn from_name(name: &str) -> Uid {
+        const OFFSET: u128 = 0x6c62_272e_07bb_0142_62b8_2175_6295_c58d;
+        const PRIME: u128 = 0x0000_0000_0100_0000_0000_0000_0000_013b;
+        let h = name
+            .bytes()
+            .fold(OFFSET, |h, b| (h ^ b as u128).wrapping_mul(PRIME));
+        let ver_mask = 0xFu128 << 76;
+        let var_mask = 0b11u128 << 62;
+        Uid((h & !ver_mask & !var_mask) | (0x8u128 << 76) | (0b10u128 << 62))
+    }
+
+    /// UUID version number (7 for new elements, 8 for name-based ids).
     pub fn version(&self) -> u8 {
         ((self.0 >> 76) & 0xF) as u8
     }
@@ -102,6 +119,23 @@ mod tests {
     #[test]
     fn v7_sorts_by_time() {
         assert!(Uid::v7(1000, u128::MAX) < Uid::v7(1001, 0));
+    }
+
+    #[test]
+    fn from_name_is_deterministic_v8() {
+        let a = Uid::from_name("ferro.parameter_definition:ferro.common.comments");
+        assert_eq!(a.version(), 8);
+        assert_eq!((a.0 >> 62) & 0b11, 0b10);
+        assert_eq!(
+            a,
+            Uid::from_name("ferro.parameter_definition:ferro.common.comments")
+        );
+        assert_ne!(
+            a,
+            Uid::from_name("ferro.parameter_definition:ferro.common.tags")
+        );
+        // Degenerate: the empty name still gives a valid v8 id.
+        assert_eq!(Uid::from_name("").version(), 8);
     }
 
     #[test]

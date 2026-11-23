@@ -1,4 +1,4 @@
-use super::{Category, Element, ElementId, Uid};
+use super::{builtin_definition, Category, Element, ElementId, ParameterDefinition, Uid};
 use crate::math::{Angle, Point3};
 use imbl::OrdMap;
 use serde::{Deserialize, Serialize};
@@ -27,10 +27,16 @@ impl Default for ProjectOrigins {
     }
 }
 
+/// Project-wide information (Revit: `ProjectInfo` plus parameter bindings).
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct ProjectInfo {
     pub name: String,
     pub origins: ProjectOrigins,
+    /// Project (user-defined) parameter definitions, sorted by key, keys
+    /// unique, never in the built-in `ferro` namespace (ADR 0004 §2.3).
+    /// Omitted from files when empty, so files without it still load.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub parameter_definitions: Vec<ParameterDefinition>,
 }
 
 /// The project container (Revit: `Document`). Cheap to clone: elements live in
@@ -72,7 +78,24 @@ impl Document {
     /// Assemble a document from loaded parts (opening a file, importing).
     /// This creates a new document; it does not mutate an existing one, so it
     /// does not bypass D-17. Ids and uids must be unique.
-    pub fn from_parts(project: ProjectInfo, elements: Vec<Element>) -> Result<Document, String> {
+    pub fn from_parts(
+        mut project: ProjectInfo,
+        elements: Vec<Element>,
+    ) -> Result<Document, String> {
+        project
+            .parameter_definitions
+            .sort_by(|a, b| a.key.cmp(&b.key));
+        for (i, d) in project.parameter_definitions.iter().enumerate() {
+            if ParameterDefinition::is_builtin_key(&d.key) {
+                return Err(format!("{} is a built-in parameter key", d.key));
+            }
+            if project.parameter_definitions[..i]
+                .iter()
+                .any(|o| o.key == d.key || o.uid == d.uid)
+            {
+                return Err(format!("duplicate parameter definition {}", d.key));
+            }
+        }
         let mut doc = Document {
             project,
             ..Default::default()
@@ -107,6 +130,18 @@ impl Document {
     }
     pub fn version(&self) -> u64 {
         self.version
+    }
+    /// The definition of a parameter key: the built-in one for `ferro.*`
+    /// keys, else the project's. `None` if the key has no definition (any
+    /// typed value is then allowed, D-15).
+    pub fn parameter_definition(&self, key: &str) -> Option<ParameterDefinition> {
+        builtin_definition(key).or_else(|| {
+            self.project
+                .parameter_definitions
+                .iter()
+                .find(|d| d.key == key)
+                .cloned()
+        })
     }
     pub fn get(&self, id: ElementId) -> Option<&Element> {
         self.elements.get(&id).map(|e| e.as_ref())
