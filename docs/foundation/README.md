@@ -136,6 +136,6 @@ walls, floors, doors and windows with types and materials, Ferro Link, AI
 proposals and the in-app chat. Milestone 3 (`docs/milestones/M3.md`, ADR 0002)
 added the two-way Revit link, IFC4 export and T-joins. Open items: explicit join
 relationships, openings
-in curved walls, design options and views as elements (D-32, D-33), exact
+in curved walls, design options (D-32; views as elements landed with M5-22, §3.11), exact
 single curved faces (D-39), layer / glossary lints and CI performance budgets
 (D-19, D-20, D-62).

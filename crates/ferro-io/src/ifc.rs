@@ -959,6 +959,24 @@ mod tests {
     }
 
     #[test]
+    fn views_are_not_exported() {
+        let plain = export_ifc(house().doc()).unwrap();
+        let mut s = house();
+        s.execute(
+            AnyCommand::from_tool(
+                "create_view",
+                &json!({"name": "ViewOnly", "view_type": "view_3d"}),
+            )
+            .unwrap(),
+            &ExecContext::user(),
+        )
+        .unwrap();
+        let with_view = export_ifc(s.doc()).unwrap();
+        assert!(!with_view.contains("ViewOnly"));
+        assert_eq!(with_view, plain, "a view changes nothing in IFC");
+    }
+
+    #[test]
     fn renovation_status_is_written_for_the_export_phase() {
         let plain = export_ifc(house().doc()).unwrap();
         assert!(!plain.contains("'Status'"), "no phases, no status");

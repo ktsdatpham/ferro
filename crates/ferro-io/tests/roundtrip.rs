@@ -285,6 +285,30 @@ fn house(gaps: bool) -> Session {
         "create_phase",
         json!({"name": "Hoàn thiện", "start_date": "2027-01-15", "end_date": "2027-06-30"}),
     );
+    // Views (M5-22): a 3D view hiding two elements in a phase, a plan of
+    // L1 and a section.
+    let first_phase = s.doc().phases()[0].id;
+    let v3 = el(&run(
+        &mut s,
+        "create_view",
+        json!({"name": "3D phối cảnh", "view_type": "view_3d", "phase": first_phase, "phase_filter": "show_previous_and_demo",
+               "section_plane": {"point": p(0.0, 0.0, 1500.0), "normal": p(0.0, 0.0, 1.0)}}),
+    ));
+    run(
+        &mut s,
+        "set_view",
+        json!({"view": v3, "hide": [bx, south], "hidden_tags": ["client"], "display_style": "x_ray"}),
+    );
+    run(
+        &mut s,
+        "create_view",
+        json!({"name": "Mặt bằng L1", "view_type": "plan_view", "level": l1}),
+    );
+    run(
+        &mut s,
+        "create_view",
+        json!({"name": "Mặt cắt A", "view_type": "section_view", "section_plane": {"point": p(0.0, 2000.0, 0.0), "normal": p(0.0, -1.0, 0.0)}, "depth": 8000}),
+    );
     s
 }
 
@@ -322,6 +346,18 @@ fn normalised(doc: &Document, e: &Element) -> Value {
     if let Some(Value::Object(body)) = o.get_mut("body") {
         if let Some(l) = body.get_mut("top").and_then(|t| t.get_mut("level")) {
             *l = uid(l);
+        }
+        if body.get("kind").and_then(Value::as_str) == Some("view") {
+            if let Some(ph) = body.get_mut("phase") {
+                *ph = uid(ph);
+            }
+            for list in ["hidden_elements", "design_options"] {
+                if let Some(Value::Array(ids)) = body.get_mut(list) {
+                    let mut u: Vec<Value> = ids.iter().map(&uid).collect();
+                    u.sort_by_key(|x| x.to_string());
+                    *ids = u;
+                }
+            }
         }
         if let Some(Value::Array(ls)) = body
             .get_mut("structure")
@@ -392,6 +428,12 @@ fn every_element_kind_is_present() {
     assert!(!s.doc().project().parameter_definitions.is_empty());
     assert!(has(|e| matches!(e.body, ElementBody::Phase(_))));
     assert!(has(|e| e.phase_demolished.is_some()));
+    assert!(has(|e| e.as_view().is_some_and(|v| v
+        .hidden_elements
+        .len()
+        == 2
+        && v.phase.is_some())));
+    assert_eq!(s.doc().views().len(), 3);
 }
 
 #[test]

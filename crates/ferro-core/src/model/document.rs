@@ -1,5 +1,6 @@
 use super::{
-    builtin_definition, Category, Element, ElementId, ParameterDefinition, Relationship, Uid,
+    builtin_definition, Category, Element, ElementBody, ElementId, ParameterDefinition,
+    Relationship, Uid,
 };
 use crate::math::{Angle, Point3};
 use imbl::OrdMap;
@@ -114,7 +115,14 @@ impl Document {
             ..Default::default()
         };
         let mut uids = std::collections::HashSet::new();
-        for e in elements {
+        for mut e in elements {
+            // Ids are renumbered on load: keep view lists sorted (M5-22).
+            if let ElementBody::View(v) = &mut e.body {
+                v.hidden_elements.sort();
+                v.hidden_elements.dedup();
+                v.hidden_tags.sort();
+                v.hidden_tags.dedup();
+            }
             if doc.contains(e.id) {
                 return Err(format!("duplicate element id {}", e.id));
             }
@@ -135,6 +143,18 @@ impl Document {
             for r in [e.phase_created, e.phase_demolished].into_iter().flatten() {
                 if doc.get(r).and_then(|p| p.as_phase()).is_none() {
                     return Err(format!("{} has phase {r}, which is not a phase", e.id));
+                }
+            }
+            if let Some(v) = e.as_view() {
+                if let Some(r) = v.phase {
+                    if doc.get(r).and_then(|p| p.as_phase()).is_none() {
+                        return Err(format!("view {} has phase {r}, which is not a phase", e.id));
+                    }
+                }
+                for r in v.hidden_elements.iter().chain(&v.design_options) {
+                    if !doc.contains(*r) {
+                        return Err(format!("view {} references missing element {r}", e.id));
+                    }
                 }
             }
         }

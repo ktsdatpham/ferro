@@ -30,6 +30,7 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 mod phases;
+mod views;
 
 /// How much an AI agent may do on its own (D-26 autonomy slider).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -151,13 +152,13 @@ pub struct FerroApp {
     last_copy: Option<CopyElements>,
     /// Screen position where a selection window drag started.
     select_drag: Option<Pos2>,
-    /// Elements hidden by the user (view state, not saved).
+    /// Elements hidden in the active view (copy of the view's list).
     hidden: HashSet<ElementId>,
-    /// Tags whose elements are not shown (view state).
+    /// Tags whose elements are not shown (copy of the active view's).
     hidden_tags: HashSet<String>,
     /// Tag name typed in the Tags panel.
     new_tag: String,
-    /// Section plane cutting the view (view state, not saved).
+    /// Section plane cutting the view (copy of the active view's cut).
     section: Option<SectionPlane>,
     /// Hidden line style: white faces, black edges.
     hidden_line: bool,
@@ -183,8 +184,10 @@ pub struct FerroApp {
     autonomy: Autonomy,
     proposal: Option<Proposal>,
     chat: Chat,
-    /// View phase and phase display (M5-23; view state, not saved).
+    /// View phase and phase display (M5-23; copy of the active view's).
     phasing: phases::PhaseState,
+    /// The active view (M5-22, `views`).
+    views: views::ViewState,
 }
 
 fn now_ms() -> u64 {
@@ -264,6 +267,7 @@ impl FerroApp {
                 settings_note: String::new(),
             },
             phasing: Default::default(),
+            views: Default::default(),
         };
         if let Some(p) = open {
             app.open_path(p);
@@ -438,8 +442,7 @@ impl FerroApp {
     }
 
     fn set_section(&mut self, p: Option<SectionPlane>) {
-        self.section = p;
-        if p.is_some() {
+        if self.set_view_section(p) && p.is_some() {
             self.say("Section plane set. View > Clear section removes it.", false);
         }
     }
@@ -454,7 +457,8 @@ impl FerroApp {
     }
 
     fn hide_selection(&mut self) {
-        self.hidden.extend(self.selection.drain());
+        let ids: Vec<ElementId> = self.selection.drain().collect();
+        self.hide_in_view(ids);
     }
 
     fn tags_ui(&mut self, ui: &mut egui::Ui) {
@@ -474,11 +478,7 @@ impl FerroApp {
             ui.horizontal(|ui| {
                 let mut shown = !self.hidden_tags.contains(t);
                 if ui.checkbox(&mut shown, t).changed() {
-                    if shown {
-                        self.hidden_tags.remove(t);
-                    } else {
-                        self.hidden_tags.insert(t.clone());
-                    }
+                    self.set_tag_hidden(t, !shown);
                 }
                 if ui
                     .small_button("Select")
@@ -519,7 +519,7 @@ impl FerroApp {
                 .button(format!("Unhide all ({})", self.hidden.len()))
                 .clicked()
         {
-            self.hidden.clear();
+            self.unhide_all_in_view();
         }
     }
 
@@ -622,6 +622,7 @@ impl FerroApp {
         self.selection.clear();
         self.active_level = None;
         self.camera = OrbitCamera::default();
+        self.reset_views();
         self.tool.cancel();
     }
 
@@ -663,6 +664,8 @@ impl FerroApp {
                 self.active_level = None;
                 self.camera
                     .zoom_extents(scene::doc_bounds(self.session.doc()));
+                // A file with views opens in its first view.
+                self.reset_views();
                 self.suggest_level_name();
                 self.say(format!("Opened {}", p.display()), false);
             }
@@ -1088,7 +1091,7 @@ impl FerroApp {
         match (t.tool(), t) {
             (Some(k), _) => self.set_tool(k),
             (None, Target::Hide) => self.hide_selection(),
-            (None, Target::UnhideAll) => self.hidden.clear(),
+            (None, Target::UnhideAll) => self.unhide_all_in_view(),
             (None, Target::ZoomExtents) => self
                 .camera
                 .zoom_extents(scene::doc_bounds(self.session.doc())),
@@ -1336,7 +1339,7 @@ impl FerroApp {
                     )
                     .clicked()
                 {
-                    self.hidden.clear();
+                    self.unhide_all_in_view();
                 }
                 ui.separator();
                 if ui.button("Command palette…   Ctrl+K").clicked() {
@@ -1385,9 +1388,13 @@ impl FerroApp {
                 }
                 ui.separator();
                 ui.checkbox(&mut self.camera.parallel, "Parallel projection");
-                ui.checkbox(&mut self.scene.xray, "X-ray");
-                ui.checkbox(&mut self.scene.wireframe, "Wireframe");
-                ui.checkbox(&mut self.hidden_line, "Hidden line");
+                // Display style of the active view (one undo step each).
+                let style = self.display_style();
+                for s in ferro_core::model::DisplayStyle::ALL {
+                    if ui.radio(style == s, s.label()).clicked() {
+                        self.set_display_style(s);
+                    }
+                }
                 ui.separator();
                 if ui.button("Plan section (1.2 m above level)").clicked() {
                     self.plan_section();
@@ -1397,15 +1404,16 @@ impl FerroApp {
                     .add_enabled(self.section.is_some(), egui::Button::new("Flip section"))
                     .clicked()
                 {
-                    if let Some(p) = &mut self.section {
+                    if let Some(mut p) = self.section {
                         p.normal = -p.normal;
+                        self.set_section(Some(p));
                     }
                 }
                 if ui
                     .add_enabled(self.section.is_some(), egui::Button::new("Clear section"))
                     .clicked()
                 {
-                    self.section = None;
+                    self.set_section(None);
                 }
             });
             ui.menu_button("AI", |ui| {
@@ -1489,6 +1497,8 @@ impl FerroApp {
             }
             ui.separator();
             self.levels_ui(ui);
+            ui.separator();
+            self.views_ui(ui);
             ui.separator();
             self.phases_ui(ui);
             ui.separator();
@@ -1806,6 +1816,7 @@ impl FerroApp {
                         ui.colored_label(Color32::from_rgb(r, g, b), "■■■");
                         ui.end_row();
                     }
+                    ElementBody::View(v) => self.view_rows(ui, v),
                     ElementBody::Phase(p) => {
                         for (label, d) in [("Start", &p.start_date), ("End", &p.end_date)] {
                             ui.label(label);
@@ -3118,6 +3129,7 @@ impl eframe::App for FerroApp {
     fn ui(&mut self, ui: &mut egui::Ui, frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
         self.process_agent_calls();
+        self.sync_view();
         self.poll_chat();
         self.shortcuts(&ctx);
         self.palette_ui(&ctx);

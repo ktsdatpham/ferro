@@ -35,6 +35,8 @@ struct Fx {
     ph_new: ElementId,
     /// A `connect` relationship between `wall` and `bx` (its uid).
     rel: String,
+    /// A 3D view hiding nothing (M5-22).
+    view: ElementId,
 }
 
 impl Fx {
@@ -122,6 +124,11 @@ impl Fx {
             .as_str()
             .expect("uid")
             .to_string();
+        let view = id(&run(
+            &mut s,
+            "create_view",
+            json!({"name": "3D", "view_type": "view_3d"}),
+        ));
         check_document(s.doc()).expect("fixture is valid");
         Fx {
             s,
@@ -142,6 +149,7 @@ impl Fx {
             ph_old,
             ph_new,
             rel,
+            view,
         }
     }
 
@@ -1489,6 +1497,16 @@ fn valid_calls(f: &Fx) -> Vec<(&'static str, Value)> {
             json!({"kind": "join", "elements": [f.wall2, f.bx], "phase": f.ph_new}),
         ),
         ("delete_relationship", json!({"relationship": f.rel})),
+        // views (M5-22)
+        (
+            "create_view",
+            json!({"name": "L1 plan", "view_type": "plan_view", "level": f.l1, "phase": f.ph_old}),
+        ),
+        (
+            "set_view",
+            json!({"view": f.view, "hide": [f.bx], "display_style": "wireframe", "phase": f.ph_new}),
+        ),
+        ("delete_view", json!({"view": f.view})),
         // a semantic push / pull on a wall (height)
         (
             "push_pull_face",
@@ -1530,6 +1548,7 @@ fn every_id_argument_accepts_any_element_kind_without_panicking() {
         "merge_into",
         "created",
         "demolished",
+        "view",
     ];
     let base = Fx::new();
     let all = base.all_ids();

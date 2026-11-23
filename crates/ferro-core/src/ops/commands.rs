@@ -10,6 +10,7 @@ use super::parameter_commands::*;
 use super::phase_commands::*;
 use super::project_commands::*;
 use super::relationship_commands::*;
+use super::view_commands::*;
 use super::{CommandError, Transaction};
 use crate::algo::{push_pull_face, PushPullMode};
 use crate::geom::{polygon, Plane};
@@ -337,9 +338,10 @@ fn transform_elements(
             ElementBody::Material(_)
             | ElementBody::WallType(_)
             | ElementBody::FloorType(_)
-            | ElementBody::Phase(_) => Err(CommandError::new(
+            | ElementBody::Phase(_)
+            | ElementBody::View(_) => Err(CommandError::new(
                 "ferro.model.not_movable",
-                "types, materials and phases have no location",
+                "types, materials, phases and views have no location",
             )
             .on(e.id)),
             ElementBody::Wall(w) => {
@@ -714,6 +716,9 @@ any_command!(
     SetRenovationStatus,
     CreateRelationship,
     DeleteRelationship,
+    CreateView,
+    SetView,
+    DeleteView,
 );
 
 impl AnyCommand {

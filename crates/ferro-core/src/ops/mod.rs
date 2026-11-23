@@ -21,6 +21,7 @@ pub mod project_commands;
 pub mod relationship_commands;
 mod session;
 mod transaction;
+pub mod view_commands;
 
 pub use commands::{AnyCommand, Command, CommandOutput};
 pub use events::DocumentChanged;
@@ -51,3 +52,5 @@ mod scenario_common_tests;
 mod scenario_tests;
 #[cfg(test)]
 mod stress_tests;
+#[cfg(test)]
+mod view_tests;

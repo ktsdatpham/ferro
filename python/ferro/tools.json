@@ -2522,6 +2522,515 @@
       "name": "list_relationships"
     },
     {
+      "description": "Create a view (Revit View): `view_3d` (camera, optional section plane / section box), `plan_view` (needs `level`; cut at view_range.cut_height above it, default 1200 mm) or `section_view` (needs `section_plane`; shows `depth` beyond it, default 10 m). View names are unique. A view keeps camera, display style, hidden elements / tags and its phase; the Ferro app shows the active view. Returns {element}.",
+      "inputSchema": {
+        "properties": {
+          "camera": {
+            "description": "Camera; points in mm",
+            "properties": {
+              "eye": {
+                "description": "Camera position [x, y, z] (z optional): numbers in millimetres or strings with units (\"3m\"). Z is up, X east, Y north.",
+                "items": {
+                  "type": [
+                    "number",
+                    "string"
+                  ]
+                },
+                "maxItems": 3,
+                "minItems": 2,
+                "type": "array"
+              },
+              "fov_y": {
+                "description": "Vertical field of view, degrees (default 45)",
+                "type": [
+                  "number",
+                  "string"
+                ]
+              },
+              "projection": {
+                "enum": [
+                  "perspective",
+                  "parallel"
+                ],
+                "type": "string"
+              },
+              "target": {
+                "description": "Point looked at [x, y, z] (z optional): numbers in millimetres or strings with units (\"3m\"). Z is up, X east, Y north.",
+                "items": {
+                  "type": [
+                    "number",
+                    "string"
+                  ]
+                },
+                "maxItems": 3,
+                "minItems": 2,
+                "type": "array"
+              },
+              "up": {
+                "description": "Up direction [x, y, z] (z optional): numbers in millimetres or strings with units (\"3m\"). Z is up, X east, Y north.",
+                "items": {
+                  "type": [
+                    "number",
+                    "string"
+                  ]
+                },
+                "maxItems": 3,
+                "minItems": 2,
+                "type": "array"
+              }
+            },
+            "required": [
+              "eye",
+              "target",
+              "up"
+            ],
+            "type": "object"
+          },
+          "depth": {
+            "description": "Length: number = millimetres, or a string with units such as \"3m\", \"300cm\", \"10'\".",
+            "type": [
+              "number",
+              "string"
+            ]
+          },
+          "display_style": {
+            "enum": [
+              "shaded",
+              "x_ray",
+              "wireframe",
+              "hidden_line"
+            ],
+            "type": "string"
+          },
+          "level": {
+            "description": "Level of a plan view",
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "phase": {
+            "description": "Phase shown by the view (null = the last phase)",
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "phase_filter": {
+            "description": "Revit phase filter: which statuses are shown and with status graphics (default show_all)",
+            "enum": [
+              "show_all",
+              "show_complete",
+              "show_new",
+              "show_previous_and_demo",
+              "show_previous_and_new",
+              "show_demo_and_new",
+              "no_overrides"
+            ],
+            "type": "string"
+          },
+          "section_box": {
+            "description": "3D views: only what is inside is drawn (stored; not drawn by the app yet)",
+            "properties": {
+              "max": {
+                "description": "Highest corner [x, y, z] (z optional): numbers in millimetres or strings with units (\"3m\"). Z is up, X east, Y north.",
+                "items": {
+                  "type": [
+                    "number",
+                    "string"
+                  ]
+                },
+                "maxItems": 3,
+                "minItems": 2,
+                "type": "array"
+              },
+              "min": {
+                "description": "Lowest corner [x, y, z] (z optional): numbers in millimetres or strings with units (\"3m\"). Z is up, X east, Y north.",
+                "items": {
+                  "type": [
+                    "number",
+                    "string"
+                  ]
+                },
+                "maxItems": 3,
+                "minItems": 2,
+                "type": "array"
+              }
+            },
+            "required": [
+              "min",
+              "max"
+            ],
+            "type": [
+              "object",
+              "null"
+            ]
+          },
+          "section_plane": {
+            "description": "Cutting plane: geometry on the side the normal points to is not drawn",
+            "properties": {
+              "normal": {
+                "description": "Normal of the side cut away [x, y, z] (z optional): numbers in millimetres or strings with units (\"3m\"). Z is up, X east, Y north.",
+                "items": {
+                  "type": [
+                    "number",
+                    "string"
+                  ]
+                },
+                "maxItems": 3,
+                "minItems": 2,
+                "type": "array"
+              },
+              "point": {
+                "description": "A point on the plane [x, y, z] (z optional): numbers in millimetres or strings with units (\"3m\"). Z is up, X east, Y north.",
+                "items": {
+                  "type": [
+                    "number",
+                    "string"
+                  ]
+                },
+                "maxItems": 3,
+                "minItems": 2,
+                "type": "array"
+              }
+            },
+            "required": [
+              "point",
+              "normal"
+            ],
+            "type": [
+              "object",
+              "null"
+            ]
+          },
+          "view_range": {
+            "description": "Plan views (Revit View Range), offsets from the level; view_depth ≤ bottom ≤ cut_height ≤ top",
+            "properties": {
+              "bottom": {
+                "description": "Length: number = millimetres, or a string with units such as \"3m\", \"300cm\", \"10'\".",
+                "type": [
+                  "number",
+                  "string"
+                ]
+              },
+              "cut_height": {
+                "description": "Length: number = millimetres, or a string with units such as \"3m\", \"300cm\", \"10'\".",
+                "type": [
+                  "number",
+                  "string"
+                ]
+              },
+              "top": {
+                "description": "Length: number = millimetres, or a string with units such as \"3m\", \"300cm\", \"10'\".",
+                "type": [
+                  "number",
+                  "string"
+                ]
+              },
+              "view_depth": {
+                "description": "Length: number = millimetres, or a string with units such as \"3m\", \"300cm\", \"10'\".",
+                "type": [
+                  "number",
+                  "string"
+                ]
+              }
+            },
+            "required": [
+              "top",
+              "cut_height",
+              "bottom",
+              "view_depth"
+            ],
+            "type": "object"
+          },
+          "view_type": {
+            "enum": [
+              "view_3d",
+              "plan_view",
+              "section_view"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "view_type"
+        ],
+        "type": "object"
+      },
+      "name": "create_view"
+    },
+    {
+      "description": "Change a view. Omit a field to keep it. `section_plane`, `section_box` and `phase` accept null to clear (a section view keeps its plane). `hide` / `unhide` add / remove elements from the view's hidden list (`unhide_all` empties it first); `hidden_tags` replaces the tags hidden in the view. Deleting an element removes it from every view.",
+      "inputSchema": {
+        "properties": {
+          "camera": {
+            "description": "Camera; points in mm",
+            "properties": {
+              "eye": {
+                "description": "Camera position [x, y, z] (z optional): numbers in millimetres or strings with units (\"3m\"). Z is up, X east, Y north.",
+                "items": {
+                  "type": [
+                    "number",
+                    "string"
+                  ]
+                },
+                "maxItems": 3,
+                "minItems": 2,
+                "type": "array"
+              },
+              "fov_y": {
+                "description": "Vertical field of view, degrees (default 45)",
+                "type": [
+                  "number",
+                  "string"
+                ]
+              },
+              "projection": {
+                "enum": [
+                  "perspective",
+                  "parallel"
+                ],
+                "type": "string"
+              },
+              "target": {
+                "description": "Point looked at [x, y, z] (z optional): numbers in millimetres or strings with units (\"3m\"). Z is up, X east, Y north.",
+                "items": {
+                  "type": [
+                    "number",
+                    "string"
+                  ]
+                },
+                "maxItems": 3,
+                "minItems": 2,
+                "type": "array"
+              },
+              "up": {
+                "description": "Up direction [x, y, z] (z optional): numbers in millimetres or strings with units (\"3m\"). Z is up, X east, Y north.",
+                "items": {
+                  "type": [
+                    "number",
+                    "string"
+                  ]
+                },
+                "maxItems": 3,
+                "minItems": 2,
+                "type": "array"
+              }
+            },
+            "required": [
+              "eye",
+              "target",
+              "up"
+            ],
+            "type": "object"
+          },
+          "depth": {
+            "description": "Length: number = millimetres, or a string with units such as \"3m\", \"300cm\", \"10'\".",
+            "type": [
+              "number",
+              "string"
+            ]
+          },
+          "display_style": {
+            "enum": [
+              "shaded",
+              "x_ray",
+              "wireframe",
+              "hidden_line"
+            ],
+            "type": "string"
+          },
+          "hidden_tags": {
+            "description": "Tags whose elements are not shown",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "hide": {
+            "description": "Elements to hide in the view",
+            "items": {
+              "type": "integer"
+            },
+            "type": "array"
+          },
+          "name": {
+            "type": "string"
+          },
+          "phase": {
+            "description": "Phase shown by the view (null = the last phase)",
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "phase_filter": {
+            "description": "Revit phase filter: which statuses are shown and with status graphics (default show_all)",
+            "enum": [
+              "show_all",
+              "show_complete",
+              "show_new",
+              "show_previous_and_demo",
+              "show_previous_and_new",
+              "show_demo_and_new",
+              "no_overrides"
+            ],
+            "type": "string"
+          },
+          "section_box": {
+            "description": "3D views: only what is inside is drawn (stored; not drawn by the app yet)",
+            "properties": {
+              "max": {
+                "description": "Highest corner [x, y, z] (z optional): numbers in millimetres or strings with units (\"3m\"). Z is up, X east, Y north.",
+                "items": {
+                  "type": [
+                    "number",
+                    "string"
+                  ]
+                },
+                "maxItems": 3,
+                "minItems": 2,
+                "type": "array"
+              },
+              "min": {
+                "description": "Lowest corner [x, y, z] (z optional): numbers in millimetres or strings with units (\"3m\"). Z is up, X east, Y north.",
+                "items": {
+                  "type": [
+                    "number",
+                    "string"
+                  ]
+                },
+                "maxItems": 3,
+                "minItems": 2,
+                "type": "array"
+              }
+            },
+            "required": [
+              "min",
+              "max"
+            ],
+            "type": [
+              "object",
+              "null"
+            ]
+          },
+          "section_plane": {
+            "description": "Cutting plane: geometry on the side the normal points to is not drawn",
+            "properties": {
+              "normal": {
+                "description": "Normal of the side cut away [x, y, z] (z optional): numbers in millimetres or strings with units (\"3m\"). Z is up, X east, Y north.",
+                "items": {
+                  "type": [
+                    "number",
+                    "string"
+                  ]
+                },
+                "maxItems": 3,
+                "minItems": 2,
+                "type": "array"
+              },
+              "point": {
+                "description": "A point on the plane [x, y, z] (z optional): numbers in millimetres or strings with units (\"3m\"). Z is up, X east, Y north.",
+                "items": {
+                  "type": [
+                    "number",
+                    "string"
+                  ]
+                },
+                "maxItems": 3,
+                "minItems": 2,
+                "type": "array"
+              }
+            },
+            "required": [
+              "point",
+              "normal"
+            ],
+            "type": [
+              "object",
+              "null"
+            ]
+          },
+          "unhide": {
+            "description": "Elements to show again",
+            "items": {
+              "type": "integer"
+            },
+            "type": "array"
+          },
+          "unhide_all": {
+            "type": "boolean"
+          },
+          "view": {
+            "description": "View id",
+            "type": "integer"
+          },
+          "view_range": {
+            "description": "Plan views (Revit View Range), offsets from the level; view_depth ≤ bottom ≤ cut_height ≤ top",
+            "properties": {
+              "bottom": {
+                "description": "Length: number = millimetres, or a string with units such as \"3m\", \"300cm\", \"10'\".",
+                "type": [
+                  "number",
+                  "string"
+                ]
+              },
+              "cut_height": {
+                "description": "Length: number = millimetres, or a string with units such as \"3m\", \"300cm\", \"10'\".",
+                "type": [
+                  "number",
+                  "string"
+                ]
+              },
+              "top": {
+                "description": "Length: number = millimetres, or a string with units such as \"3m\", \"300cm\", \"10'\".",
+                "type": [
+                  "number",
+                  "string"
+                ]
+              },
+              "view_depth": {
+                "description": "Length: number = millimetres, or a string with units such as \"3m\", \"300cm\", \"10'\".",
+                "type": [
+                  "number",
+                  "string"
+                ]
+              }
+            },
+            "required": [
+              "top",
+              "cut_height",
+              "bottom",
+              "view_depth"
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "view"
+        ],
+        "type": "object"
+      },
+      "name": "set_view"
+    },
+    {
+      "description": "Delete a view (deleting a level also deletes its plan views).",
+      "inputSchema": {
+        "properties": {
+          "view": {
+            "description": "View id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "view"
+        ],
+        "type": "object"
+      },
+      "name": "delete_view"
+    },
+    {
       "description": "Elements the user has selected in the Ferro app, with their summaries. Use it for requests like \"make the selected wall taller\".",
       "inputSchema": {
         "properties": {},

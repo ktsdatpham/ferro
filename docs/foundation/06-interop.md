@@ -102,3 +102,5 @@ EPD source, price); a complete U-value becomes
 `Pset_WallCommon` / `Pset_SlabCommon.ThermalTransmittance` on the type. SI
 derived units are declared only when such data exists. Geometry is `IfcTriangulatedFaceSet`
 in millimetres.
+
+Views (§3.11) are neither exported to IFC nor synced to Revit yet.

@@ -4,7 +4,7 @@ use crate::model::bim::WallTop;
 use crate::model::generate;
 use crate::model::{
     keys, Category, Document, Element, ElementBody, ElementId, ParamValue, Relationship,
-    RelationshipKind, Uid, EXTENT_LIMIT_MM,
+    RelationshipKind, Uid, ViewType, EXTENT_LIMIT_MM,
 };
 use std::collections::BTreeMap;
 
@@ -175,7 +175,9 @@ impl<'a> Transaction<'a> {
     }
 
     /// Delete an element. Hosted elements (doors, windows) are deleted with
-    /// their host; other references are cleared and reported as warnings.
+    /// their host, plan views with their level; the element leaves every
+    /// view's hidden list (and a deleted phase every view's phase) silently;
+    /// other references are cleared and reported as warnings.
     /// Deleting a type that is still used fails with `ferro.model.type_in_use`,
     /// a phase that is still used with `ferro.model.phase_in_use`.
     pub fn delete(&mut self, id: ElementId) -> Result<(), CommandError> {
@@ -220,10 +222,17 @@ impl<'a> Transaction<'a> {
                 .on(id));
             }
         }
+        // Hosted elements go with their host; plan views with their level
+        // (Revit behaviour).
         let hosted: Vec<ElementId> = self
             .work
             .elements()
-            .filter(|e| e.host_id == Some(id))
+            .filter(|e| {
+                e.host_id == Some(id)
+                    || (e.level_id == Some(id)
+                        && matches!(&e.body, ElementBody::View(v)
+                            if matches!(v.view_type, ViewType::PlanView { .. })))
+            })
             .map(|e| e.id)
             .collect();
         for h in hosted {
@@ -232,6 +241,7 @@ impl<'a> Transaction<'a> {
             }
         }
         self.work.remove(id);
+        self.forget_in_views(id);
         let elevation = target.as_level().map(|l| l.elevation.mm());
         for other in self.work.element_ids() {
             let e = self.work.get(other).expect("listed");
@@ -282,6 +292,34 @@ impl<'a> Transaction<'a> {
             }
         }
         Ok(())
+    }
+
+    /// Remove a deleted element from every view: hidden lists, the
+    /// reserved design-option list and the view phase (a view whose phase
+    /// is deleted shows the last phase). No dangling references remain.
+    fn forget_in_views(&mut self, id: ElementId) {
+        let users: Vec<ElementId> = self
+            .work
+            .elements()
+            .filter(|e| {
+                e.as_view().is_some_and(|v| {
+                    v.phase == Some(id) || v.hides(id) || v.design_options.contains(&id)
+                })
+            })
+            .map(|e| e.id)
+            .collect();
+        for u in users {
+            if let Some(mut e) = self.work.get(u).cloned() {
+                if let ElementBody::View(v) = &mut e.body {
+                    v.hidden_elements.retain(|h| *h != id);
+                    v.design_options.retain(|h| *h != id);
+                    if v.phase == Some(id) {
+                        v.phase = None;
+                    }
+                }
+                self.work.put(e);
+            }
+        }
     }
 
     pub fn warn(&mut self, f: Failure) {

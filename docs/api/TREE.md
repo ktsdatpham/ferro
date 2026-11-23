@@ -38,11 +38,22 @@ The Ferro window: menus, workspaces, toolbar, viewport, levels and properties pa
 
 ### `ferro_app::app::phases`
 
-Phases in the app (ADR 0006, M5-23): the view's phase (app state until views become elements, M5-22), the simple renovation buttons, phase pickers in Properties and the per-status graphics handed to the scene.
+Phases in the app (ADR 0006, M5-23): the active view's phase and phase filter (stored in the view element, M5-22 / M5-23.8), the simple renovation buttons, phase pickers in Properties and the per-status graphics handed to the scene.
 
 - struct `PhaseDisplay` — What the view shows for phases: elements to hide and how to draw the
-- struct `PhaseState` — Phase view state of the app (not saved).
-- fn `phase_display` — Phase display of `doc` in view phase `view`: pure, used by the app and
+- struct `PhaseState` — Phase view state of the app: a working copy of the active view's
+- fn `phase_display` — Phase display of `doc` in view phase `view` under `filter`: pure, used
+
+### `ferro_app::app::views`
+
+Views in the app (D-33, M5-22): the screen shows the *active view*, an element of category `Views`; the Views panel creates, renames, switches and deletes views.
+
+- struct `ViewState` — View state of the app (not saved itself: views are elements).
+- fn `camera_to_view` — The app's orbit camera as a view camera (eye / target / up, mm).
+- fn `camera_from_view` — A view camera as the app's orbit camera. Pitch is limited to ±1.55 rad
+- fn `same_camera` — `true` if two cameras are the same within the tolerances (VERTEX_TOL on
+- fn `style_of` — Display style from the app's three style switches (hidden line wins,
+- fn `unique_view_name` — `base`, or `base 2`, `base 3`… : the first name no view has.
 
 ### `ferro_app::camera`
 
@@ -177,7 +188,6 @@ Drawing tools (D-72): app-side state machines. Each tool previews by evaluating 
 - fn `pick_sub` — The vertex, edge or face of `element` under the snap.
 - enum `SelectOp`
 - enum `ToolEvent`
-- struct `SectionPlane` — A section plane: a point on it and the normal of the side cut away.
 - struct `DrawPlane` — A plane to draw on, with an in-plane frame.
 - fn `DrawPlane::is_horizontal`
 - struct `ToolState`
@@ -818,6 +828,41 @@ Quantities of a wall / floor type derived from its `CompoundStructure` and the a
 - fn `StructureQuantities::from_type` — Quantities of a wall type (heat flow horizontal) or floor type (heat
 - fn `StructureQuantities::is_complete` — `true` if every quantity could be computed.
 
+### `ferro_core::model::view`
+
+Views as elements (D-33, M5-22): `View3D`, `PlanView` and `SectionView`.
+
+- const `DEFAULT_CUT_HEIGHT_MM` — Default cut height of a plan view above its level (Revit: 1200 mm).
+- const `DEFAULT_SECTION_DEPTH_MM` — Default depth of a section view behind its plane (mm).
+- const `DEFAULT_FOV_Y_RAD` — Default vertical field of view (45°).
+- struct `SectionPlane` — A plane cutting a view: a point on it and the normal of the side that is
+- enum `Projection` — How the camera projects (Revit: perspective / orthographic 3D view).
+- struct `ViewCamera` — Camera of a view: where it stands, what it looks at, which way is up and
+- fn `ViewCamera::default_3d` — Iso 3D camera: looking at the origin from the south-west-ish side
+- fn `ViewCamera::plan` — Top-down parallel camera over `(x, y)` looking at height `z`.
+- fn `ViewCamera::section` — Parallel camera looking at a section plane from the side cut away.
+- fn `ViewCamera::validate` — Check the camera: finite coordinates, eye and target further apart
+- struct `ViewRange` — Vertical range of a plan view, as offsets from its level (Revit: *View
+- fn `ViewRange::validate` — Check the order `view_depth ≤ bottom ≤ cut_height ≤ top` (equal
+- enum `ViewType` — What kind of view, with its kind-specific cut (Revit: `ViewType`
+- fn `ViewType::as_str` — Stable snake_case name: `view_3d`, `plan_view`, `section_view`.
+- enum `DisplayStyle` — How a view draws faces and edges (Revit: `DisplayStyle`). The app's
+- fn `DisplayStyle::label` — Label for menus.
+- enum `PhaseGraphics` — How an element of some [`PhaseStatus`] is drawn in a view.
+- enum `PhaseFilter` — Which statuses a view shows and how (Revit: *Phase Filter*). Future and
+- fn `PhaseFilter::is_default` — `true` for the default filter (left out of files).
+- fn `PhaseFilter::label` — Label for menus (Revit names).
+- fn `PhaseFilter::graphics` — How an element of status `s` is drawn under this filter. Pure and
+- struct `View` — A view (D-33): body of an element of category `Views`.
+- fn `View::new` — A view of type `view_type` with `camera`, default style (shaded for
+- fn `View::cut_plane` — The plane cutting the view: a 3D view's optional plane, a section's
+- fn `View::hides` — `true` if `id` is hidden in this view by id (tags not included).
+- fn `validate_section_box` — Check a section box: finite corners and `min < max` by more than
+- fn `validate_section_plane` — Check a section plane's point is finite.
+- fn `Element::as_view` — The view data, if this element is a view.
+- fn `Document::views` — The project's views, sorted by name (then id).
+- fn `Document::view_cut_plane` — The plane cutting view element `view` ([`View::cut_plane`], with a
+
 ### `ferro_core::ops`
 
 Operations layer (Foundation Spec ch. 4): the only way to change a `Document` (D-17).
@@ -999,6 +1044,17 @@ Commands on the relationship table (ADR 0004 §5, M5-5.1).
 - fn `Transaction::project_name`
 - fn `Transaction::project_settings` — Change the project settings (units, location, currency). The caller
 - fn `Transaction::put_parameter_definition` — Add or replace (by key) a project parameter definition, keeping the
+
+### `ferro_core::ops::view_commands`
+
+View commands (D-33, M5-22): create, change and delete views. Each `NAME` is also the MCP tool name.
+
+- enum `ViewTypeName` — Kind of view to create.
+- struct `CreateView` — Create a view named `name` (unique among views).
+- fn `CreateView::view_3d` — A command creating a 3D view with `camera` and nothing else set.
+- struct `SetView` — Change a view. Every field is optional; a missing field is left as it
+- fn `SetView::new` — A command changing nothing on `view` (set fields afterwards).
+- struct `DeleteView` — Delete a view. Same as `delete_elements` on it, but refuses other
 
 ### `ferro_core::topo`
 
