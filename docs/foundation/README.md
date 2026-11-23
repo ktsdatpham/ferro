@@ -123,6 +123,7 @@ decision requires a new ADR in [`../decisions/`](../decisions/).
 | D-74 | **No CAD layers**: visibility by category, parameter filters and user Tags (SketchUp tags import as Tags), plus worksets in collaboration (Q-R14) | **Accepted** |
 | D-75 | **Import / export roadmap**: M1 `.fro` + OBJ / glTF export; M2 SKP and DXF import; M3 Revit live link, IFC export, 3DM, point clouds, PDF underlays, OSM, spreadsheets; M4 IFC import, DWG (Pro), BCF, USD / FBX, STL. All remaining Q-R recommendations (texture mapping, autosave, CAD links, copy / paste, templates, M1–M2 tool set) are adopted (Q-R1, Q-R13, Q-R15–R19) | **Accepted** |
 | D-76 | **Foundation 2** (ADR 0004): element semantics separate from geometry source (any category may be free-form); quantity-typed parameters with `Uid` definitions; materials with appearance / physical / thermal / environmental / cost assets; body kinds incl. non-manifold and curve-ready surface types; relationships as data incl. non-destructive cuts; derived `ferro-scene`; data-driven commands and keymaps. Supersedes parts of D-11, D-39, D-41, D-70 | **Accepted** |
+| D-77 | **Phases and design options** (ADR 0006): ordered phases with created / demolished per element, status derived per view, ArchiCAD-style simple mode, phased cuts; design options as layers of changes over the shared model (add / remove / override), combinations per view, accept = merge, options kept | **Accepted** |
 
 ## Status of the current code
 

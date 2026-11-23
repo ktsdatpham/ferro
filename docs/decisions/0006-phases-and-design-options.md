@@ -1,6 +1,6 @@
 # 0006. Phases and design options
 
-- **Status:** Proposed (2026-11-24)
+- **Status:** Accepted (2026-11-24, owner approval)
 - **Affects:** D-32, D-33, D-34, D-55, F10 (review), M5-5, M5-23, M5-26
 
 ## Context

@@ -1,0 +1,35 @@
+{
+  "bounding_box_mm": {
+    "max": [
+      8100.0,
+      6100.0,
+      3000.0
+    ],
+    "min": [
+      -100.0,
+      -100.0,
+      -200.0
+    ]
+  },
+  "categories": {
+    "doors": 1,
+    "floors": 1,
+    "levels": 1,
+    "walls": 4,
+    "windows": 1
+  },
+  "definitions": {
+    "floors": 1,
+    "walls": 1
+  },
+  "elements": 10,
+  "levels": [
+    {
+      "elevation_mm": 0.0,
+      "id": 1,
+      "name": "Ground"
+    }
+  ],
+  "problems": [],
+  "project": "Untitled"
+}

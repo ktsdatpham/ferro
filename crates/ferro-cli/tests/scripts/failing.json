@@ -1,0 +1,7 @@
+[
+  {"id": "walls", "tool": "create_walls", "args": {
+    "points": [[0, 0], [0, "6m"], ["8m", "6m"], ["8m", 0]], "closed": true, "height": "3m"}},
+  {"tool": "create_opening", "args": {
+    "wall": {"$ref": "walls.result.elements.0"}, "kind": "window", "position": "5.9m"}},
+  {"tool": "create_box", "args": {"origin": [0, 0, 0], "width": "1m", "depth": "1m", "height": "1m"}}
+]
