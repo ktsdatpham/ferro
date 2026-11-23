@@ -1486,29 +1486,13 @@ impl FerroApp {
                     ui.label(l.label());
                     ui.end_row();
                 }
-                match &e.body {
-                    ElementBody::Form(f) => {
-                        ui.label("Faces");
-                        ui.label(format!(
-                            "{}{}",
-                            f.body.face_count(),
-                            if f.body.is_closed() { "  (solid)" } else { "" }
-                        ));
-                        ui.end_row();
-                        if let Some(bb) = f.body.bounding_box() {
-                            let s = bb.size();
-                            ui.label("Size");
-                            ui.label(format!("{:.0} × {:.0} × {:.0} mm", s.x, s.y, s.z));
-                            ui.end_row();
-                        }
-                    }
-                    ElementBody::Level(l) => {
-                        ui.label("Elevation");
-                        ui.label(format!("{:.3} m", l.elevation.m()));
-                        ui.end_row();
-                    }
-                    ElementBody::Wall(_) | ElementBody::Floor(_) => {
-                        let is_wall = e.as_wall().is_some();
+                // Type: parametric walls / floors, and direct ones of that category.
+                let type_of = match (&e.body, e.category) {
+                    (ElementBody::Wall(_), _) | (ElementBody::Form(_), Category::Walls) => Some(true),
+                    (ElementBody::Floor(_), _) | (ElementBody::Form(_), Category::Floors) => Some(false),
+                    _ => None,
+                };
+                if let Some(is_wall) = type_of {
                         let types: Vec<(ElementId, String)> = self
                             .session
                             .doc()
@@ -1545,6 +1529,29 @@ impl FerroApp {
                                 .into(),
                             );
                         }
+                }
+                match &e.body {
+                    ElementBody::Form(f) => {
+                        ui.label("Faces");
+                        ui.label(format!(
+                            "{}{}",
+                            f.body.face_count(),
+                            if f.body.is_closed() { "  (solid)" } else { "" }
+                        ));
+                        ui.end_row();
+                        if let Some(bb) = f.body.bounding_box() {
+                            let s = bb.size();
+                            ui.label("Size");
+                            ui.label(format!("{:.0} × {:.0} × {:.0} mm", s.x, s.y, s.z));
+                            ui.end_row();
+                        }
+                    }
+                    ElementBody::Level(l) => {
+                        ui.label("Elevation");
+                        ui.label(format!("{:.3} m", l.elevation.m()));
+                        ui.end_row();
+                    }
+                    ElementBody::Wall(_) | ElementBody::Floor(_) => {
                         for (k, label) in [
                             (keys::LENGTH, "Length"),
                             (keys::HEIGHT, "Height"),

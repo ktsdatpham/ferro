@@ -29,7 +29,8 @@ Legend: `[ ]` open · `[~]` in progress · `[x]` done · `✓` verified ·
   - [x] M5-1.2 `set_geometry_source`: freeze walls (with openings) and floors; recognise plain walls / slabs · PR #11 ✓ verified @lead
   - [x] M5-1.3 `set_category` keeps fitting types; `set_element_type` on direct walls / floors · PR #11 ✓ verified @lead
   - [x] M5-1.4 Properties panel switch (Edit freely / Make parametric) · PR #11 ✓ verified @lead
-  - [ ] M5-1.5 Type selector and type data shown for direct walls / floors in the properties panel
+  - [x] M5-1.5 Type selector and type data shown for direct walls / floors in the properties panel @lead
+    - accept: select a frozen wall: the Properties panel shows a Type combo listing wall types; picking one runs `set_element_type`
 - [ ] **M5-2 Representations and quantities** @lead
   - [ ] M5-2.1 Quantities from the body for every category: volume, surface area, footprint area, height (read-only computed parameters)
   - [ ] M5-2.2 Wall faces by side (exterior / interior / top / ends) for direct walls, by comparing with the type's layers when possible
