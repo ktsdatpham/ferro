@@ -336,12 +336,16 @@ fn new_token() -> String {
 /// Make a private, fresh folder for one run and write the bundled SDK in it.
 fn run_dir(write_sdk: bool) -> std::io::Result<PathBuf> {
     let dir = std::env::temp_dir().join(format!("ferro-run-{}", new_token()));
-    let mut b = std::fs::DirBuilder::new();
     #[cfg(unix)]
-    {
+    let b = {
         use std::os::unix::fs::DirBuilderExt;
+        let mut b = std::fs::DirBuilder::new();
         b.mode(0o700);
-    }
+        b
+    };
+    // Windows: the per-user temp folder is already private to the user.
+    #[cfg(not(unix))]
+    let b = std::fs::DirBuilder::new();
     // `create`, not `create_all`: fails if someone planted the folder.
     b.create(&dir)?;
     if write_sdk {
