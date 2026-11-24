@@ -57,6 +57,14 @@ Phases in the app (ADR 0006, M5-23): the active view's phase and phase filter (s
 Pins in the app (ADR 0008, M5-27.5): a "Pinned" row with a toggle in Properties, Pin / Unpin in the viewport's context menu and on the `PN` / `UP` codes, and a "Pinned" marker on selected pinned elements.
 
 
+### `ferro_app::app::plugins`
+
+Plugins in the app (ADR 0009, M5-28): the loaded plugins' commands in the command palette, a Plugins menu, a Plugins group in the left panel and the keymap; hot reload; "New plugin..." from the template; the install screen and the Plugins window (enable, disable, remove).
+
+- fn `PluginState::script_ended` — The running script ended: a pending `ferro.ask` has no one to answer.
+- fn `PluginState::slot` — The command in `slot`.
+- fn `PluginState::targets` — Commands of the active plugins (palette entries), with their slots.
+
 ### `ferro_app::app::python`
 
 `run_python` in the app (ADR 0005 §5): the script runs out of process and calls back over Ferro Link with its one-time token; its calls are answered on the UI thread, inside the run's group, between frames. Nothing here waits for the script: [`FerroApp::poll_python`] checks it once per frame.
@@ -111,6 +119,8 @@ Keyboard shortcuts as data (ADR 0004 §7, M5-11).
 - fn `Keymap::scheme` — The bindings of a preset.
 - fn `Keymap::from_file` — A preset with the user's overrides applied. Invalid keys are
 - fn `Keymap::get` — Target bound to a key or code.
+- fn `Keymap::bind_plugin` — Bind a plugin command's two-letter code unless the key is taken
+- fn `Keymap::clear_plugins` — Remove every plugin binding (before plugins are reloaded).
 - fn `Keymap::keys_for` — Keys and codes for a target, single keys first (for labels).
 - fn `Keymap::label_for` — Shortest label for a target's shortcut, e.g. "L" or "WA".
 - struct `KeyResolver` — Turns key presses into targets, handling two-letter codes.
@@ -1324,13 +1334,76 @@ Ferro `Body` ↔ solidcore B-rep record (schema 4, STEP names) for planar bodies
 
 ### `ferro_mcp`
 
-ferro-mcp library: the MCP tool host (a headless [`tools::Server`] with file tools, forwarding to the open app over Ferro Link when linked). The `ferro-mcp` binary serves it over stdio; `ferro-cli` reuses it so scripts run exactly the same dispatch as agents (D-44). [`python`] runs `run_python` scripts for this host and for the app.
+ferro-mcp library: the MCP tool host (a headless [`tools::Server`] with file tools, forwarding to the open app over Ferro Link when linked). The `ferro-mcp` binary serves it over stdio; `ferro-cli` reuses it so scripts run exactly the same dispatch as agents (D-44). [`python`] runs `run_python` scripts for this host and for the app; [`plugins`] loads plugins (ADR 0009) and runs their commands through it.
 
 
 ### `ferro_mcp`
 
 ferro-mcp: lets any MCP client (Claude Desktop, Claude Code, Cursor, ...) model in Ferro. Transport: newline-delimited JSON-RPC 2.0 over stdio.
 
+
+### `ferro_mcp::plugins`
+
+Plugins (ADR 0009, D-80): a folder with a small manifest and Python code on the Ferro SDK, run with the user's rights like a Revit add-in or a SketchUp extension.
+
+- const `MANIFEST_FILE` — File name of a plugin's manifest.
+- const `DISABLED_FILE` — Marker file: a plugin folder holding it is disabled (listed, not loaded).
+- const `MAX_MANIFEST_BYTES` — Largest manifest read (bytes).
+- const `MAX_ID_LEN` — Longest plugin or command id.
+- const `POLL_INTERVAL` — How often [`PluginWatch`] looks at the plugins folder.
+- const `MAX_WATCHED_FILES` — Files looked at by one [`fingerprint`] at most (the rest is ignored).
+- const `MAX_INSTALL_BYTES` — Largest plugin copied or unpacked at install (bytes, all files).
+- const `MAX_INSTALL_FILES` — Most files in a plugin copied or unpacked at install.
+- fn `plugins_dir` — The plugins folder: `$FERRO_HOME/plugins`, else `~/.ferro/plugins`.
+- enum `PluginGroup` — Where a plugin command shows besides the command palette and the
+- fn `PluginGroup::as_str` — The manifest spelling (`"panel"`, `"menu"`).
+- enum `PluginEntry` — What a plugin command runs.
+- fn `PluginEntry::spelling` — The manifest spelling (`main:box_at_origin`, `scripts/box.py`).
+- struct `PluginCommand` — One entry a plugin adds to the app: the command palette, the Plugins
+- struct `PluginManifest` — A plugin's `plugin.json`, validated.
+- fn `parse_entry` — Parse a command's `run` field. `dir` (the plugin folder) is used to check
+- fn `PluginManifest::parse` — Parse and validate `plugin.json` text. `dir` (the plugin folder)
+- fn `PluginManifest::read` — Read and validate `dir/plugin.json` ([`Self::parse`] with entry
+- fn `PluginManifest::command` — The command with this id.
+- fn `PluginManifest::to_json` — The manifest as `plugin.json` text (pretty JSON).
+- struct `Plugin` — One folder in the plugins folder, loaded or broken.
+- fn `Plugin::id` — The manifest's id, else the folder name (broken plugins).
+- fn `Plugin::name` — The manifest's name, else the folder name.
+- fn `Plugin::active` — The manifest when the plugin is enabled and not broken.
+- fn `scan` — Load every plugin folder in `root` (sorted by folder name). Folders whose
+- fn `find` — Find an active (enabled, not broken) plugin's command by ids.
+- struct `KeyBinding` — A key given to a plugin command by [`assign_keys`].
+- fn `assign_keys` — Give the active plugins' commands their keys. A key already used by a
+- fn `command_source` — The Python source that runs `entry` of the plugin in `dir` inside a run
+- fn `run_args` — The run arguments of a plugin command (its source from
+- fn `plugin_ctx` — Who a plugin command's changes are recorded as: the plugin (journal
+- fn `run_command_blocking` — Run a plugin command to the end on this thread (headless hosts and
+- struct `Fingerprint` — The state of the plugins folder for hot reload: every file's path, size
+- fn `fingerprint` — Take the [`Fingerprint`] of `root` (at most [`MAX_WATCHED_FILES`] files,
+- struct `PluginWatch` — Polls the plugins folder for hot reload: at most once per
+- fn `PluginWatch::new` — Watch `root`, taking its state now as loaded.
+- fn `PluginWatch::root` — The watched folder.
+- fn `PluginWatch::poll` — True when the folder changed since the last load (then the new state
+- fn `PluginWatch::loaded` — The plugins were just reloaded (e.g. the Reload menu item): take the
+- fn `plugin_id_for` — A plugin id made from a name: ASCII letters and digits kept (lower case;
+- const `TEMPLATE_MAIN` — `main.py` of a new plugin: one working command, "Box at origin".
+- const `TEMPLATE_README` — `README.md` of a new plugin (Vietnamese, then English).
+- fn `create_plugin` — Create a new plugin from the template in `root`: a folder named after
+- fn `set_enabled` — Enable or disable the plugin in `dir` (removes or writes
+- fn `remove_plugin` — Remove the plugin folder `dir`, which must be directly inside `root`
+- struct `StagedPlugin` — A plugin unpacked or copied into a staging folder, waiting for the user
+- fn `stage_install` — Unpack (`.zip`) or copy (folder) `source` into a staging folder in
+- fn `finish_install` — The user confirmed the install screen: move the staged plugin into
+- fn `cancel_install` — The user cancelled the install screen: remove the staging folder.
+- fn `clean_staging` — Remove staging folders left by an install the app never finished (it
+
+### `ferro_mcp::plugins::unzip`
+
+Unpacking a plugin `.zip` (user input): stored and deflated entries only, no encryption, no zip64. Every entry path is checked so nothing lands outside the destination folder ("zip slip": absolute paths, drive letters, `..`), and the number of files and the unpacked size are limited (a small zip may inflate to gigabytes).
+
+- struct `ZipLimits` — Limits for [`extract`].
+- fn `safe_path` — The relative path an entry name stands for, or `None` when it would
+- fn `extract` — Unpack the zip at `zip` into `dest` (which must exist). Returns the
 
 ### `ferro_mcp::python`
 
@@ -1342,7 +1415,7 @@ ferro-mcp: lets any MCP client (Claude Desktop, Claude Code, Cursor, ...) model 
 - const `FAILED` — The script raised an exception or exited with a non-zero status; rolled
 - const `NESTED` — A script tried to start `run_python` itself.
 - const `BUSY` — Another script is running; the call was refused (retry when it is done).
-- const `NOT_ALLOWED` — The caller may not start scripts (plugins: D-51 keeps them in WASM), or
+- const `NOT_ALLOWED` — The caller may not cancel this run (only the user and the caller that
 - const `CANCELLED` — The script was stopped (`cancel_python`, the app's Stop button or Esc
 - const `CANCEL_TOOL` — Tool name of the cancel request (MCP and Ferro Link).
 - const `DEFAULT_TIMEOUT_S` — Time limit when the caller gives none (seconds).
@@ -1353,6 +1426,11 @@ ferro-mcp: lets any MCP client (Claude Desktop, Claude Code, Cursor, ...) model 
 - const `BEGIN_TRANSACTION` — Ferro Link requests a running script may send besides tools: savepoints
 - const `COMMIT_TRANSACTION` — Keep the changes since the innermost `begin_transaction`.
 - const `ROLLBACK_TRANSACTION` — Discard the changes since the innermost `begin_transaction`.
+- const `GET_USER_INPUT` — Ferro Link request only a running script may send (SDK `ferro.ask`, ADR
+- const `APP_ONLY` — Requests about the user's session that only the app can answer: the
+- const `USER_INPUT_TIMEOUT` — How long a script waits for the user to answer [`GET_USER_INPUT`]. The
+- fn `headless_answer` — The answer of a headless host (no app, so no user and no selection) to an
+- fn `user_input_default` — The `default` of a [`GET_USER_INPUT`] request as a string (numbers are
 - fn `tool` — The MCP / Ferro Link schema of `run_python`.
 - fn `cancel_tool` — The MCP / Ferro Link schema of `cancel_python`.
 - fn `failure` — A failure body like the tools return: `{error, failures: [{severity, code, message, elements}]}`.
@@ -1368,11 +1446,12 @@ ferro-mcp: lets any MCP client (Claude Desktop, Claude Code, Cursor, ...) model 
 - struct `PythonRun` — One running script: its process, its token and the group it holds open.
 - fn `PythonRun::start` — Spawn the interpreter for `args.code` and open the run's group.
 - fn `PythonRun::elapsed` — How long the script has been running.
+- fn `PythonRun::extend_deadline` — Push the time limit back by `by`: the time the script spent waiting
 - fn `PythonRun::targets` — Where the script's commands landed so far, in first-use order without
 - fn `PythonRun::cancel` — Stop the script now: kill its process tree (as on a timeout, so a
 - fn `PythonRun::token` — The one-time Ferro Link token of this run. It is valid only while the
 - fn `PythonRun::ctx` — The caller that started the run (its actor goes on the journal).
-- fn `PythonRun::handle` — Answer one request from the script. `None` for tools the host must
+- fn `PythonRun::handle` — Answer one request from the script. `None` for requests the host must
 - fn `PythonRun::poll` — Check the process without blocking. Returns how it ended once it has
 - fn `PythonRun::finish` — Commit or roll back, then report. `Ok` when the script exited with
 - struct `ScriptCall` — A tool call from a script, waiting for the host thread.
@@ -1386,6 +1465,7 @@ ferro-mcp: lets any MCP client (Claude Desktop, Claude Code, Cursor, ...) model 
 - fn `RunControl::is_running` — Whether a script is running.
 - fn `RunControl::cancel` — `cancel_python` from `caller`. Refused with [`NOT_ALLOWED`] unless
 - fn `run_blocking` — Run a script to the end on this thread (headless hosts: `ferro-mcp`
+- fn `run_blocking_as` — [`run_blocking`] with parsed arguments and the name of the group the run
 - fn `interpreter_works` — Whether `path` names an interpreter that starts (used by tests to skip
 
 ### `ferro_mcp::tools`

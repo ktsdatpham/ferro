@@ -32,6 +32,7 @@ use std::time::{Duration, Instant};
 mod design_options;
 mod phases;
 mod pins;
+mod plugins;
 mod python;
 mod views;
 
@@ -194,6 +195,8 @@ pub struct FerroApp {
     script_wait: python::ScriptWait,
     /// Interpreter and SDK for `run_python` (`FERRO_PYTHON`, `FERRO_PYTHON_SDK`).
     python_config: ferro_mcp::python::PythonConfig,
+    /// Loaded plugins and their windows (ADR 0009).
+    plugins: plugins::PluginState,
     chat: Chat,
     /// View phase and phase display (M5-23; copy of the active view's).
     phasing: phases::PhaseState,
@@ -273,6 +276,7 @@ impl FerroApp {
             python: None,
             script_wait: Default::default(),
             python_config: ferro_mcp::python::PythonConfig::from_env(),
+            plugins: Default::default(),
             chat: Chat {
                 open: false,
                 input: String::new(),
@@ -292,6 +296,7 @@ impl FerroApp {
             app.open_path(p);
         }
         app.load_keymap();
+        app.reload_plugins();
         app
     }
 
@@ -1145,6 +1150,7 @@ impl FerroApp {
             (None, Target::ZoomExtents) => self.camera.zoom_extents(scene::doc_bounds(self.doc())),
             (None, Target::Pin) => self.pin_selection(true),
             (None, Target::Unpin) => self.pin_selection(false),
+            (None, Target::Plugin(slot)) => self.run_plugin_slot(slot),
             (None, _) => self.delete_selection(),
         }
     }
@@ -1169,10 +1175,12 @@ impl FerroApp {
             }
             Err(e) => self.say(format!("keymap.json: {e}"), true),
         }
+        self.apply_plugin_keys();
     }
 
     fn set_scheme(&mut self, p: KeyScheme) {
         self.keymap = Keymap::scheme(p);
+        self.apply_plugin_keys();
         if let Some(dir) = ferro_tools::link::ferro_dir() {
             let f = KeymapFile {
                 scheme: p,
@@ -1273,11 +1281,21 @@ impl FerroApp {
                 );
                 r.request_focus();
                 let needle = q.trim().to_lowercase();
+                // Built-in targets, then plugin commands (ADR 0009).
+                let label = |t: &Target| match t {
+                    Target::Plugin(i) => self
+                        .plugins
+                        .slot(*i)
+                        .map(|s| s.label.clone())
+                        .unwrap_or_default(),
+                    t => t.label().to_string(),
+                };
                 let hits: Vec<Target> = Target::ALL
                     .into_iter()
+                    .chain(self.plugins.targets().map(|(t, _)| t))
                     .filter(|t| {
                         needle.is_empty()
-                            || t.label().to_lowercase().contains(&needle)
+                            || label(t).to_lowercase().contains(&needle)
                             || self
                                 .keymap
                                 .keys_for(*t)
@@ -1286,7 +1304,7 @@ impl FerroApp {
                     })
                     .collect();
                 for t in &hits {
-                    let label = format!("{:<16} {}", t.label(), self.keymap.label_for(*t));
+                    let label = format!("{:<16} {}", label(t), self.keymap.label_for(*t));
                     if ui
                         .selectable_label(false, RichText::new(label).monospace())
                         .clicked()
@@ -1484,6 +1502,7 @@ impl FerroApp {
                 );
                 ui.radio_value(&mut self.autonomy, Autonomy::Apply, "Apply directly");
             });
+            self.plugins_menu(ui);
             ui.menu_button("Help", |ui| {
                 if ui.button("Report a problem…").clicked() {
                     self.report = Some(ReportDraft::new(String::new(), None));
@@ -1533,6 +1552,7 @@ impl FerroApp {
             }
         }
         self.renovation_toolbar(ui);
+        self.plugins_toolbar(ui);
     }
 
     fn side_panel(&mut self, ui: &mut egui::Ui) {
@@ -2792,7 +2812,13 @@ impl FerroApp {
         self.link.set_project(&name);
         for p in self.link.drain() {
             let tool = p.req.tool.clone();
-            let resp = if self.is_script_token(&p.req.token) {
+            let resp = if self.is_script_token(&p.req.token)
+                && tool == ferro_mcp::python::GET_USER_INPUT
+            {
+                // `ferro.ask`: answered when the user closes the dialog.
+                self.ask_from_script(p.req, p.reply);
+                continue;
+            } else if self.is_script_token(&p.req.token) {
                 self.script_call(p.req)
             } else if tool == ferro_mcp::python::CANCEL_TOOL {
                 self.cancel_from_link(&p.req)
@@ -3202,6 +3228,7 @@ impl FerroApp {
 
     fn windows(&mut self, ctx: &egui::Context) {
         self.project_settings_window(ctx);
+        self.plugins_windows(ctx);
         egui::Window::new("About Ferro").open(&mut self.show_about).resizable(false).show(ctx, |ui| {
             ui.heading(format!("Ferro {}", env!("CARGO_PKG_VERSION")));
             ui.label("Open-source, AI-native 3D design tool for architects.");
@@ -3249,6 +3276,7 @@ impl eframe::App for FerroApp {
         self.refresh_view();
         self.process_agent_calls();
         self.poll_python(&ctx);
+        self.poll_plugins(&ctx);
         self.sync_view();
         self.poll_chat();
         self.shortcuts(&ctx);

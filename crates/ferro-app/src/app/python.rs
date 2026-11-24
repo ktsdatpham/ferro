@@ -22,12 +22,17 @@ use std::path::PathBuf;
 use std::sync::mpsc::Sender;
 use std::time::{Duration, Instant};
 
-/// A script started by an agent or the chat, waiting to finish.
+/// A script started by an agent, the chat or a plugin command, waiting to
+/// finish.
 pub(super) struct ScriptRun {
-    run: PythonRun,
-    /// Where the `run_python` answer goes once the script has ended.
-    reply: Sender<LinkResponse>,
-    agent: String,
+    pub(super) run: PythonRun,
+    /// Where the `run_python` answer goes once the script has ended (`None`
+    /// for a plugin command the user clicked: the status line reports it).
+    pub(super) reply: Option<Sender<LinkResponse>>,
+    /// Who started it: the agent's name, or the plugin's name.
+    pub(super) agent: String,
+    /// The plugin command's label when a plugin command runs (ADR 0009).
+    pub(super) plugin: Option<String>,
 }
 
 /// An edit the user tried while a script ran, done once the script has
@@ -293,8 +298,9 @@ impl FerroApp {
                 self.say(format!("{} is running a Python script…", info.name), false);
                 self.python = Some(ScriptRun {
                     run,
-                    reply,
+                    reply: Some(reply),
                     agent: info.name,
+                    plugin: None,
                 });
             }
             Err(body) => {
@@ -385,6 +391,7 @@ impl FerroApp {
             return;
         };
         self.link.set_run_token(None); // the token dies with the run
+        self.plugins.script_ended();
         let targets = script.run.targets().to_vec();
         let r = script.run.finish(&mut self.session, end);
         let code = r
@@ -393,6 +400,13 @@ impl FerroApp {
             .and_then(|b| b["failures"][0]["code"].as_str())
             .unwrap_or("")
             .to_string();
+        if let Some(label) = &script.plugin {
+            self.plugin_command_ended(label, &script.agent, end, &r);
+            for action in self.script_wait.script_ended() {
+                self.perform(action);
+            }
+            return;
+        }
         crate::report::record(if r.is_ok() {
             "agent run_python ok".to_string()
         } else {
@@ -431,7 +445,9 @@ impl FerroApp {
                 self.say(text, end != RunEnd::Cancelled);
             }
         }
-        let _ = script.reply.send(answer(r));
+        if let Some(reply) = script.reply {
+            let _ = reply.send(answer(r));
+        }
         for action in self.script_wait.script_ended() {
             self.perform(action);
         }

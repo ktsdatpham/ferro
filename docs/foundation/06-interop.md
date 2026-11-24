@@ -67,6 +67,19 @@ Rules:
   `{cancelled: false}` when no script runs. `ferro-mcp` answers it (and the
   MCP `notifications/cancelled` of a waiting `run_python`) while it waits
   for the script; the Python SDK sends it on Ctrl+C during `run_python`.
+- **Requests only a running script may send** (not MCP tools; stable
+  names): `begin_transaction`, `commit_transaction`, `rollback_transaction`
+  (savepoints, ADR 0005) and **`get_user_input {prompt, default?}`** (ADR
+  0009, SDK `ferro.ask`): the app shows a small dialog and answers
+  `{value}` (a string, or `null` when the user cancelled); the script's time
+  limit is paused while it is open. A script also reads the selection with
+  `get_selection` (SDK `doc.selection()`, the ids). Headless hosts
+  (`ferro-mcp` / `ferro-cli` without the app) answer `get_user_input` with
+  its `default` and `get_selection` with an empty list.
+- **Plugins** (ADR 0009): a `PluginCommand` runs exactly like `run_python`
+  (same host, one undo step named after its label, all or nothing,
+  stoppable), committed as the plugin (actor kind `plugin`, the user's
+  rights, never a Proposal). Format: `docs/plugins/` and `ferro_mcp::plugins`.
 - **Target of a change** (ADR 0006, M5-14.8): every command tool and
   `run_python` take `in_design_option`: a design option id, or the string
   `"shared"` for the shared model. Omitted (or `null`): the option the user

@@ -27,7 +27,7 @@ points are `(x, y)` or `(x, y, z)`; angles are degrees. Z is up.
   named exactly as the tool (`ferro.tools.create_wall(start=..., end=...)`).
   Arguments left as `None` are not sent. Returns the tool's JSON body.
 - `ferro.Document` / `Element` / `Wall` / `Floor` / `Opening` / `Level` — a
-  small object layer on top (`doc.walls`, `doc.get(id)`, `doc.selection`,
+  small object layer on top (`doc.walls`, `doc.get(id)`, `doc.selection` (ids: `doc.selection()`),
   `wall.set(height="3.5m")`, `element.set_parameter(key, value)`,
   `element.delete()`).
 - `ferro.link.Link` — the Ferro Link client.
@@ -50,6 +50,83 @@ rolls everything back (`ferro.python.failed`, traceback in `stderr`); past
 (`ferro.python.timeout`). Inside it, `ferro.connect()` returns the run's
 document and `with doc.transaction(name):` is a savepoint: an exception
 leaving the block undoes the block. `FERRO_PYTHON` picks the interpreter.
+
+## Plugins: your own buttons in a minute
+
+A plugin (ADR 0009) adds commands to Ferro: a button in the left panel, an
+item in the *Plugins* menu, an entry in the command palette (Ctrl+K) and,
+if you like, a two-letter key. It is a folder in `~/.ferro/plugins/`
+(`$FERRO_HOME/plugins` when set) holding `plugin.json` and Python code.
+
+**Plugins > New plugin…** asks for a name, creates the folder from a
+template and opens it. Then:
+
+1. edit `main.py`,
+2. save (Ferro reloads plugins within a second; *Plugins > Reload plugins*
+   does it at once),
+3. click the command.
+
+`plugin.json`:
+
+```json
+{
+  "id": "my-tools",
+  "name": "My tools",
+  "version": "0.1.0",
+  "author": "Your name",
+  "description": "What it does.",
+  "commands": [
+    {"id": "box_at_origin", "label": "Box at origin", "key": "BX",
+     "group": "panel", "run": "main:box_at_origin"}
+  ]
+}
+```
+
+- `id`: lower-case letters, digits, `-`, `_`; unique among your plugins.
+- `commands[].run`: `module:function` in the plugin folder, or a `.py`
+  script file (run like `run_python`, with `doc`, `tools`, `ferro`
+  predefined and `result` returned).
+- `key` (optional): a two-letter code typed in sequence, as in Revit. A key
+  Ferro already uses stays Ferro's; the app shows a warning.
+- `group` (optional): `panel` (default; also a button in the left panel)
+  or `menu` (menu and palette only). `timeout_s` (optional): time limit,
+  30 s by default, 300 s at most.
+
+`main.py`:
+
+```python
+import ferro
+
+def box_at_origin(doc):
+    height = ferro.ask("Box height", default="3m")   # a dialog; None = Cancel
+    if height is None:
+        return None
+    ids = doc.selection()                            # ids of the selected elements
+    return doc.call("create_box", origin=[0, 0, 0], width="2m", depth="2m", height=height)
+```
+
+The function gets `doc` if it takes a parameter; what it returns is the
+run's result, and its last printed line shows in the status bar. Each click
+is **one undo step**, all or nothing: an exception undoes everything the
+command did. The Stop button (or Esc twice) stops it. The current folder is
+the plugin folder, and modules next to `main.py` can be imported. Outside
+the app (headless `ferro-mcp` / `ferro-cli`), `ferro.ask` returns the
+default and `doc.selection()` is empty.
+
+A plugin runs with your rights, like a Revit add-in or a SketchUp
+extension: it can call every tool, read and write files, use the network.
+Install plugins from others only if you trust them: *Plugins > Install
+from file…* (a `.zip`; dropping it on the window works too) shows who made
+it and what it adds once. *Plugins > Manage plugins…* enables, disables and
+removes plugins. To make a plugin part of Ferro, see
+[`docs/plugins/PROMOTE.md`](../docs/plugins/PROMOTE.md).
+
+**For agents** writing a plugin from a description: create the folder with
+the three files above (copy the template from *New plugin…* or from
+`TEMPLATE_MAIN` in `crates/ferro-mcp/src/plugins.rs`), keep one function
+per command, use only `doc`, `ferro.tools` and `ferro.ask`, and check the
+manifest by opening *Plugins > Manage plugins…* (a broken plugin shows its
+reason).
 
 ## Errors
 

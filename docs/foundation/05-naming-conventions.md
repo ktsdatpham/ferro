@@ -49,6 +49,9 @@ for the same concept.
 | `Opening` | Door or window hosted by a wall | Hole, Cutout, Insert (as a type) |
 | `LocationLine` | Which line of a wall its curve follows | Justification, Alignment |
 | Ferro Link | Local protocol for agents to drive the open app | Bridge, Socket API |
+| `Plugin` | A folder in `~/.ferro/plugins/` with a `PluginManifest` and Python code on the SDK; runs with the user's rights (ADR 0009) | Add-in, Addon, Extension, Package (for this) |
+| `PluginManifest` | A plugin's `plugin.json`: id, name, version, author, description and its `PluginCommand`s | Descriptor, Plugin config, Package file |
+| `PluginCommand` | An entry a plugin adds to the palette, the Plugins menu, the left panel and the keymap; runs Python as one script run (it is not a `Command`: the tools the script calls are) | Plugin action, Button (as a type), Macro |
 | Proposal | Agent changes awaiting the user's accept / reject | Draft, Suggestion (for this) |
 | Pin / `pinned` | An element's flag that keeps it in place (Revit `Element.Pinned`, ADR 0008): a pinned element cannot be moved or deleted (`ferro.model.pinned`), every other edit stays allowed; verbs *pin* / *unpin*, command `set_pinned` | Lock (as a type, field or command), Freeze, Protect (for this) |
 | `Phase` | A construction stage (Revit `Phase`), an element of category `Phases`; ordered | Stage, Period (for this) |

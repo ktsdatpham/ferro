@@ -50,6 +50,11 @@ pub enum Target {
     Pin,
     /// Unpin the selection (Revit `UP`).
     Unpin,
+    /// A plugin command (ADR 0009), by its slot in the app's list of loaded
+    /// plugin commands. Bound only by [`Keymap::bind_plugin`], never read
+    /// from or written to `keymap.json` (slots change on every reload).
+    #[serde(skip)]
+    Plugin(u16),
 }
 
 impl Target {
@@ -108,7 +113,8 @@ impl Target {
             | Target::ZoomExtents
             | Target::Delete
             | Target::Pin
-            | Target::Unpin => return None,
+            | Target::Unpin
+            | Target::Plugin(_) => return None,
         })
     }
 
@@ -130,6 +136,7 @@ impl Target {
                 Target::ZoomExtents => "Zoom extents",
                 Target::Pin => "Pin",
                 Target::Unpin => "Unpin",
+                Target::Plugin(_) => "Plugin",
                 _ => "Delete",
             },
         }
@@ -258,6 +265,23 @@ impl Keymap {
     /// Target bound to a key or code.
     pub fn get(&self, key: &str) -> Option<Target> {
         self.bindings.get(key).copied()
+    }
+
+    /// Bind a plugin command's two-letter code unless the key is taken
+    /// (the built-in, or an earlier plugin, keeps it). Returns whether it
+    /// was bound.
+    pub fn bind_plugin(&mut self, key: &str, slot: u16) -> bool {
+        let key = key.trim().to_ascii_uppercase();
+        if !valid_key(&key) || self.bindings.contains_key(&key) {
+            return false;
+        }
+        self.bindings.insert(key, Target::Plugin(slot));
+        true
+    }
+
+    /// Remove every plugin binding (before plugins are reloaded).
+    pub fn clear_plugins(&mut self) {
+        self.bindings.retain(|_, t| !matches!(t, Target::Plugin(_)));
     }
 
     /// Keys and codes for a target, single keys first (for labels).
@@ -433,6 +457,30 @@ mod tests {
         );
         assert_eq!(Target::Pin.label(), "Pin");
         assert_eq!(Target::Unpin.tool(), None);
+    }
+
+    #[test]
+    fn plugin_keys_never_take_a_built_in_key() {
+        let mut k = Keymap::scheme(KeyScheme::Ferro);
+        assert!(!k.bind_plugin("WA", 0), "Wall keeps WA");
+        assert_eq!(k.get("WA"), Some(Target::Wall));
+        assert!(k.bind_plugin("bx", 0));
+        assert!(!k.bind_plugin("BX", 1), "the first plugin keeps it");
+        assert!(!k.bind_plugin("B1", 2));
+        assert_eq!(k.get("BX"), Some(Target::Plugin(0)));
+        // B = Paint at once; B X within the window = the plugin command.
+        assert_eq!(
+            feed(&k, &[('b', 0.0), ('x', 0.3)]),
+            [Some(Target::Paint), Some(Target::Plugin(0))]
+        );
+        assert_eq!(k.label_for(Target::Plugin(0)), "BX");
+        assert_eq!(Target::Plugin(0).tool(), None);
+        k.clear_plugins();
+        assert_eq!(k.get("BX"), None);
+        assert_eq!(k.get("WA"), Some(Target::Wall));
+        // Plugin slots are not keymap.json targets.
+        let file = r#"{"bindings": {"BX": {"plugin": 0}}}"#;
+        assert!(serde_json::from_str::<KeymapFile>(file).is_err());
     }
 
     #[test]

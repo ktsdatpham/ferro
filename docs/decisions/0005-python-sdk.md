@@ -66,7 +66,8 @@ short script that calls the same tools does the job in one step.
 - **Security.** A script has the user's own rights: it is the user's
   Python. Only a caller allowed to edit may start one: the user, or an agent,
   whose script then becomes (part of) its Proposal unless the user raised
-  autonomy; plugins run scripts like the user (ADR 0009; before it, D-51 refused them). The
+  autonomy; plugins run scripts like the user (ADR 0009; before it, D-51 refused them;
+  plugin commands and `get_user_input`: ADR 0009 implementation note). The
   script reaches Ferro only with a **one-time token** (random UUID v4) given
   in environment variables (`FERRO_LINK_PORT`, `FERRO_LINK_TOKEN`), never in
   argv; the host accepts it only while that run lasts and drops it when the
