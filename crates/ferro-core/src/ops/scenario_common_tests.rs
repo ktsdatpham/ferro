@@ -238,6 +238,32 @@ impl crate::algo::Kernel for DisjointKernel {
             (Some(ba), Some(bb)) => !ba.intersects(bb),
             _ => false,
         };
+        // A box `a` intersected with a body inside it is that body.
+        let inside = match (a.bounding_box(), b.bounding_box()) {
+            (Some(ba), Some(bb)) => {
+                a.face_count() == 6
+                    && ba.min.x <= bb.min.x
+                    && ba.min.y <= bb.min.y
+                    && ba.min.z <= bb.min.z
+                    && ba.max.x >= bb.max.x
+                    && ba.max.y >= bb.max.y
+                    && ba.max.z >= bb.max.z
+            }
+            _ => false,
+        };
+        if op == BooleanOp::Intersection && inside {
+            return Ok(KernelResult {
+                body: b.clone(),
+                faces: b
+                    .face_ids()
+                    .map(|f| (f, vec![FaceSource::FromB(f)]))
+                    .collect(),
+                lineage: crate::topo::Lineage {
+                    deleted: a.face_ids().collect(),
+                    ..Default::default()
+                },
+            });
+        }
         if !apart {
             return Err(KernelError::new(
                 KernelError::UNSUPPORTED,
@@ -260,10 +286,47 @@ impl crate::algo::Kernel for DisjointKernel {
                 KernelError::EMPTY_RESULT,
                 "the operands are apart",
             )),
-            BooleanOp::Union => Err(KernelError::new(
-                KernelError::UNSUPPORTED,
-                "the test kernel has no union",
-            )),
+            BooleanOp::Union => {
+                // Two shells: `a` with its ids, then `b`'s faces with new ids.
+                let mut out = a.clone();
+                let map: std::collections::BTreeMap<_, _> =
+                    b.vertices().map(|(v, p)| (v, out.add_vertex(p))).collect();
+                let mut specs = out.face_specs();
+                for sp in b.face_specs() {
+                    specs.push(crate::topo::FaceSpec {
+                        id: None,
+                        outer: sp.outer.iter().map(|v| map[v]).collect(),
+                        holes: sp
+                            .holes
+                            .iter()
+                            .map(|h| h.iter().map(|v| map[v]).collect())
+                            .collect(),
+                        surface: sp.surface,
+                        smooth_group: None,
+                    });
+                }
+                let verts = out.vertex_map();
+                out.rebuild(verts, specs)
+                    .map_err(|e| KernelError::new(KernelError::FAILED, e.to_string()))?;
+                Ok(KernelResult {
+                    faces: out
+                        .face_ids()
+                        .map(|f| {
+                            let src = if a.face(f).is_ok() {
+                                vec![FaceSource::FromA(f)]
+                            } else {
+                                vec![]
+                            };
+                            (f, src)
+                        })
+                        .collect(),
+                    lineage: crate::topo::Lineage {
+                        kept: a.face_ids().collect(),
+                        ..Default::default()
+                    },
+                    body: out,
+                })
+            }
         }
     }
 }

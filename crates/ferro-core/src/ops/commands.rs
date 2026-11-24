@@ -227,7 +227,7 @@ impl Command for CreatePolygon {
             Category::Forms,
             self.name.clone(),
             self.level,
-            ElementBody::Form(Form { body }),
+            ElementBody::Form(Form::new(body)),
         )?;
         Ok(json!({ "element": id, "face": faces[0] }))
     }
@@ -287,7 +287,7 @@ impl Command for PushPullFace {
         let (mode, lineage) = push_pull_face(&mut body, self.face, self.distance.mm())
             .map_err(|e| CommandError::from(e).on(self.element))?;
         tx.modify(self.element, |e| {
-            e.body = ElementBody::Form(Form { body });
+            e.body = ElementBody::Form(Form::new(body));
             Ok(())
         })?;
         let mode = match mode {
@@ -718,6 +718,8 @@ any_command!(
     EraseEdges,
     EraseFaces,
     SubtractForms,
+    UniteForms,
+    IntersectForms,
     SetGeometrySource,
     SetProjectUnits,
     SetSiteLocation,
