@@ -56,7 +56,9 @@ def main(source: Optional[str] = None, environ: Optional[Dict[str, str]] = None)
     for stream in (sys.stdout, sys.stderr):
         reconfigure = getattr(stream, "reconfigure", None)
         if reconfigure is not None:
-            reconfigure(encoding="utf-8", errors="backslashreplace")
+            # "\n" on every OS: Windows would write "\r\n", and agents
+            # compare outputs across machines.
+            reconfigure(encoding="utf-8", errors="backslashreplace", newline="\n")
     if source is None:
         source = sys.stdin.buffer.read().decode("utf-8", errors="replace")
     import ferro  # noqa: PLC0415 - the package this module belongs to
