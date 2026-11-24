@@ -125,6 +125,7 @@ decision requires a new ADR in [`../decisions/`](../decisions/).
 | D-76 | **Foundation 2** (ADR 0004): element semantics separate from geometry source (any category may be free-form); quantity-typed parameters with `Uid` definitions; materials with appearance / physical / thermal / environmental / cost assets; body kinds incl. non-manifold and curve-ready surface types; relationships as data incl. non-destructive cuts; derived `ferro-scene`; data-driven commands and keymaps. Supersedes parts of D-11, D-39, D-41, D-70 | **Accepted** |
 | D-77 | **Phases and design options** (ADR 0006): ordered phases with created / demolished per element, status derived per view, ArchiCAD-style simple mode, phased cuts; design options as layers of changes over the shared model (add / remove / override), combinations per view, accept = merge, options kept | **Accepted** |
 | D-78 | **Kernel** (ADR 0007): solidcore (safe-Rust SMLib port) for booleans and curved geometry, only inside `ferro-kernel`; `ferro-core` defines a `Kernel` trait with lineage and receives the kernel by injection like `IdSource`; without one, kernel commands fail with `ferro.kernel.unavailable` | **Accepted** |
+| D-79 | **Pin** (ADR 0008): `pinned` on every element blocks delete, move, geometry, level, type, host, phase and option overrides (`ferro.model.pinned`); only the user unpins directly, an agent's or script's unpin is always a proposal, plugins cannot; new datums are auto-pinned | **Accepted** |
 
 ## Status of the current code
 
