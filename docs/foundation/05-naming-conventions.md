@@ -50,6 +50,7 @@ for the same concept.
 | `LocationLine` | Which line of a wall its curve follows | Justification, Alignment |
 | Ferro Link | Local protocol for agents to drive the open app | Bridge, Socket API |
 | Proposal | Agent changes awaiting the user's accept / reject | Draft, Suggestion (for this) |
+| Pin / `pinned` | An element's flag that keeps it in place (Revit `Element.Pinned`, ADR 0008): a pinned element cannot be moved or deleted (`ferro.model.pinned`), every other edit stays allowed; verbs *pin* / *unpin*, command `set_pinned` | Lock (as a type, field or command), Freeze, Protect (for this) |
 | `Phase` | A construction stage (Revit `Phase`), an element of category `Phases`; ordered | Stage, Period (for this) |
 | `PhaseStatus` | Status of an element in a view's phase: existing, new, demolished, temporary, future, past (derived, never stored) | RenovationState, Lifecycle |
 | `RenovationStatus` | Simple-mode choice existing / demolish / new, mapped to the first and last phase (ArchiCAD renovation status) | Phase type, Status (alone) |

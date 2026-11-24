@@ -32,6 +32,9 @@ fn element(doc: &Document, e: &Element) -> Value {
     if let Some(n) = &e.name {
         m.insert("name".into(), json!(n));
     }
+    if e.pinned {
+        m.insert("pinned".into(), json!(true));
+    }
     for (k, v) in [
         ("level", e.level_id),
         ("type", e.type_id),

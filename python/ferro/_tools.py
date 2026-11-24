@@ -629,11 +629,52 @@ def set_project_currency(
     return _call("set_project_currency", args)
 
 
-def set_project_name(*, name: str, in_design_option: Optional[Any] = None) -> Dict[str, Any]:
-    """Rename the project.
+def set_project_name(
+    *,
+    auto_pin_datums: Optional[bool] = None,
+    in_design_option: Optional[Any] = None,
+    name: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Rename the project and / or switch auto-pinning: with auto_pin_datums true new
+    levels are created pinned (default false, as Revit). Omitted fields keep their
+    value.
 
     Args:
-        name: Text.
+        auto_pin_datums: New levels (datums) are created pinned. Optional.
+        in_design_option: Where the change lands: a design option id (the change goes
+            into that option's layer), or "shared" for the shared model. Omitted (or
+            null): the option the user is editing in the Ferro app, else the shared
+            model. Optional.
+        name: Text. Optional.
+
+    Returns:
+        The tool's JSON body. Raises FerroError on failure.
+    """
+    args: Dict[str, Any] = {}
+    if auto_pin_datums is not None:
+        args["auto_pin_datums"] = auto_pin_datums
+    if in_design_option is not None:
+        args["in_design_option"] = in_design_option
+    if name is not None:
+        args["name"] = name
+    return _call("set_project_name", args)
+
+
+def set_pinned(
+    *,
+    elements: Sequence[ElementId],
+    pinned: bool,
+    in_design_option: Optional[Any] = None,
+) -> Dict[str, Any]:
+    """Pin or unpin elements (Revit Pin / Unpin). As in Revit, a pinned element cannot
+    be moved (move, rotate, dragging it or its ends, a level's elevation, a door's
+    position) or deleted, nor can the wall hosting a pinned door be deleted
+    (ferro.model.pinned); everything else stays editable: parameters, type, name, phase,
+    shape and profile, copying. Unpin first to move it. Returns {elements, changed}.
+
+    Args:
+        elements: Element ids.
+        pinned: true = pin, false = unpin.
         in_design_option: Where the change lands: a design option id (the change goes
             into that option's layer), or "shared" for the shared model. Omitted (or
             null): the option the user is editing in the Ferro app, else the shared
@@ -642,10 +683,10 @@ def set_project_name(*, name: str, in_design_option: Optional[Any] = None) -> Di
     Returns:
         The tool's JSON body. Raises FerroError on failure.
     """
-    args: Dict[str, Any] = {"name": name}
+    args: Dict[str, Any] = {"elements": elements, "pinned": pinned}
     if in_design_option is not None:
         args["in_design_option"] = in_design_option
-    return _call("set_project_name", args)
+    return _call("set_pinned", args)
 
 
 def create_material(
@@ -2538,6 +2579,7 @@ TOOL_NAMES = (
     "set_site_location",
     "set_project_currency",
     "set_project_name",
+    "set_pinned",
     "create_material",
     "set_material",
     "create_wall_type",
