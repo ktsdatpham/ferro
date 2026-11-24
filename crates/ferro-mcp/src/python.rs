@@ -52,8 +52,8 @@ pub const FAILED: &str = "ferro.python.failed";
 pub const NESTED: &str = "ferro.python.nested";
 /// Another script is running; the call was refused (retry when it is done).
 pub const BUSY: &str = "ferro.python.busy";
-/// The caller may not start scripts (plugins: D-51 keeps them in WASM), or
-/// may not cancel this one (only the user and the caller that started it).
+/// The caller may not cancel this run (only the user and the caller that
+/// started it). Plugins may start scripts (ADR 0009; D-51 refused them).
 pub const NOT_ALLOWED: &str = "ferro.python.not_allowed";
 /// The script was stopped (`cancel_python`, the app's Stop button or Esc
 /// twice); its process tree was killed and nothing was changed.
@@ -81,6 +81,45 @@ pub const BEGIN_TRANSACTION: &str = "begin_transaction";
 pub const COMMIT_TRANSACTION: &str = "commit_transaction";
 /// Discard the changes since the innermost `begin_transaction`.
 pub const ROLLBACK_TRANSACTION: &str = "rollback_transaction";
+
+/// Ferro Link request only a running script may send (SDK `ferro.ask`, ADR
+/// 0009): `{prompt, default?}` asks the user for one value in a small dialog
+/// and answers `{value}`, a string, or `null` when the user cancelled. A
+/// headless host answers the default ([`headless_answer`]). A stable name.
+pub const GET_USER_INPUT: &str = "get_user_input";
+
+/// Requests about the user's session that only the app can answer: the
+/// selection (`get_selection`, `select_elements`) and [`GET_USER_INPUT`].
+/// [`PythonRun::handle`] leaves them to the host.
+pub const APP_ONLY: [&str; 3] = ["get_selection", "select_elements", GET_USER_INPUT];
+
+/// How long a script waits for the user to answer [`GET_USER_INPUT`]. The
+/// script's own time limit is paused meanwhile ([`PythonRun::extend_deadline`]).
+pub const USER_INPUT_TIMEOUT: Duration = Duration::from_secs(600);
+
+/// The answer of a headless host (no app, so no user and no selection) to an
+/// [`APP_ONLY`] request: the selection is empty, nothing gets selected, and
+/// [`GET_USER_INPUT`] returns its `default` (`null` when none). `None` for
+/// any other request.
+pub fn headless_answer(tool: &str, args: &Value) -> Option<Value> {
+    match tool {
+        "get_selection" => Some(json!({"elements": []})),
+        "select_elements" => Some(json!({"selected": 0})),
+        GET_USER_INPUT => Some(json!({"value": user_input_default(args)})),
+        _ => None,
+    }
+}
+
+/// The `default` of a [`GET_USER_INPUT`] request as a string (numbers are
+/// written out), or `null`.
+pub fn user_input_default(args: &Value) -> Value {
+    match args.get("default") {
+        Some(Value::String(s)) => json!(s),
+        Some(Value::Number(n)) => json!(n.to_string()),
+        Some(Value::Bool(b)) => json!(b.to_string()),
+        _ => Value::Null,
+    }
+}
 
 /// The SDK shipped inside this binary (`python/ferro/*.py`), written to a
 /// private temporary folder for each run so it always matches this tool set.
@@ -193,9 +232,13 @@ impl RunArgs {
 }
 
 /// How long a Ferro Link client should wait for the answer to `tool`: the
-/// script's time limit plus a margin for `run_python`, else 120 s.
+/// script's time limit plus a margin for `run_python`,
+/// [`USER_INPUT_TIMEOUT`] for [`GET_USER_INPUT`], else 120 s.
 pub fn answer_timeout(tool: &str, args: &Value) -> Duration {
     const DEFAULT: Duration = Duration::from_secs(120);
+    if tool == GET_USER_INPUT {
+        return USER_INPUT_TIMEOUT;
+    }
     if tool != TOOL {
         return DEFAULT;
     }
@@ -526,6 +569,12 @@ impl PythonRun {
         self.started.elapsed()
     }
 
+    /// Push the time limit back by `by`: the time the script spent waiting
+    /// for the user ([`GET_USER_INPUT`]) does not count against it.
+    pub fn extend_deadline(&mut self, by: Duration) {
+        self.deadline += by;
+    }
+
     /// Where the script's commands landed so far, in first-use order without
     /// repeats: `None` = the shared model, `Some(id)` = that design option
     /// (shown on the Proposal bar, ADR 0006).
@@ -555,9 +604,9 @@ impl PythonRun {
         &self.ctx
     }
 
-    /// Answer one request from the script. `None` for tools the host must
-    /// answer itself (app-only tools such as `get_selection`); a host refuses
-    /// anything else it does not know.
+    /// Answer one request from the script. `None` for requests the host must
+    /// answer itself ([`APP_ONLY`]: the selection, [`GET_USER_INPUT`]); a
+    /// host refuses anything else it does not know.
     ///
     /// Commands run inside the run's group with the caller's context, and
     /// inside the run's design option (`in_design_option`) when it has one
@@ -574,6 +623,9 @@ impl PythonRun {
         tool: &str,
         args: &Value,
     ) -> Option<Result<Value, Value>> {
+        if APP_ONLY.contains(&tool) {
+            return None;
+        }
         let r = match tool {
             TOOL => Err(failure(
                 NESTED,
@@ -1002,9 +1054,11 @@ impl RunControl {
 }
 
 /// Run a script to the end on this thread (headless hosts: `ferro-mcp`
-/// without the app, `ferro-cli`). Script requests the run does not answer
-/// itself are refused, since there is no app (`get_selection`, file tools).
-/// Another thread may stop it through `control` ([`RunControl::cancel`]).
+/// without the app, `ferro-cli`). [`APP_ONLY`] requests get the
+/// [`headless_answer`] (empty selection, the default value); other requests
+/// the run does not answer itself are refused, since there is no app (file
+/// tools). Another thread may stop it through `control`
+/// ([`RunControl::cancel`]).
 pub fn run_blocking(
     session: &mut Session,
     config: &PythonConfig,
@@ -1014,6 +1068,29 @@ pub fn run_blocking(
     control: &RunControl,
 ) -> Result<Value, Value> {
     let run_args = RunArgs::from_tool(args)?;
+    run_blocking_as(
+        session,
+        config,
+        &run_args,
+        ctx,
+        propose_agents,
+        control,
+        TOOL,
+    )
+}
+
+/// [`run_blocking`] with parsed arguments and the name of the group the run
+/// opens (its undo step and journal entry): a plugin command passes its
+/// label (`ferro_mcp::plugins`).
+pub fn run_blocking_as(
+    session: &mut Session,
+    config: &PythonConfig,
+    run_args: &RunArgs,
+    ctx: ExecContext,
+    propose_agents: bool,
+    control: &RunControl,
+    group_name: &str,
+) -> Result<Value, Value> {
     decide(&ctx.actor, propose_agents)?;
     let link = ScriptLink::bind(run_args.timeout + Duration::from_secs(30)).map_err(|e| {
         failure(
@@ -1022,7 +1099,7 @@ pub fn run_blocking(
         )
     })?;
     let started_by = ctx.actor.clone();
-    let mut run = PythonRun::start(session, config, &run_args, ctx, link.port(), TOOL)?;
+    let mut run = PythonRun::start(session, config, run_args, ctx, link.port(), group_name)?;
     link.set_token(run.token());
     control.begin(started_by);
     let end = loop {
@@ -1030,8 +1107,9 @@ pub fn run_blocking(
             let tool = call.req.tool.clone();
             let r = run
                 .handle(session, &tool, &call.req.args)
-                .unwrap_or_else(|| {
-                    Err(json!({"error": format!("{tool} is not available inside run_python here (no Ferro app)")}))
+                .unwrap_or_else(|| match headless_answer(&tool, &call.req.args) {
+                    Some(body) => Ok(body),
+                    None => Err(json!({"error": format!("{tool} is not available inside run_python here (no Ferro app)")})),
                 });
             let _ = call.reply.send(match r {
                 Ok(body) => LinkResponse { ok: true, body },

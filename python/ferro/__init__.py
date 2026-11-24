@@ -20,6 +20,7 @@ from . import _tools as tools  # noqa: E402
 from .document import (  # noqa: E402
     Document,
     Element,
+    Selection,
     Floor,
     FloorType,
     Level,
@@ -41,9 +42,11 @@ __all__ = [
     "Link",
     "Material",
     "Opening",
+    "Selection",
     "Wall",
     "WallType",
     "as_array",
+    "ask",
     "connect",
     "tools",
 ]
@@ -74,3 +77,27 @@ def connect(home: Optional[str] = None, agent: str = "python", timeout: float = 
     link.call("link_status", {})  # check that the app answers and accepts the token
     _runtime.set_default(link)
     return Document(link)
+
+
+def ask(prompt: str, default: Optional[str] = None) -> Optional[str]:
+    """Ask the user for one value in a small dialog of the Ferro app.
+
+        height = ferro.ask("Height", default="3m")
+        if height is None:
+            return  # the user pressed Cancel
+
+    Returns the text the user typed (``default`` is filled in), or ``None``
+    when the user cancelled. Only a script Ferro runs (``run_python`` or a
+    plugin command) can ask: elsewhere, and in headless Ferro (``ferro-mcp``
+    or ``ferro-cli`` without the app), ``default`` is returned at once
+    (as text; ``None`` stays ``None``). The script's time limit is paused
+    while the dialog is open. Sends the Ferro Link request
+    ``get_user_input {prompt, default}``.
+    """
+    text = None if default is None else str(default)
+    run = _runtime.run_link()
+    if run is None:
+        return text
+    body = run.call("get_user_input", {"prompt": str(prompt), "default": text})
+    value = body.get("value") if isinstance(body, dict) else None
+    return None if value is None else str(value)

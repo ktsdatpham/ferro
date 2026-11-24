@@ -819,6 +819,7 @@ dependencies = [
  "ferro-io",
  "ferro-kernel",
  "ferro-tools",
+ "flate2",
  "libc",
  "serde",
  "serde_json",

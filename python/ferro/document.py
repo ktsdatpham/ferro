@@ -317,6 +317,16 @@ def _infer_type(value: Any) -> str:
     raise TypeError("cannot infer the parameter type; pass type=...")
 
 
+class Selection(list):  # list of Element
+    """The user's selection: a list of :class:`Element`. Calling it gives the
+    selected ids, so ``doc.selection()`` is ``[e.id for e in doc.selection]``.
+    """
+
+    def __call__(self) -> List[int]:
+        """The ids of the selected elements."""
+        return [e.id for e in self]
+
+
 class Document:
     """The document open in the Ferro app, reached through Ferro Link.
 
@@ -380,11 +390,16 @@ class Document:
         return self.elements("doors") + self.elements("windows")
 
     @property
-    def selection(self) -> List[Element]:
-        """What the user has selected in the app (``get_selection``)."""
+    def selection(self) -> "Selection":
+        """What the user has selected in the app (``get_selection``).
+
+        A list of elements; call it for their ids: ``doc.selection()``.
+        Empty in headless Ferro (no app, no user).
+        """
         with _runtime.bound(self.link):
             body = tools.get_selection()
-        return [self._wrap(d) for d in body.get("elements", [])]
+        elements = body.get("elements", []) if isinstance(body, dict) else []
+        return Selection(self._wrap(d) for d in elements)
 
     def select(self, elements: Sequence[Any]) -> Dict[str, Any]:
         """Select elements (or ids) in the app (``select_elements``); [] clears."""
