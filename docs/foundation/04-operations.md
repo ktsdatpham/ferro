@@ -202,6 +202,9 @@ Commands using the kernel:
 | Command | What |
 |---|---|
 | `subtract_forms {target, cutter, keep_cutter?: false}` | The target Form's body becomes target − cutter in one transaction; the cutter is deleted unless `keep_cutter`. Output: `element`, `cutter_deleted`, `lineage`, `faces` |
+| `unite_forms {target, other, keep_other?: false}` | The target Form's body becomes target ∪ other (several shells when apart); `other` is deleted unless `keep_other`. Output: `element`, `other_deleted`, `lineage`, `faces` |
+| `intersect_forms {target, other, keep_other?: false}` | The target Form's body becomes target ∩ other (`ferro.kernel.empty_result` when they do not overlap); `other` is deleted unless `keep_other`. Output as `unite_forms` |
+| `create_relationship {kind: "cut", elements: [cutter, cut], phase?}` | The non-destructive cut (M5-5.3, Foundation §3.8): regenerated through the kernel; kernel problems are warnings, never errors |
 
 Kernel failure codes:
 
@@ -214,4 +217,4 @@ Kernel failure codes:
 | `ferro.kernel.non_manifold_result` | The solids touch only along an edge or at a vertex |
 | `ferro.kernel.invalid_result` | The result fails `Body::validate_solid` |
 | `ferro.kernel.failed` | The kernel refused or failed (its message says why) |
-| `ferro.ops.same_element` | `subtract_forms` was given the same Form twice |
+| `ferro.ops.same_element` | `subtract_forms`, `unite_forms` or `intersect_forms` was given the same Form twice |

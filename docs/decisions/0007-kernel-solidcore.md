@@ -64,3 +64,8 @@ port of SMLib, Apache-2.0):
   difference); `cut` stays the `RelationshipKind`.
 - 2026-11-24 (M5-16): the session holds `Option<Arc<dyn Kernel>>` (shared
   with each transaction and the preview), not `Box<dyn Kernel>`.
+- 2026-11-24 (M5-5.3): `unite` and `intersect` join the geometric verbs
+  (§5.5) for `unite_forms` / `intersect_forms`; `join` stays a
+  `RelationshipKind` and is never a boolean. Regeneration reaches the
+  kernel too (`generate::regenerate_with`), for `cut` rows; without one
+  the cut is skipped with a warning, never an error.

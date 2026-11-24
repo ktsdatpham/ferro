@@ -118,6 +118,12 @@ by the change format (`/relationships/<uid>`) and stored in files with uid
 references (format 4). `host_id` stays the source of truth for openings
 until M5-5.4 moves it into the table.
 
+*Implementation note (M5-5.3, 2026-11-24):* a `cut` row is regenerated
+through the injected kernel (walls / floors: generated geometry; Forms: a
+derived `cut_body`); a Form of category `Forms` that cuts is a *void*,
+derived from the table (drawn faint, not exported), with no new flag or
+category. Details in Foundation §3.8.
+
 ### 6. Scene derived from the document (F6)
 
 New crate `ferro-scene`: an incremental, ECS-style scene derived from the

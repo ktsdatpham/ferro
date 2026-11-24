@@ -1646,6 +1646,72 @@ def subtract_forms(
     return _call("subtract_forms", args)
 
 
+def unite_forms(
+    *,
+    target: int,
+    other: int,
+    in_design_option: Optional[Any] = None,
+    keep_other: Optional[bool] = None,
+) -> Dict[str, Any]:
+    """Unite two Forms (solid boolean union): the target becomes target plus other, in
+    one body (several shells when they do not touch). Both must be closed solids with
+    flat faces. The other Form is deleted unless keep_other is true. Faces of the target
+    that survive keep their ids; returns lineage and faces (from_a = target, from_b =
+    other). Fails with ferro.kernel.non_manifold_result when they touch only along an
+    edge, ferro.kernel.unavailable when no geometry kernel is attached.
+
+    Args:
+        target: Form to grow.
+        other: Form to add.
+        in_design_option: Where the change lands: a design option id (the change goes
+            into that option's layer), or "shared" for the shared model. Omitted (or
+            null): the option the user is editing in the Ferro app, else the shared
+            model. Optional.
+        keep_other: Keep the other Form (default false: it is deleted). Optional.
+
+    Returns:
+        The tool's JSON body. Raises FerroError on failure.
+    """
+    args: Dict[str, Any] = {"target": target, "other": other}
+    if in_design_option is not None:
+        args["in_design_option"] = in_design_option
+    if keep_other is not None:
+        args["keep_other"] = keep_other
+    return _call("unite_forms", args)
+
+
+def intersect_forms(
+    *,
+    target: int,
+    other: int,
+    in_design_option: Optional[Any] = None,
+    keep_other: Optional[bool] = None,
+) -> Dict[str, Any]:
+    """Intersect two Forms (solid boolean intersection): the target becomes what lies in
+    both. Both must be closed solids with flat faces. The other Form is deleted unless
+    keep_other is true. Returns lineage and faces as unite_forms. Fails with
+    ferro.kernel.empty_result when they do not overlap.
+
+    Args:
+        target: Form to trim.
+        other: Form to intersect with.
+        in_design_option: Where the change lands: a design option id (the change goes
+            into that option's layer), or "shared" for the shared model. Omitted (or
+            null): the option the user is editing in the Ferro app, else the shared
+            model. Optional.
+        keep_other: Keep the other Form (default false: it is deleted). Optional.
+
+    Returns:
+        The tool's JSON body. Raises FerroError on failure.
+    """
+    args: Dict[str, Any] = {"target": target, "other": other}
+    if in_design_option is not None:
+        args["in_design_option"] = in_design_option
+    if keep_other is not None:
+        args["keep_other"] = keep_other
+    return _call("intersect_forms", args)
+
+
 def create_phase(
     *,
     name: str,
@@ -1817,7 +1883,9 @@ def set_renovation_status(
 def get_phase_quantities(*, phase: Optional[int] = None) -> Dict[str, Any]:
     """Quantities in the view of a phase, per category split by status (existing / new /
     demolished / temporary): count, volume (m³) and area (m²; floors plan area, walls
-    gross length × height). The basis for demolition and new-build costs. `phase`
+    gross length × height). The basis for demolition and new-build costs. A cut
+    relationship made in a phase (an opening in an existing wall) counts the removed
+    part as demolished volume in that phase; before it the element is uncut. `phase`
     defaults to the last phase.
 
     Args:
@@ -1841,10 +1909,13 @@ def create_relationship(
 ) -> Dict[str, Any]:
     """Link elements with a relationship row (stored as data, saved, undoable). Order of
     `elements` by kind: join [first, second] (first wins where they overlap), cut
-    [cutter, cut], host [host, hosted], attach [attached, target], bounds [space,
-    boundary], connect [a, b], aggregate [whole, part, ...]. Only elements with
-    geometry. `phase`: the phase it is made in. Returns {relationship: uid}. Fails with
-    ferro.model.invalid_relationship, missing_element or duplicate_relationship.
+    [cutter, cut] (non-destructive void: the cut element, a wall, floor or Form, shows
+    its body minus the cutter's, regenerated when either changes; a Form used only as a
+    cutter becomes a hidden void), host [host, hosted], attach [attached, target],
+    bounds [space, boundary], connect [a, b], aggregate [whole, part, ...]. Only
+    elements with geometry. `phase`: the phase it is made in. Returns {relationship:
+    uid}. Fails with ferro.model.invalid_relationship, missing_element or
+    duplicate_relationship.
 
     Args:
         kind: One of: join, cut, host, attach, bounds, connect, aggregate.
@@ -2602,6 +2673,8 @@ TOOL_NAMES = (
     "erase_edges",
     "erase_faces",
     "subtract_forms",
+    "unite_forms",
+    "intersect_forms",
     "create_phase",
     "set_phase",
     "delete_phase",

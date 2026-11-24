@@ -71,6 +71,8 @@ for the same concept.
 | `Change` | One edit in the change format (M5-26): set or remove the value at a uid-keyed JSON-pointer path | Patch, Delta, Diff (for one edit) |
 | `Kernel` | The B-rep library behind Ferro's seam (booleans, later blends and curved geometry): a trait in `ferro_core::algo`, implemented by `ferro-kernel` on solidcore (ADR 0007) | Engine, Backend, Modeler, CAD core |
 | `BooleanOp` | Which boolean a `Kernel` computes: `union`, `difference`, `intersection`; a value, not a `Command` | BooleanType, CsgOp, Operation |
+| Void | A Form of category `Forms` that is the cutter of a `cut` relationship (Revit *void form*): derived from the relationship table, drawn faint, not exported as an element (M5-5.3) | Negative, Hole (as a type), Opening (for this), Cutter (as a category) |
+| `cut_body` | A Form's derived body after its `cut` relationships (its drawn `body` stays the source); `None` when uncut | Result body, Display body, Final body |
 | `DisplayScene` / `DrawRecord` | Display data derived from a `Document` snapshot (`ferro-scene`, ADR 0004 §6) / what to draw for one element; never saved | Scene (alone, as a type), Render model, Node |
 
 Adding a term requires adding it here first.
@@ -122,7 +124,10 @@ an edge (FFI, MCP JSON, file), the name carries the unit: `height_mm`,
 - Standard verbs only: `create`, `delete`, `move`, `rotate`, `copy`, `mirror`,
   `array`, `set`, `get`, `list`, `join`, `unjoin`, `host`, `classify`, `convert`,
   `import`, `export`, plus geometric verbs (`push_pull`, `offset`, `split`,
-  `extrude`, `subtract`: a solid boolean difference, ADR 0007). New verbs
+  `extrude`, `subtract`: a solid boolean difference, ADR 0007; `unite`: a
+  solid boolean union, `unite_forms`; `intersect`: a solid boolean
+  intersection, `intersect_forms`). `join` stays the verb and
+  `RelationshipKind` of joined elements, never a boolean union. New verbs
   need a glossary entry.
 - Verbs of the change format and design options (ADR 0006): `accept`
   (merge a proposal or a design option into the shared model:

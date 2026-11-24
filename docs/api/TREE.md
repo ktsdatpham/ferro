@@ -50,6 +50,8 @@ Phases in the app (ADR 0006, M5-23): the active view's phase and phase filter (s
 
 - struct `PhaseDisplay` — What the view shows for phases: elements to hide and how to draw the
 - struct `PhaseState` — Phase view state of the app: a working copy of the active view's
+- fn `voids` — Voids of `doc`: Forms of category `Forms` that cut (M5-5.3), drawn
+- fn `phased_cut_doc` — `doc` as drawn in view phase `view` (M5-23.6): elements with `cut` rows
 - fn `phase_display` — Phase display of `doc` in view phase `view` under `filter`: pure, used
 
 ### `ferro_app::app::pins`
@@ -181,6 +183,8 @@ Turns the display scene (`ferro-scene`) into GPU vertex lists.
 - const `DEMOLISHED_EDGE`
 - const `EXISTING_GREY` — Existing elements: faces blended towards this grey, lighter edges.
 - const `EXISTING_EDGE`
+- const `VOID` — Voids (Forms that only cut, M5-5.3): faint translucent faces and dashed
+- const `VOID_EDGE`
 - struct `SceneCache`
 - fn `SceneCache::update` — Bring the vertex lists up to date with `doc`, the selection and the
 - fn `SceneCache::mesh` — The element's mesh in model coordinates (a copy; instanced meshes
@@ -206,8 +210,10 @@ Drawing tools (D-72): app-side state machines. Each tool previews by evaluating 
 
 - enum `ToolKind`
 - fn `ToolKind::is_chain` — Tools that draw a chain of clicked points.
+- fn `ToolKind::is_solid` — The solid tools: pick a target, then the other element.
 - fn `ToolKind::is_bim`
 - fn `ToolKind::label`
+- fn `solid_command` — The command of a solid tool: `target` picked first, then `other`.
 - struct `ToolCtx` — What the tool sees each frame.
 - enum `SubPick` — Part of a Form picked while editing it (SketchUp group editing).
 - fn `pick_sub` — The vertex, edge or face of `element` under the snap.
@@ -689,6 +695,21 @@ The change format (M5-26, F10 of the foundation review, D-34, D-55, ADR 0006): e
 - fn `partition_applicable` — Split `changes` into those that apply to `doc` one after the other and
 - fn `conflicts` — Paths where `ours` and `theirs` disagree: both edit the same path with
 
+### `ferro_core::model::cut`
+
+Non-destructive cuts (ADR 0004 §5, M5-5.3) and phased cuts (ADR 0006 §5, M5-23.6).
+
+- fn `is_cut_target` — `true` when `e` can be the `cut` element of a cut row: walls, floors and
+- fn `is_void` — `true` when `e` is a void: a Form of category `Forms` that cuts at least
+- fn `cuts_of` — The cut rows whose target is `target`, in the order they apply: rows
+- fn `cuts_in_phase` — The cut rows of `target` that apply in a view of phase `phase`: rows
+- fn `cuts_before_phase` — The cut rows of `target` made before phase `phase`: rows without a
+- fn `has_phased_cuts` — `true` when `target` has a cut row made in a phase (ADR 0006 §5).
+- struct `CutOutcome` — What [`apply_cuts`] produced: the cut body and the warnings.
+- fn `apply_cuts` — Subtract the cutters of `rows` (in the given order) from `uncut`, the
+- fn `body_in_phase` — The body of element `id` in a view of phase `phase` (ADR 0006 §5): its
+- fn `removed_in_phase` — The part of element `id` that the cut rows made in phase `phase`
+
 ### `ferro_core::model::design_option`
 
 Design options (ADR 0006 §Design options, M5-23.9): option sets, options as layers of changes over the shared model, and combinations.
@@ -750,6 +771,7 @@ Design options (ADR 0006 §Design options, M5-23.9): option sets, options as lay
 
 - struct `Level` — A named elevation (D-16). `is_building_storey` marks real storeys
 - struct `Form` — Free-form geometry edited directly (D-12, D-38). Geometry is stored in
+- fn `Form::new` — A Form with this body and no cut.
 - enum `GeometrySource` — Where an element's geometry comes from (ADR 0004 §1). The geometric
 - enum `ElementBody` — Category-specific data of an element.
 - fn `ElementBody::kind` — Stable name of the body kind, as written in files (the `kind` tag):
@@ -785,7 +807,10 @@ Regeneration of derived BIM geometry (Foundation Spec §4.4, D-41).
 - fn `wall_layout` — Placement of a wall element. Fails with `ferro.wall.*` codes.
 - fn `floor_body` — Build a floor body: the sketch at level + offset, extruded down by the
 - fn `affects_bim` — `true` if a change to this element can affect derived BIM geometry.
-- fn `regenerate` — Rebuild the geometry of every wall, floor and opening in `doc`. Only
+- fn `uncut_bodies` — Uncut bodies of every element with geometry: generated walls, floors
+- fn `uncut_body` — The uncut body of one element ([`uncut_bodies`]); `None` without
+- fn `regenerate` — Rebuild the geometry of every wall, floor and opening in `doc`, without
+- fn `regenerate_with` — Rebuild the geometry of every wall, floor and opening in `doc`, then
 - fn `set_geometry` — Replace an element's derived geometry (used by `ops::Transaction`).
 - fn `point_on_wall` — Opening geometry helper for commands: plan point and wall-local frame of
 
@@ -870,6 +895,7 @@ Quantities split by phase status (ADR 0006 §6): demolished, new and existing vo
 - struct `StatusTotals` — Totals of one status within one category. Volumes in mm³, areas in mm².
 - struct `PhaseQuantities` — Quantities of a document in the view of one phase: per category, per
 - fn `PhaseQuantities::from_document` — Quantities of every phased element (Forms, walls, floors, doors,
+- fn `PhaseQuantities::from_document_with_kernel` — [`PhaseQuantities::from_document`] with phased cuts (ADR 0006 §5,
 - fn `PhaseQuantities::total` — Totals of one status over every category.
 
 ### `ferro_core::model::project_settings`
@@ -1046,6 +1072,8 @@ SketchUp-style editing of Forms (milestone 4): drawing on faces, circles, offset
 - struct `EraseEdges` — Erase edges of a Form. An edge between two faces in the same plane merges
 - struct `EraseFaces` — Erase faces of a Form (the Form becomes open, like deleting a face in
 - struct `SubtractForms` — Subtract one Form from another (solid boolean difference through the
+- struct `UniteForms` — Unite two Forms (solid boolean union through the geometry kernel, ADR
+- struct `IntersectForms` — Intersect two Forms (solid boolean intersection through the geometry
 
 ### `ferro_core::ops::geometry_source`
 
@@ -1533,6 +1561,7 @@ Shared tool surface (D-17, D-44) for MCP and Ferro Link: every kernel command is
 - fn `summary_of` — Summary restricted to some elements (selection).
 - fn `detail` — Full element detail (`get_element`).
 - fn `phase_quantities` — `get_phase_quantities`: [`PhaseQuantities`] in m³ / m², keyed by category
+- fn `phase_quantities_with` — [`phase_quantities`] with the session's kernel: phased cuts count the
 - fn `call` — Run a command or read-only tool against a session. Ok = JSON result,
 - fn `file_tools` — File tools offered by a standalone tool host (ferro-mcp without an open app).
 
