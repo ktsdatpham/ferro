@@ -1,0 +1,20 @@
+[
+  {"id": "wall", "tool": "create_wall", "args": {"start": {"x": 0, "y": 0, "z": 0}, "end": {"x": 4000, "y": 0, "z": 0}, "name": "Cut wall"}},
+  {"id": "window", "tool": "create_box", "args": {"origin": [1000, -300, 900], "width": 1200, "depth": 600, "height": 1200, "name": "Window void"}},
+  {"tool": "create_relationship", "args": {"kind": "cut", "elements": [{"$ref": "window.result.element"}, {"$ref": "wall.result.element"}]}},
+  {"id": "door", "tool": "create_box", "args": {"origin": [2600, -100, 0], "width": 900, "depth": 200, "height": 2100, "name": "Flush door void"}},
+  {"tool": "create_relationship", "args": {"kind": "cut", "elements": [{"$ref": "door.result.element"}, {"$ref": "wall.result.element"}]}},
+  {"tool": "move_elements", "args": {"elements": [{"$ref": "window.result.element"}], "vector": {"x": -200, "y": 0, "z": 0}}},
+  {"id": "floor", "tool": "create_floor", "args": {"points": [{"x": 0, "y": 1000}, {"x": 4000, "y": 1000}, {"x": 4000, "y": 4000}, {"x": 0, "y": 4000}], "name": "Cut floor"}},
+  {"id": "shaft", "tool": "create_box", "args": {"origin": [1500, 2000, -500], "width": 800, "depth": 800, "height": 1000, "name": "Shaft void"}},
+  {"tool": "create_relationship", "args": {"kind": "cut", "elements": [{"$ref": "shaft.result.element"}, {"$ref": "floor.result.element"}]}},
+  {"id": "block", "tool": "create_box", "args": {"origin": ["6m", 0, 0], "width": "2m", "depth": "2m", "height": "1m", "name": "Cut block"}},
+  {"id": "pocket", "tool": "create_box", "args": {"origin": [6500, 500, 600], "width": 800, "depth": 600, "height": 600, "name": "Pocket void"}},
+  {"tool": "create_relationship", "args": {"kind": "cut", "elements": [{"$ref": "pocket.result.element"}, {"$ref": "block.result.element"}]}},
+  {"id": "old", "tool": "create_phase", "args": {"name": "Existing"}},
+  {"id": "new", "tool": "create_phase", "args": {"name": "New Construction"}},
+  {"id": "existing_wall", "tool": "create_wall", "args": {"start": {"x": 0, "y": 6000, "z": 0}, "end": {"x": 4000, "y": 6000, "z": 0}, "name": "Existing wall"}},
+  {"tool": "set_element_phase", "args": {"elements": [{"$ref": "existing_wall.result.element"}], "created": {"$ref": "old.result.element"}}},
+  {"id": "new_opening", "tool": "create_box", "args": {"origin": [1500, 5800, 0], "width": 1000, "depth": 400, "height": 2100, "name": "New opening void"}},
+  {"tool": "create_relationship", "args": {"kind": "cut", "elements": [{"$ref": "new_opening.result.element"}, {"$ref": "existing_wall.result.element"}], "phase": {"$ref": "new.result.element"}}}
+]

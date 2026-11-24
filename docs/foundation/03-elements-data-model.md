@@ -181,6 +181,45 @@ a command. Geometry is derived from location + parameters + type.
   `ferro.model.invalid_relationship`, `ferro.model.duplicate_relationship`,
   `ferro.model.missing_relationship`, `ferro.model.missing_element`,
   `ferro.model.invalid_uid`.
+- **Cuts** (M5-5.3, non-destructive, like Revit's Cut Geometry with voids):
+  a row `cut [cutter, cut]` makes the geometry of the `cut` element (the
+  *target*: a wall, a floor or a Form of any category; not an opening) its
+  own body minus the cutter's body. The cutter is any element with
+  geometry (Form, wall, floor, opening) and contributes its *uncut* body
+  (cuts do not chain). Nothing but the row is stored as source: the result
+  is regenerated through the session's `Kernel` (ADR 0007) whenever the
+  row, the cutter or the target changes, so moving or editing the cutter
+  moves the cut and deleting the row (or the cutter) restores the body.
+  Walls and floors carry the cut in their generated `geometry`; a Form keeps
+  its drawn `body` (what commands edit) and gets a derived `cut_body`
+  (omitted from files when absent), which `Element::geometry` returns.
+  Several rows on one element apply one after the other: rows without a
+  phase first, then by phase order, each group in uid order. Faces of the
+  target that survive keep their ids (kernel lineage, D-25), so references
+  to them survive re-cuts; faces made by a cut belong to no source face
+  and cannot be pushed / pulled (edit the cutter instead). Quantities
+  (`ferro.dimensions.volume`, `ferro.form.volume`, areas) come from the cut
+  body. A cut never fails a transaction: without a kernel the target keeps
+  its uncut body and regeneration warns `ferro.kernel.unavailable` once; a
+  kernel error on a row (`ferro.kernel.empty_result`,
+  `ferro.kernel.non_manifold_result`, `ferro.kernel.not_solid`, …) skips
+  that row with a warning carrying the kernel's code. A cut on a pinned
+  element is allowed (a pin blocks only moving and deleting, ADR 0008).
+  Freezing a cut wall or floor (`set_geometry_source`) freezes it uncut, so
+  its rows keep cutting the Form.
+- **Voids.** A Form of category `Forms` that is the cutter of at least one
+  `cut` row is a *void* (Revit: a void form). It is derived from the table,
+  not stored: views draw it faint (translucent, dashed edges) so it stays
+  selectable, and exports leave it out as an element (IFC, OBJ / glTF,
+  Revit). Deleting its last cut row makes it an ordinary Form again. Walls,
+  floors and openings used as cutters stay ordinary elements.
+- **Interop of cuts.** IFC: a cut wall or slab gets an `IfcOpeningElement`
+  (the cutter's body; `GlobalId` from the row's uid) and an
+  `IfcRelVoidsElement`; other cut elements carry their cut body; rows made
+  after the export phase are left out. Revit: Forms send their cut body as
+  a `DirectShape`; native walls and floors are rebuilt by Revit from their
+  parameters, so their cuts are not sent and the plan carries one warning
+  `ferro.revit.cut_not_sent` (freeze them to send the cut body).
 - **Joins** (wall-to-wall, floor-to-wall) become `join` rows (M5-5.2). Until
   then, generation infers L- and T-joins from coincident wall ends (ADR 0001);
   hosted openings use `host_id` and are deleted with their host.
@@ -254,7 +293,20 @@ per category and shown status, count, volume of closed bodies and area
 (`PEnum_ElementStatus`). Revit: phases are looked up by name (the Revit API
 cannot create them) and *Phase Created* / *Phase Demolished* are set by name.
 
-Phased cuts (ADR 0006 §5) wait for the relationship table (M5-5).
+**Phased cuts** (ADR 0006 §5, M5-23.6). A `cut` row's optional `phase`
+says when the cut is made. In a view of a phase before it the target is
+uncut; in the row's phase the removed part is demolished; in later phases
+the target is cut. The stored geometry is the latest state (every row
+applied). `model::cut::body_in_phase` gives the body in any phase and
+`removed_in_phase` the part a phase removes; `get_phase_quantities`
+(`PhaseQuantities::from_document_with_kernel`) counts each element with
+its body in the phase and, for an element *existing* in the cut's phase,
+adds the removed volume to its category's `demolished` volume (count
+unchanged: a removed part is not an element). A wall *new* in the cut's
+phase has no demolished part. The app draws the target uncut before the
+row's phase and cut from it on; it does not yet draw the removed part as a
+red demolished solid. A cut made in the app while phasing is used is made
+in the view's phase.
 
 ## 3.11 Views (D-33, M5-22)
 

@@ -138,7 +138,8 @@ impl Relationship {
     /// Check the row against `doc`: the number of elements for the kind
     /// (two, or a whole and at least one part for `Aggregate`), all
     /// distinct, all existing elements with geometry (not levels, types,
-    /// materials or phases), the phase a phase, and no other row linking the same
+    /// materials or phases), the `cut` element of a cut a wall, floor or
+    /// Form, the phase a phase, and no other row linking the same
     /// elements the same way (rows with this row's uid are ignored, so an
     /// edit can be checked in place).
     pub fn validate(&self, doc: &Document) -> Result<(), RelationshipError> {
@@ -174,6 +175,16 @@ impl Relationship {
                     "{} cannot take part in a relationship",
                     e.label()
                 )));
+            }
+        }
+        if self.kind == RelationshipKind::Cut {
+            if let Some(t) = self.elements.get(1).and_then(|id| doc.get(*id)) {
+                if !super::cut::is_cut_target(t) {
+                    return Err(invalid(format!(
+                        "{} cannot be cut: a cut row cuts a wall, a floor or a Form",
+                        t.label()
+                    )));
+                }
             }
         }
         if let Some(p) = self.phase {

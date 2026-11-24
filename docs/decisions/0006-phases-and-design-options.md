@@ -74,6 +74,17 @@ D-32 reserves phase and design-option fields; nothing uses them yet.
   Details in Foundation §3.10.
 
 
+## Implementation notes (M5-23.6, phased cuts)
+
+- A `cut` row's `phase` orders it (rows without a phase first) and decides
+  where it applies: uncut before, removed part demolished in, cut after.
+  Stored geometry is the latest state; bodies per phase come from the
+  kernel on demand (`model::cut::body_in_phase`, `removed_in_phase`).
+- `get_phase_quantities` counts the removed part as demolished volume of
+  the element's category when the element is existing in that phase.
+- The app switches cut / uncut by view phase; drawing the removed part as
+  a red demolished solid is left for later (Foundation §3.10).
+
 ## Implementation notes (M5-23.9, design options; M5-26.2, M5-26.3)
 
 - **Data.** One category `DesignOptions` with two bodies: `OptionSet

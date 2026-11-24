@@ -17,7 +17,24 @@ pub struct Level {
 /// model coordinates (relative to the Internal Origin).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Form {
+    /// The body as drawn: the source that commands edit.
     pub body: Body,
+    /// Derived (regenerated, M5-5.3): `body` less the cutters of the `cut`
+    /// relationship rows whose target is this element (`model::cut`);
+    /// `None` when no cut applies. [`Element::geometry`] returns it when
+    /// present. Omitted from files when `None`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cut_body: Option<Body>,
+}
+
+impl Form {
+    /// A Form with this body and no cut.
+    pub fn new(body: Body) -> Form {
+        Form {
+            body,
+            cut_body: None,
+        }
+    }
 }
 
 /// Where an element's geometry comes from (ADR 0004 §1). The geometric
@@ -194,10 +211,11 @@ impl Element {
         }
     }
     /// Model geometry of the element, if it has any (Forms, walls, floors,
-    /// openings).
+    /// openings), with its `cut` relationships applied (a Form's
+    /// `cut_body` when it has one).
     pub fn geometry(&self) -> Option<&Body> {
         match &self.body {
-            ElementBody::Form(f) => Some(&f.body),
+            ElementBody::Form(f) => Some(f.cut_body.as_ref().unwrap_or(&f.body)),
             ElementBody::Wall(w) => Some(&w.geometry),
             ElementBody::Floor(f) => Some(&f.geometry),
             ElementBody::Opening(o) => Some(&o.geometry),

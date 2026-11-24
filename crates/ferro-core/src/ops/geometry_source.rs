@@ -95,9 +95,16 @@ fn freeze(tx: &mut Transaction, id: ElementId) -> Result<Vec<ElementId>, Command
         ids.extend(hosted);
     }
     for &x in &ids {
+        // A cut element freezes uncut: its `cut` rows keep cutting the Form
+        // (non-destructive, M5-5.3).
+        let uncut = if crate::model::cut::cuts_of(tx.doc(), x).is_empty() {
+            None
+        } else {
+            crate::model::generate::uncut_body(tx.doc(), x)
+        };
         tx.modify(x, |e| {
-            let body = e.geometry().cloned().unwrap_or_default();
-            e.body = ElementBody::Form(Form { body });
+            let body = uncut.or_else(|| e.geometry().cloned()).unwrap_or_default();
+            e.body = ElementBody::Form(Form::new(body));
             Ok(())
         })?;
     }

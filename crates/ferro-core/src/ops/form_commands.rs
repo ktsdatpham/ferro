@@ -25,7 +25,7 @@ fn form_body(tx: &Transaction, id: ElementId) -> Result<Body, CommandError> {
 
 fn store(tx: &mut Transaction, id: ElementId, body: Body) -> Result<(), CommandError> {
     tx.modify(id, |e| {
-        e.body = ElementBody::Form(Form { body });
+        e.body = ElementBody::Form(Form::new(body));
         Ok(())
     })
 }
@@ -129,7 +129,7 @@ impl Command for CreateCircle {
                     Category::Forms,
                     self.name.clone(),
                     self.level,
-                    ElementBody::Form(Form { body }),
+                    ElementBody::Form(Form::new(body)),
                 )?;
                 Ok(json!({"element": id, "face": faces[0]}))
             }
@@ -546,6 +546,98 @@ impl Command for SubtractForms {
             "lineage": r.lineage,
             "faces": r.faces,
         }))
+    }
+}
+
+/// Shared body of [`UniteForms`] and [`IntersectForms`]: `target` becomes
+/// `target op other` through the kernel; `other` is deleted unless `keep`.
+fn boolean_forms(
+    tx: &mut Transaction,
+    op: BooleanOp,
+    target: ElementId,
+    other: ElementId,
+    keep: bool,
+) -> Result<CommandOutput, CommandError> {
+    if target == other {
+        return Err(err("ferro.ops.same_element", "the two Forms must be different").on(target));
+    }
+    let a = form_body(tx, target)?;
+    let b = form_body(tx, other)?;
+    let r = tx
+        .kernel()?
+        .boolean(op, &a, &b)
+        .map_err(|e| CommandError::from(e).on(target).on(other))?;
+    store(tx, target, r.body)?;
+    if !keep {
+        tx.delete(other)?;
+    }
+    Ok(json!({
+        "element": target,
+        "other_deleted": !keep,
+        "lineage": r.lineage,
+        "faces": r.faces,
+    }))
+}
+
+/// Unite two Forms (solid boolean union through the geometry kernel, ADR
+/// 0007; Revit `BooleanOperationsType.Union`): the target's body becomes
+/// target ∪ other in one transaction, and `other` is deleted unless
+/// `keep_other`. Faces of the target that survive keep their ids (D-25);
+/// `lineage` and `faces` as for [`SubtractForms`] (`from_b` = other).
+/// Disjoint Forms give one body of several shells. Both Forms must be
+/// closed solids with flat faces (mm).
+///
+/// Fails with `ferro.kernel.unavailable`, `ferro.ops.same_element`,
+/// `ferro.model.not_a_form`, or the kernel's codes
+/// (`ferro.kernel.not_solid`, `ferro.kernel.non_manifold_result` for
+/// solids touching only along an edge, ...).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct UniteForms {
+    pub target: ElementId,
+    pub other: ElementId,
+    #[serde(default)]
+    pub keep_other: bool,
+}
+
+impl Command for UniteForms {
+    const NAME: &'static str = "unite_forms";
+    fn execute(&self, tx: &mut Transaction) -> Result<CommandOutput, CommandError> {
+        boolean_forms(
+            tx,
+            BooleanOp::Union,
+            self.target,
+            self.other,
+            self.keep_other,
+        )
+    }
+}
+
+/// Intersect two Forms (solid boolean intersection through the geometry
+/// kernel, ADR 0007; Revit `BooleanOperationsType.Intersect`): the
+/// target's body becomes what lies in both, and `other` is deleted unless
+/// `keep_other`. Lineage as for [`UniteForms`]. Both Forms must be closed
+/// solids with flat faces (mm).
+///
+/// Fails with `ferro.kernel.empty_result` when they do not overlap, and
+/// otherwise as [`UniteForms`].
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct IntersectForms {
+    pub target: ElementId,
+    pub other: ElementId,
+    #[serde(default)]
+    pub keep_other: bool,
+}
+
+impl Command for IntersectForms {
+    const NAME: &'static str = "intersect_forms";
+    fn execute(&self, tx: &mut Transaction) -> Result<CommandOutput, CommandError> {
+        boolean_forms(
+            tx,
+            BooleanOp::Intersection,
+            self.target,
+            self.other,
+            self.keep_other,
+        )
     }
 }
 

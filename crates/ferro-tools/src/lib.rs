@@ -250,6 +250,10 @@ pub fn list() -> Vec<Value> {
             json!({"element": id("Form id"), "faces": ids("Face ids")}), &["element", "faces"]),
         tool("subtract_forms", "Cut one Form out of another (solid boolean difference): the target becomes target minus cutter, e.g. a box pushed into a wall makes a niche or an opening. Both must be closed solids with flat faces. The cutter is deleted unless keep_cutter is true. Faces of the target that survive keep their ids; returns lineage (kept / created / deleted faces) and faces (each result face with the input faces it came from: from_a = target, from_b = cutter). Fails with ferro.kernel.empty_result when nothing is left, ferro.kernel.unavailable when no geometry kernel is attached.",
             json!({"target": id("Form to cut"), "cutter": id("Form to cut away"), "keep_cutter": {"type":"boolean","description":"Keep the cutter Form (default false: it is deleted)"}}), &["target", "cutter"]),
+        tool("unite_forms", "Unite two Forms (solid boolean union): the target becomes target plus other, in one body (several shells when they do not touch). Both must be closed solids with flat faces. The other Form is deleted unless keep_other is true. Faces of the target that survive keep their ids; returns lineage and faces (from_a = target, from_b = other). Fails with ferro.kernel.non_manifold_result when they touch only along an edge, ferro.kernel.unavailable when no geometry kernel is attached.",
+            json!({"target": id("Form to grow"), "other": id("Form to add"), "keep_other": {"type":"boolean","description":"Keep the other Form (default false: it is deleted)"}}), &["target", "other"]),
+        tool("intersect_forms", "Intersect two Forms (solid boolean intersection): the target becomes what lies in both. Both must be closed solids with flat faces. The other Form is deleted unless keep_other is true. Returns lineage and faces as unite_forms. Fails with ferro.kernel.empty_result when they do not overlap.",
+            json!({"target": id("Form to trim"), "other": id("Form to intersect with"), "keep_other": {"type":"boolean","description":"Keep the other Form (default false: it is deleted)"}}), &["target", "other"]),
         // Phases (ADR 0006).
         tool("create_phase", "Create a construction phase (Revit Phase), appended at the end or inserted before `before`. Phases are ordered; elements are created / demolished in phases. Dates are YYYY-MM-DD. Returns {element, phases}.",
             json!({"name": {"type":"string"}, "before": id("Optional phase to insert before"), "start_date": {"type":"string","description":"YYYY-MM-DD"}, "end_date": {"type":"string","description":"YYYY-MM-DD"}}), &["name"]),
@@ -261,10 +265,10 @@ pub fn list() -> Vec<Value> {
             json!({"elements": ids("Element ids (walls, floors, doors, windows, Forms)"), "created": {"type":["integer","null"],"description":"Phase id"}, "demolished": {"type":["integer","null"],"description":"Phase id"}}), &["elements"]),
         tool("set_renovation_status", "Simple renovation mode (ArchiCAD-like): mark elements existing, to be demolished, or new. Uses the first and last phase; creates \"Existing\" and \"New Construction\" if the project has fewer than two phases.",
             json!({"elements": ids("Element ids"), "status": {"type":"string","enum":["existing","demolish","new"]}}), &["elements", "status"]),
-        tool("get_phase_quantities", "Quantities in the view of a phase, per category split by status (existing / new / demolished / temporary): count, volume (m³) and area (m²; floors plan area, walls gross length × height). The basis for demolition and new-build costs. `phase` defaults to the last phase.",
+        tool("get_phase_quantities", "Quantities in the view of a phase, per category split by status (existing / new / demolished / temporary): count, volume (m³) and area (m²; floors plan area, walls gross length × height). The basis for demolition and new-build costs. A cut relationship made in a phase (an opening in an existing wall) counts the removed part as demolished volume in that phase; before it the element is uncut. `phase` defaults to the last phase.",
             json!({"phase": id("Phase id (default: last phase)")}), &[]),
         // Relationships (ADR 0004 §5).
-        tool("create_relationship", "Link elements with a relationship row (stored as data, saved, undoable). Order of `elements` by kind: join [first, second] (first wins where they overlap), cut [cutter, cut], host [host, hosted], attach [attached, target], bounds [space, boundary], connect [a, b], aggregate [whole, part, ...]. Only elements with geometry. `phase`: the phase it is made in. Returns {relationship: uid}. Fails with ferro.model.invalid_relationship, missing_element or duplicate_relationship.",
+        tool("create_relationship", "Link elements with a relationship row (stored as data, saved, undoable). Order of `elements` by kind: join [first, second] (first wins where they overlap), cut [cutter, cut] (non-destructive void: the cut element, a wall, floor or Form, shows its body minus the cutter's, regenerated when either changes; a Form used only as a cutter becomes a hidden void), host [host, hosted], attach [attached, target], bounds [space, boundary], connect [a, b], aggregate [whole, part, ...]. Only elements with geometry. `phase`: the phase it is made in. Returns {relationship: uid}. Fails with ferro.model.invalid_relationship, missing_element or duplicate_relationship.",
             json!({"kind": {"type":"string","enum":["join","cut","host","attach","bounds","connect","aggregate"]}, "elements": ids("Element ids, ordered as the kind says"), "phase": id("Optional phase id")}), &["kind", "elements"]),
         tool("delete_relationship", "Remove a relationship row by uid; the elements stay. Deleting an element removes its rows automatically.",
             json!({"relationship": {"type":"string","description":"Relationship uid (from create_relationship or list_relationships)"}}), &["relationship"]),
@@ -762,6 +766,17 @@ fn relationships(doc: &Document, args: &Value) -> Value {
 ///
 /// [`PhaseQuantities`]: ferro_core::model::PhaseQuantities
 pub fn phase_quantities(doc: &Document, args: &Value) -> Result<Value, String> {
+    phase_quantities_with(doc, args, None)
+}
+
+/// [`phase_quantities`] with the session's kernel: phased cuts count the
+/// body in the phase and the removed part as demolished volume (ADR 0006
+/// §5, `PhaseQuantities::from_document_with_kernel`).
+pub fn phase_quantities_with(
+    doc: &Document,
+    args: &Value,
+    kernel: Option<&dyn ferro_core::algo::Kernel>,
+) -> Result<Value, String> {
     let phase = match args.get("phase").and_then(Value::as_u64) {
         Some(p) => ElementId(p),
         None => doc
@@ -770,7 +785,7 @@ pub fn phase_quantities(doc: &Document, args: &Value) -> Result<Value, String> {
             .map(|p| p.id)
             .ok_or("the project has no phases yet")?,
     };
-    let q = ferro_core::model::PhaseQuantities::from_document(doc, phase)
+    let q = ferro_core::model::PhaseQuantities::from_document_with_kernel(doc, phase, kernel)
         .ok_or_else(|| format!("{phase} is not a phase"))?;
     let totals = |t: &ferro_core::model::phase_quantities::StatusTotals| json!({"count": t.count, "volume_m3": (t.volume_mm3 / 1e9 * 1000.0).round() / 1000.0, "area_m2": (t.area_mm2 / 1e6 * 1000.0).round() / 1000.0});
     let mut cats = Map::new();
@@ -888,7 +903,12 @@ pub fn call(
             }),
             None => err("missing element".into()),
         },
-        "get_phase_quantities" => phase_quantities(session.doc(), args).or_else(err),
+        "get_phase_quantities" => phase_quantities_with(
+            session.doc(),
+            args,
+            session.kernel().map(|k| k.as_ref()),
+        )
+        .or_else(err),
         "list_relationships" => Ok(relationships(session.doc(), args)),
         "undo" => match session.undo() {
             Some(c) => Ok(json!({"changed": c})),

@@ -466,14 +466,31 @@ impl<'a> Transaction<'a> {
             .filter_map(|id| self.work.get(*id))
             .chain(pre.deleted.iter().filter_map(|id| self.base.get(*id)))
             .any(generate::affects_bim);
-        if bim_touched {
-            let regen = generate::regenerate(&self.work);
+        if bim_touched || self.cuts_touched(&pre) {
+            let regen = generate::regenerate_with(&self.work, self.kernel.as_deref());
             for (id, body) in regen.updates {
                 if let Some(e) = self.work.get(id) {
                     let mut e = e.clone();
                     generate::set_geometry(&mut e, body);
                     self.work.put(e);
                 }
+            }
+            for (id, cut) in regen.cut_updates {
+                if let Some(e) = self.work.get(id) {
+                    let mut e = e.clone();
+                    if let ElementBody::Form(f) = &mut e.body {
+                        f.cut_body = cut;
+                    }
+                    self.work.put(e);
+                }
+            }
+            // Cut problems never fail the transaction (M5-5.3).
+            for issue in regen.cut_issues {
+                self.warnings.push(Failure::warning(
+                    issue.code,
+                    issue.message,
+                    vec![issue.element],
+                ));
             }
             for issue in regen.issues {
                 // A wall or opening placed in this very transaction that
@@ -535,18 +552,14 @@ impl<'a> Transaction<'a> {
                         continue;
                     }
                 }
-                let area: f64 = f
-                    .body
-                    .face_ids()
-                    .filter_map(|fid| f.body.face_area(fid).ok())
-                    .sum();
+                // Quantities of what is built: the cut body when cut.
+                let g = f.cut_body.as_ref().unwrap_or(&f.body);
+                let area: f64 = g.face_ids().filter_map(|fid| g.face_area(fid).ok()).sum();
                 e.params
                     .insert(keys::FORM_AREA.into(), ParamValue::Area(area));
-                if f.body.is_closed() {
-                    e.params.insert(
-                        keys::FORM_VOLUME.into(),
-                        ParamValue::Volume(f.body.volume()),
-                    );
+                if g.is_closed() {
+                    e.params
+                        .insert(keys::FORM_VOLUME.into(), ParamValue::Volume(g.volume()));
                 } else {
                     e.params.remove(keys::FORM_VOLUME);
                 }
@@ -582,6 +595,33 @@ impl<'a> Transaction<'a> {
             self.work.bump_version();
         }
         Ok((self.work, changed, self.warnings))
+    }
+
+    /// `true` when this transaction can change a `cut` result (M5-5.3): a
+    /// cut row was added, changed or removed, or an element linked by a cut
+    /// row (cutter or target, before or after) was added, changed or
+    /// deleted.
+    fn cuts_touched(&self, pre: &DocumentChanged) -> bool {
+        let is_cut = |r: &&Relationship| r.kind == RelationshipKind::Cut;
+        let rows: Vec<&Relationship> = self
+            .base
+            .relationships()
+            .filter(is_cut)
+            .chain(self.work.relationships().filter(is_cut))
+            .collect();
+        if rows.is_empty() {
+            return false;
+        }
+        let row_changed = rows
+            .iter()
+            .any(|r| self.base.relationship(r.uid) != self.work.relationship(r.uid));
+        row_changed
+            || pre
+                .added
+                .iter()
+                .chain(&pre.modified)
+                .chain(&pre.deleted)
+                .any(|id| rows.iter().any(|r| r.involves(*id)))
     }
 
     /// Step 0 of `finish`, for design options: an option layer this
@@ -709,8 +749,9 @@ impl<'a> Transaction<'a> {
                 }
             }
             ElementBody::Form(f) if snapshot.category != Category::Forms => {
-                // Direct geometry classified as a building element.
-                let b = &f.body;
+                // Direct geometry classified as a building element (its
+                // cut body when cut, M5-5.3).
+                let b = f.cut_body.as_ref().unwrap_or(&f.body);
                 if b.is_closed() {
                     set(keys::VOLUME, ParamValue::Volume(b.volume()));
                 }

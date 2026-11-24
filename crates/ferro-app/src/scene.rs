@@ -27,6 +27,10 @@ pub const DEMOLISHED_EDGE: [f32; 4] = [0.70, 0.12, 0.08, 1.0];
 /// Existing elements: faces blended towards this grey, lighter edges.
 pub const EXISTING_GREY: [f32; 4] = [0.72, 0.72, 0.72, 1.0];
 pub const EXISTING_EDGE: [f32; 4] = [0.45, 0.46, 0.48, 1.0];
+/// Voids (Forms that only cut, M5-5.3): faint translucent faces and dashed
+/// edges, so they stay visible and selectable but read as "not built".
+pub const VOID: [f32; 4] = [0.95, 0.62, 0.20, 0.15];
+pub const VOID_EDGE: [f32; 4] = [0.80, 0.45, 0.10, 1.0];
 /// Dash and gap of demolished edges, mm.
 const DASH_MM: f64 = 120.0;
 const GAP_MM: f64 = 80.0;
@@ -40,6 +44,7 @@ struct Chunk {
     revision: u64,
     selected: bool,
     phase: Option<PhaseStatus>,
+    void: bool,
     tris: Vec<Vertex>,
     lines: Vec<Vertex>,
 }
@@ -52,6 +57,7 @@ struct ListKey {
     selection: Vec<ElementId>,
     hidden: Vec<ElementId>,
     phase: Vec<(ElementId, PhaseStatus)>,
+    voids: Vec<ElementId>,
 }
 
 /// What the cut lines were built for: scene revision, origin, hidden, plane.
@@ -86,6 +92,8 @@ pub struct SceneCache {
     /// Phase status of elements drawn differently in the view's phase
     /// (existing greyed, demolished / temporary red and dashed). View state.
     pub phase: HashMap<ElementId, PhaseStatus>,
+    /// Voids, drawn translucent with dashed edges (M5-5.3). View state.
+    pub voids: HashSet<ElementId>,
 }
 
 fn sorted(set: &HashSet<ElementId>) -> Vec<ElementId> {
@@ -123,6 +131,7 @@ impl SceneCache {
                 v.sort();
                 v
             },
+            voids: sorted(&self.voids),
         };
         if self.list_key.as_ref() == Some(&key) {
             return;
@@ -139,8 +148,12 @@ impl SceneCache {
         for r in scene.records() {
             let selected = selection.contains(&r.element);
             let phase = self.phase.get(&r.element).copied();
+            let void = self.voids.contains(&r.element);
             let fresh = self.chunks.get(&r.element).is_some_and(|c| {
-                c.revision == r.revision && c.selected == selected && c.phase == phase
+                c.revision == r.revision
+                    && c.selected == selected
+                    && c.phase == phase
+                    && c.void == void
             });
             if !fresh {
                 if let Some(m) = scene.shared_mesh(r.mesh) {
@@ -153,6 +166,7 @@ impl SceneCache {
                             origin,
                             (self.xray, self.wireframe, self.hidden_line),
                             phase,
+                            void,
                         ),
                     );
                     self.rebuilt += 1;
@@ -163,10 +177,12 @@ impl SceneCache {
             }
             // Translucent (demolished) faces go last so opaque faces behind
             // them are already drawn when they blend.
-            if matches!(
-                phase,
-                Some(PhaseStatus::Demolished | PhaseStatus::Temporary)
-            ) {
+            if void
+                || matches!(
+                    phase,
+                    Some(PhaseStatus::Demolished | PhaseStatus::Temporary)
+                )
+            {
                 translucent.push(r.element);
                 continue;
             }
@@ -233,6 +249,7 @@ fn chunk(
     origin: Point3,
     (xray, wireframe, hidden_line): (bool, bool, bool),
     phase: Option<PhaseStatus>,
+    void: bool,
 ) -> Chunk {
     // Local → camera-relative: add the record's offset, subtract the origin.
     let shift = r.offset - (origin - Point3::ORIGIN);
@@ -245,6 +262,7 @@ fn chunk(
         Some(PhaseStatus::Demolished | PhaseStatus::Temporary)
     );
     let c = match phase {
+        _ if void => VOID,
         _ if demolished => DEMOLISHED,
         Some(PhaseStatus::Existing) => {
             let g = EXISTING_GREY;
@@ -299,13 +317,14 @@ fn chunk(
     }
     let edge = match phase {
         _ if selected => SELECT,
+        _ if void => VOID_EDGE,
         _ if demolished => DEMOLISHED_EDGE,
         Some(PhaseStatus::Existing) => EXISTING_EDGE,
         _ => EDGE,
     };
     let mut lines = Vec::with_capacity(m.edges.len() * 2);
     for [a, b] in &m.edges {
-        if demolished {
+        if demolished || void {
             for (p, q) in dashes(*a, *b) {
                 lines.push(line_vertex(rel(p), edge));
                 lines.push(line_vertex(rel(q), edge));
@@ -319,6 +338,7 @@ fn chunk(
         revision: r.revision,
         selected,
         phase,
+        void,
         tris,
         lines,
     }
@@ -525,6 +545,23 @@ mod tests {
         assert_eq!(c.rebuilt, 3);
         assert!(c.tris.is_empty());
         assert_eq!(c.scene.revision(), rev);
+    }
+
+    #[test]
+    fn voids_are_faint_dashed_and_drawn_last() {
+        let (s, ids) = boxes(2);
+        let mut c = SceneCache::default();
+        let none = HashSet::new();
+        c.update(s.doc(), Point3::ORIGIN, &none);
+        let plain_lines = c.lines.len();
+        c.voids.insert(ids[0]);
+        c.update(s.doc(), Point3::ORIGIN, &none);
+        assert_eq!(c.rebuilt, 1, "only the void's chunk");
+        assert!(c.lines.len() > plain_lines, "dashed edges");
+        // The void's faces come last, translucent.
+        let last = c.tris.last().unwrap();
+        assert_eq!(last.color, VOID);
+        assert!(c.tris[..36].iter().all(|v| v.color != VOID));
     }
 
     #[test]

@@ -13,5 +13,6 @@ path = "src/main.rs"
 [dependencies]
 ferro-core = { path = "../ferro-core" }
 ferro-io = { path = "../ferro-io" }
+ferro-kernel = { path = "../ferro-kernel" }
 ferro-mcp = { path = "../ferro-mcp" }
 serde_json.workspace = true

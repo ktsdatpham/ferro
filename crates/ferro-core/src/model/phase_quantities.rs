@@ -3,7 +3,9 @@
 //! new-build costs and carbon.
 
 use super::phase::PhaseStatus;
-use super::{keys, Category, Document, Element, ElementId, ParamValue};
+use super::{cut, generate, keys, Category, Document, Element, ElementId, ParamValue};
+use crate::algo::Kernel;
+use crate::topo::Body;
 use serde::Serialize;
 use std::collections::BTreeMap;
 
@@ -54,6 +56,54 @@ impl PhaseQuantities {
             t.count += 1;
             t.volume_mm3 += element_volume(e);
             t.area_mm2 += element_area(e);
+        }
+        Some(out)
+    }
+
+    /// [`PhaseQuantities::from_document`] with phased cuts (ADR 0006 §5,
+    /// M5-23.6): an element with a `cut` row made in a phase counts its
+    /// body in the view of `phase` (rows of later phases not applied), and
+    /// when it is `existing` in `phase`, the volume removed by rows made in
+    /// `phase` is added to its category's `demolished` volume (the count is
+    /// unchanged: a removed part is not an element). A wall new in the
+    /// cut's phase has no demolished part. Without a kernel the result is
+    /// [`PhaseQuantities::from_document`] (stored, fully cut bodies).
+    pub fn from_document_with_kernel(
+        doc: &Document,
+        phase: ElementId,
+        kernel: Option<&dyn Kernel>,
+    ) -> Option<PhaseQuantities> {
+        let mut out = Self::from_document(doc, phase)?;
+        let Some(kernel) = kernel else {
+            return Some(out);
+        };
+        let targets: Vec<&Element> = doc
+            .elements()
+            .filter(|e| super::phase::is_phased_category(e) && cut::has_phased_cuts(doc, e.id))
+            .collect();
+        if targets.is_empty() {
+            return Some(out);
+        }
+        let bodies = generate::uncut_bodies(doc);
+        let cutter = |c: ElementId| bodies.get(&c).cloned();
+        let vol = |b: &Body| if b.is_closed() { b.volume().abs() } else { 0.0 };
+        for e in targets {
+            let status = doc.phase_status(e, phase);
+            let Some(uncut) = bodies.get(&e.id).filter(|_| status.is_shown()) else {
+                continue;
+            };
+            let now = cut::body_in_phase(doc, Some(kernel), e.id, phase, uncut, &cutter).body;
+            let now_v = vol(&now);
+            let cat = out.categories.entry(e.category).or_default();
+            cat.entry(status).or_default().volume_mm3 += now_v - element_volume(e);
+            if status == PhaseStatus::Existing {
+                let rows = cut::cuts_before_phase(doc, e.id, phase);
+                let before = cut::apply_cuts(Some(kernel), e.id, uncut, &rows, &cutter, false).body;
+                let removed = vol(&before) - now_v;
+                if removed > crate::math::tol::VERTEX_TOL {
+                    cat.entry(PhaseStatus::Demolished).or_default().volume_mm3 += removed;
+                }
+            }
         }
         Some(out)
     }

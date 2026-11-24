@@ -44,6 +44,8 @@ struct Fx {
     opt_b: ElementId,
     /// 500 mm cube at (30 m, 0, 0), apart from everything (a boolean cutter).
     cut: ElementId,
+    /// 500 mm cube inside `bx` (an intersection operand).
+    inner: ElementId,
 }
 
 impl Fx {
@@ -155,6 +157,7 @@ impl Fx {
             json!({"option": opt_b, "changes": [{"op": "set", "path": format!("/elements/{wall_uid}/name"), "value": "South B"}]}),
         );
         let cut = boxed(&mut s, [30_000.0, 0.0, 0.0], 500.0, 500.0, 500.0);
+        let inner = boxed(&mut s, [10_500.0, 500.0, 500.0], 500.0, 500.0, 500.0);
         check_document(s.doc()).expect("fixture is valid");
         Fx {
             s,
@@ -180,6 +183,7 @@ impl Fx {
             opt_a,
             opt_b,
             cut,
+            inner,
         }
     }
 
@@ -1092,6 +1096,36 @@ fn every_command_rejects_degenerate_and_wrong_inputs_with_rollback() {
             json!({"target": bx, "cutter": 9999}),
             "ferro.model.not_found",
         ),
+        (
+            "unite_forms",
+            json!({"target": bx, "other": bx}),
+            "ferro.ops.same_element",
+        ),
+        (
+            "unite_forms",
+            json!({"target": bx, "other": wall}),
+            "ferro.model.not_a_form",
+        ),
+        (
+            "unite_forms",
+            json!({"target": bx, "other": sheet}),
+            "ferro.kernel.not_solid",
+        ),
+        (
+            "intersect_forms",
+            json!({"target": bx, "other": bx}),
+            "ferro.ops.same_element",
+        ),
+        (
+            "intersect_forms",
+            json!({"target": bx, "other": sheet}),
+            "ferro.kernel.not_solid",
+        ),
+        (
+            "intersect_forms",
+            json!({"target": bx, "other": 9999}),
+            "ferro.model.not_found",
+        ),
     ];
     let mut failures = Vec::new();
     for (tool, args, code) in cases {
@@ -1552,6 +1586,14 @@ fn valid_calls(f: &Fx) -> Vec<(&'static str, Value)> {
             json!({"element": f.sheet, "faces": [f.sheet_face]}),
         ),
         ("subtract_forms", json!({"target": f.bx, "cutter": f.cut})),
+        (
+            "unite_forms",
+            json!({"target": f.bx, "other": f.cut, "keep_other": true}),
+        ),
+        (
+            "intersect_forms",
+            json!({"target": f.bx, "other": f.inner, "keep_other": true}),
+        ),
         (
             "set_geometry_source",
             json!({"element": f.wall, "source": "direct"}),

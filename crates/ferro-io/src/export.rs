@@ -22,6 +22,10 @@ fn yup_n(n: ferro_core::Vec3) -> [f32; 3] {
 fn meshes(doc: &Document) -> Result<Vec<(String, Mesh)>, IoError> {
     let mut out = Vec::new();
     for e in doc.elements() {
+        // Voids (Forms that only cut, M5-5.3) are not exported.
+        if ferro_core::model::cut::is_void(doc, e) {
+            continue;
+        }
         if let Some(g) = e.geometry() {
             let m = body_mesh(g).map_err(|err| IoError::new("ferro.io.mesh", err.to_string()))?;
             if !m.indices.is_empty() {

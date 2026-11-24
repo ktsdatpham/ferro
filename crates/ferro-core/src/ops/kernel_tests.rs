@@ -93,3 +93,49 @@ fn preview_uses_the_session_kernel() {
     assert!(doc.get(b).is_none());
     assert!(s.doc().get(b).is_some());
 }
+
+#[test]
+fn unite_and_intersect_without_a_kernel_are_unavailable() {
+    let mut s = session();
+    let (a, b) = two_boxes(&mut s);
+    for tool in ["unite_forms", "intersect_forms"] {
+        let f = try_run(&mut s, tool, json!({"target": a, "other": b})).unwrap_err();
+        assert_eq!(f[0].code, "ferro.kernel.unavailable", "{tool}");
+    }
+}
+
+#[test]
+fn unite_forms_reaches_the_kernel_and_deletes_the_other() {
+    let mut s = kernel_session();
+    let (a, b) = two_boxes(&mut s);
+    let faces: Vec<_> = geometry(&s, a).face_ids().collect();
+    let o = run(&mut s, "unite_forms", json!({"target": a, "other": b}));
+    assert_eq!(o.output["other_deleted"], json!(true));
+    assert!(s.doc().get(b).is_none());
+    let g = geometry(&s, a);
+    // Two shells; the target's faces keep their ids.
+    assert_eq!(g.face_count(), 12);
+    assert!(faces.iter().all(|f| g.face(*f).is_ok()));
+    assert!((g.volume() - (1.0e9 + 1.25e8)).abs() < 1e-3);
+    s.undo().unwrap();
+    assert!(s.doc().get(b).is_some());
+}
+
+#[test]
+fn intersect_forms_of_apart_forms_is_refused() {
+    let mut s = kernel_session();
+    let (a, b) = two_boxes(&mut s);
+    let before = snapshot(&s);
+    let f = try_run(&mut s, "intersect_forms", json!({"target": a, "other": b})).unwrap_err();
+    assert_eq!(f[0].code, "ferro.kernel.empty_result");
+    assert_eq!(snapshot(&s), before);
+    // A Form inside a box: the intersection is the inner Form, kept.
+    let c = boxed(&mut s, [100.0, 100.0, 100.0], 200.0, 200.0, 200.0);
+    let o = run(
+        &mut s,
+        "intersect_forms",
+        json!({"target": a, "other": c, "keep_other": true}),
+    );
+    assert_eq!(o.output["other_deleted"], json!(false));
+    assert!((geometry(&s, a).volume() - 8.0e6).abs() < 1e-3);
+}

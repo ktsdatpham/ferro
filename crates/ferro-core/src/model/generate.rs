@@ -7,12 +7,12 @@
 //! document always yields the same bodies with the same ids.
 
 use super::bim::{CompoundStructure, Floor, LocationLine, OpeningKind, Wall, WallTop};
-use super::{Category, Document, Element, ElementBody, ElementId};
-use crate::algo::extrude_profile;
+use super::{cut, Category, Document, Element, ElementBody, ElementId};
+use crate::algo::{extrude_profile, Kernel};
 use crate::geom::{polygon, Arc, Curve, CurveLoop, Line, Plane, Profile};
 use crate::math::{tol, Length, Point2, Point3, Vec2, Vec3};
 use crate::topo::{Body, FaceSpec, VertexId};
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 
 /// Default wall thickness when a wall has no type (mm).
 pub const DEFAULT_WALL_THICKNESS: f64 = 200.0;
@@ -36,7 +36,11 @@ pub struct GenIssue {
 }
 
 impl GenIssue {
-    fn error(code: &'static str, message: impl Into<String>, element: ElementId) -> Self {
+    pub(crate) fn error(
+        code: &'static str,
+        message: impl Into<String>,
+        element: ElementId,
+    ) -> Self {
         GenIssue {
             code,
             message: message.into(),
@@ -44,7 +48,11 @@ impl GenIssue {
             is_error: true,
         }
     }
-    fn warning(code: &'static str, message: impl Into<String>, element: ElementId) -> Self {
+    pub(crate) fn warning(
+        code: &'static str,
+        message: impl Into<String>,
+        element: ElementId,
+    ) -> Self {
         GenIssue {
             code,
             message: message.into(),
@@ -57,8 +65,14 @@ impl GenIssue {
 /// Result of [`regenerate`]: new geometry for elements whose geometry changed.
 #[derive(Debug, Default)]
 pub struct Regenerated {
+    /// New geometry of walls, floors and openings (cuts applied), by id.
     pub updates: Vec<(ElementId, Body)>,
+    /// New derived `cut_body` of Forms (`None` = uncut), by id.
+    pub cut_updates: Vec<(ElementId, Option<Body>)>,
+    /// Generation problems: errors roll back, warnings are reported.
     pub issues: Vec<GenIssue>,
+    /// Problems of `cut` rows (`ferro.kernel.*`): always warnings.
+    pub cut_issues: Vec<GenIssue>,
 }
 
 /// Elevation (mm) of a level element; 0 when missing.
@@ -815,10 +829,10 @@ pub fn affects_bim(e: &Element) -> bool {
     )
 }
 
-/// Rebuild the geometry of every wall, floor and opening in `doc`. Only
-/// elements whose geometry differs from the stored one are returned.
-pub fn regenerate(doc: &Document) -> Regenerated {
-    let mut out = Regenerated::default();
+/// Generated geometry of every wall, floor and opening of `doc`, before
+/// cuts, with the problems found (errors and warnings).
+fn generate_all(doc: &Document) -> (BTreeMap<ElementId, Body>, Vec<GenIssue>) {
+    let mut out = Generated::default();
     let mut layouts: Vec<(ElementId, WallLayout)> = Vec::new();
     for e in doc.by_category(Category::Walls) {
         let Some(w) = e.as_wall() else { continue };
@@ -875,9 +889,7 @@ pub fn regenerate(doc: &Document) -> Regenerated {
         };
         match result {
             Ok(body) => {
-                if e.geometry() != Some(&body) {
-                    out.updates.push((*id, body));
-                }
+                out.bodies.insert(*id, body);
             }
             Err(i) => out.issues.push(i),
         }
@@ -887,13 +899,11 @@ pub fn regenerate(doc: &Document) -> Regenerated {
         match &e.body {
             ElementBody::Floor(f) => match floor_body(doc, e, f) {
                 Ok(body) => {
-                    if f.geometry != body {
-                        out.updates.push((e.id, body));
-                    }
+                    out.bodies.insert(e.id, body);
                 }
                 Err(i) => out.issues.push(i),
             },
-            ElementBody::Opening(o) => {
+            ElementBody::Opening(_) => {
                 if e.host_id
                     .and_then(|h| doc.get(h))
                     .and_then(|h| h.as_wall())
@@ -906,14 +916,101 @@ pub fn regenerate(doc: &Document) -> Regenerated {
                     ));
                 }
                 let body = opening_geom.remove(&e.id).unwrap_or_default();
-                if o.geometry != body {
-                    out.updates.push((e.id, body));
-                }
+                out.bodies.insert(e.id, body);
             }
             _ => {}
         }
     }
-    out.updates.sort_by_key(|(id, _)| *id);
+    (out.bodies, out.issues)
+}
+
+#[derive(Default)]
+struct Generated {
+    bodies: BTreeMap<ElementId, Body>,
+    issues: Vec<GenIssue>,
+}
+
+/// Uncut bodies of every element with geometry: generated walls, floors
+/// and openings (before `cut` rows), and the source body of Forms. The
+/// input of cuts and of phase views (ADR 0006 §5).
+pub fn uncut_bodies(doc: &Document) -> BTreeMap<ElementId, Body> {
+    let (mut bodies, _) = generate_all(doc);
+    for e in doc.elements() {
+        if let Some(f) = e.as_form() {
+            bodies.insert(e.id, f.body.clone());
+        }
+    }
+    bodies
+}
+
+/// The uncut body of one element ([`uncut_bodies`]); `None` without
+/// geometry.
+pub fn uncut_body(doc: &Document, id: ElementId) -> Option<Body> {
+    let e = doc.get(id)?;
+    match &e.body {
+        ElementBody::Form(f) => Some(f.body.clone()),
+        _ if cut::cuts_of(doc, id).is_empty() => e.geometry().cloned(),
+        _ => generate_all(doc).0.remove(&id),
+    }
+}
+
+/// Rebuild the geometry of every wall, floor and opening in `doc`, without
+/// a kernel: `cut` rows are not applied (one `ferro.kernel.unavailable`
+/// warning when there are any). See [`regenerate_with`].
+pub fn regenerate(doc: &Document) -> Regenerated {
+    regenerate_with(doc, None)
+}
+
+/// Rebuild the geometry of every wall, floor and opening in `doc`, then
+/// apply the `cut` relationship rows through `kernel` to walls, floors and
+/// Forms ([`cut`], M5-5.3). Only elements whose geometry (or a Form's
+/// `cut_body`) differs from the stored one are returned. Cut problems are
+/// warnings in `cut_issues` and never errors.
+pub fn regenerate_with(doc: &Document, kernel: Option<&dyn Kernel>) -> Regenerated {
+    let (bodies, issues) = generate_all(doc);
+    let mut out = Regenerated {
+        issues,
+        ..Default::default()
+    };
+    let cutter_body = |c: ElementId| -> Option<Body> {
+        let e = doc.get(c)?;
+        match &e.body {
+            ElementBody::Form(f) => Some(f.body.clone()),
+            _ => bodies.get(&c).or(e.geometry()).cloned(),
+        }
+    };
+    let mut warn = true;
+    let mut cut_body = |id: ElementId, uncut: &Body, out: &mut Regenerated| -> Option<Body> {
+        let rows = cut::cuts_of(doc, id);
+        if rows.is_empty() {
+            return None;
+        }
+        let o = cut::apply_cuts(kernel, id, uncut, &rows, &cutter_body, warn);
+        if kernel.is_none() && !o.issues.is_empty() {
+            warn = false;
+        }
+        out.cut_issues.extend(o.issues);
+        Some(o.body)
+    };
+    for (id, body) in &bodies {
+        let Some(e) = doc.get(*id) else { continue };
+        let body = match e.body {
+            ElementBody::Wall(_) | ElementBody::Floor(_) => {
+                cut_body(*id, body, &mut out).unwrap_or_else(|| body.clone())
+            }
+            _ => body.clone(),
+        };
+        if e.geometry() != Some(&body) {
+            out.updates.push((*id, body));
+        }
+    }
+    for e in doc.elements() {
+        let Some(f) = e.as_form() else { continue };
+        let new = cut_body(e.id, &f.body, &mut out).filter(|b| *b != f.body);
+        if new != f.cut_body {
+            out.cut_updates.push((e.id, new));
+        }
+    }
     out
 }
 
