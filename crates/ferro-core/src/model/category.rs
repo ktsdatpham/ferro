@@ -117,6 +117,15 @@ impl Category {
         }
     }
 
+    /// Datums: levels, grids and reference planes (ADR 0008 §4). New datums
+    /// are created pinned while `ProjectSettings::auto_pin_datums` is on.
+    pub fn is_datum(&self) -> bool {
+        matches!(
+            self,
+            Category::Levels | Category::Grids | Category::ReferencePlanes
+        )
+    }
+
     /// Categories a `Form` may be classified as (D-12).
     pub fn classifiable_form(&self) -> bool {
         !matches!(

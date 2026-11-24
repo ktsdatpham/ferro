@@ -9,6 +9,7 @@ use super::form_commands::*;
 use super::geometry_source::*;
 use super::parameter_commands::*;
 use super::phase_commands::*;
+use super::pin_commands::*;
 use super::project_commands::*;
 use super::relationship_commands::*;
 use super::view_commands::*;
@@ -629,16 +630,26 @@ impl Command for SetCategory {
     }
 }
 
-/// Rename the project.
+/// Rename the project and / or switch project-wide behaviour: with
+/// `auto_pin_datums`, whether new levels (and other datums) are created
+/// pinned (ADR 0008 §4, default on). Omitted fields keep their value.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SetProjectName {
-    pub name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub auto_pin_datums: Option<bool>,
 }
 
 impl Command for SetProjectName {
     const NAME: &'static str = "set_project_name";
     fn execute(&self, tx: &mut Transaction) -> Result<CommandOutput, CommandError> {
-        tx.project_name(self.name.clone());
+        if let Some(name) = &self.name {
+            tx.project_name(name.clone());
+        }
+        if let Some(on) = self.auto_pin_datums {
+            tx.project_settings(|s| s.auto_pin_datums = on);
+        }
         Ok(json!({}))
     }
 }
@@ -731,6 +742,7 @@ any_command!(
     DeleteDesignOption,
     AcceptDesignOption,
     ApplyChanges,
+    SetPinned,
 );
 
 impl AnyCommand {

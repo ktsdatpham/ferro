@@ -93,7 +93,9 @@ impl<'a> Transaction<'a> {
         self.work.get(id).ok_or_else(|| CommandError::not_found(id))
     }
 
-    /// Create an element and return its id.
+    /// Create an element and return its id. A datum (`Category::is_datum`)
+    /// is created pinned while the project's `auto_pin_datums` is on
+    /// (ADR 0008 §4).
     pub fn create(
         &mut self,
         category: Category,
@@ -113,6 +115,7 @@ impl<'a> Transaction<'a> {
         }
         let id = self.work.alloc_id();
         let uid = self.ids.next_uid();
+        let pinned = category.is_datum() && self.work.project().settings.auto_pin_datums;
         self.work.put(Element {
             id,
             uid,
@@ -126,15 +129,18 @@ impl<'a> Transaction<'a> {
             phase_demolished: None,
             params: BTreeMap::new(),
             body,
+            pinned,
         });
         Ok(id)
     }
 
     /// Duplicate an element with a new id and uid (Q-B7: copies get both).
+    /// The copy is not pinned (as Revit), so it can be placed.
     pub fn duplicate(&mut self, id: ElementId) -> Result<ElementId, CommandError> {
         let mut e = self.element(id)?.clone();
         e.id = self.work.alloc_id();
         e.uid = self.ids.next_uid();
+        e.pinned = false;
         let new = e.id;
         self.work.put(e);
         Ok(new)
@@ -410,7 +416,14 @@ impl<'a> Transaction<'a> {
     pub(crate) fn finish(
         mut self,
     ) -> Result<(Document, DocumentChanged, Vec<Failure>), Vec<Failure>> {
-        let mut errors = Vec::new();
+        // 0. Pins (ADR 0008 §2), before regeneration so that only what the
+        // commands did is judged: elements pinned when the transaction
+        // began may not be moved or deleted, nor by an option layer.
+        let mut errors = pin_failures(&self.base, &self.work);
+        errors.extend(self.pinned_layer_failures());
+        if !errors.is_empty() {
+            return Err(errors);
+        }
 
         // 1. Levels whose elevation changed move their dependent Forms.
         let mut level_moves: Vec<(ElementId, f64)> = Vec::new();
@@ -571,6 +584,54 @@ impl<'a> Transaction<'a> {
         Ok((self.work, changed, self.warnings))
     }
 
+    /// Step 0 of `finish`, for design options: an option layer this
+    /// transaction changed may not move or remove an element pinned in the
+    /// shared model (ADR 0008 §2); other overrides are allowed. What the option's old
+    /// layer already did (before the element was pinned) is not reported
+    /// again.
+    fn pinned_layer_failures(&self) -> Vec<Failure> {
+        use crate::model::change::apply;
+        let mut out = Vec::new();
+        for e in self.work.by_category(Category::DesignOptions) {
+            let Some(new) = e.as_design_option() else {
+                continue;
+            };
+            let old = self.base.get(e.id).and_then(|b| b.as_design_option());
+            if new.changes.is_empty() || old.is_some_and(|o| o.changes == new.changes) {
+                continue;
+            }
+            let Ok(seen) = apply(&self.work, &new.changes) else {
+                continue; // an inapplicable layer is reported by its own check
+            };
+            let before: Vec<ElementId> = old
+                .and_then(|o| apply(&self.base, &o.changes).ok())
+                .map(|d| {
+                    pin_failures(&self.base, &d)
+                        .into_iter()
+                        .flat_map(|f| f.elements.first().copied())
+                        .collect()
+                })
+                .unwrap_or_default();
+            for f in pin_failures(&self.work, &seen) {
+                if f.elements.first().is_some_and(|p| before.contains(p)) {
+                    continue;
+                }
+                let mut elements = f.elements.clone();
+                elements.push(e.id);
+                out.push(Failure::error(
+                    "ferro.model.pinned",
+                    format!(
+                        "design option {} cannot hold this: {}",
+                        e.label(),
+                        f.message
+                    ),
+                    elements,
+                ));
+            }
+        }
+        out
+    }
+
     /// Step 4 of `finish`: design-option layers (ADR 0006) that this
     /// transaction made inapplicable, e.g. by deleting a shared element an option overrides:
     /// reported as `ferro.model.option_layer_stale` warnings on the option,
@@ -702,4 +763,51 @@ impl<'a> Transaction<'a> {
             e.params.insert(k.into(), v);
         }
     }
+}
+
+/// Elements pinned in `before` that `after` deletes or moves (ADR 0008 §2,
+/// as Revit), one `ferro.model.pinned` error each with the pinned element
+/// first (and the deleted host second when the pinned element went with
+/// its host). Every other edit is allowed; see `Element::pin_moved`.
+///
+/// An element pinned when a transaction begins stays protected for the
+/// whole transaction, even if the same transaction unpins it: unpinning
+/// takes effect from the next transaction.
+pub(crate) fn pin_failures(before: &Document, after: &Document) -> Vec<Failure> {
+    let mut out = Vec::new();
+    for e in before.elements().filter(|e| e.pinned) {
+        if before.same_element(after, e.id) {
+            continue;
+        }
+        match after.get(e.id) {
+            None => {
+                let host = e.host_id.filter(|h| !after.contains(*h));
+                let (message, elements) = match host.and_then(|h| before.get(h)) {
+                    Some(h) => (
+                        format!(
+                            "{} cannot be deleted: its hosted {} is pinned (unpin it first)",
+                            h.label(),
+                            e.label()
+                        ),
+                        vec![e.id, h.id],
+                    ),
+                    None => (
+                        format!("{} is pinned: unpin it before deleting it", e.label()),
+                        vec![e.id],
+                    ),
+                };
+                out.push(Failure::error("ferro.model.pinned", message, elements));
+            }
+            Some(a) => {
+                if e.pin_moved(a) {
+                    out.push(Failure::error(
+                        "ferro.model.pinned",
+                        format!("{} is pinned: unpin it before moving it", e.label()),
+                        vec![e.id],
+                    ));
+                }
+            }
+        }
+    }
+    out
 }

@@ -172,7 +172,21 @@ Legend: `[ ]` open · `[~]` in progress · `[x]` done · `✓` verified ·
     - accept: `cargo test -p ferro-io site_location_fills_ifcsite compound_angles` (16.05° → `(16,3,0,0)`, 108.2° → `(108,12,0,0)`, −33.87° → `(-33,-52,-12,0)`, no location → `$`) and `cargo test -p ferro-revit site_location_op` (op first, radians / feet / hours, signature changes with latitude, never deleted) pass; the C# add-in (`Applier.SiteLocationOf`) builds in CI; type Cost shows `… VND/m²` and an orange `… USD/m² ≠ project VND` when the materials' currency differs ✓ verified @lead (IFCSITE (16,3,0,0),(108,12,0,0),5000.)
 - [ ] **M5-25 Family and component definition format** (D-43, D-71): `.ffa` = parameters + formulas + geometry (Forms / profiles / sweeps) + type catalog; components are instances of a definition; what M6-4, M6-8–M6-10 build on
 - [ ] **M5-28 Open plugins** (ADR 0009, D-80): plugin folder + manifest + Python on the SDK, loader, template, hot reload, install screen; `run_python` allowed for plugins
-- [ ] **M5-27 Pin** (ADR 0008, D-79, as Revit): `pinned` field, delete / move refused, auto-pin links (datums by setting), UI, Revit round trip
+- [~] **M5-27 Pin** (ADR 0008, D-79, as Revit): `pinned` field, delete / move refused, auto-pin links (datums by setting), UI, Revit round trip @agent-pin · branch `m5/pin`
+  - [x] M5-27.1 Core: `Element.pinned`; the `Transaction` refuses deleting and moving (`Element::pin_moved`) elements pinned when it began, deleting the host of a pinned element, and option layers that move / remove one, with `ferro.model.pinned`; copies are not pinned @agent-pin
+    - accept: `cargo test -p ferro-core pin` (pin_tests, `model::element` rigid-motion tests, `scenario_tests::pinned_fixture_refuses_moves_and_deletes_only`: on the all-pinned fixture exactly the moving / deleting calls are refused, with rollback, and every other call passes without moving a pinned element)
+  - [x] M5-27.2 `set_pinned {elements, pinned}` command + MCP tool; anyone who may edit may unpin (no special rule) @agent-pin
+    - accept: `cargo test -p ferro-core anyone_who_may_edit_may_unpin undo_and_redo_of_set_pinned`; `cargo test -p ferro-tools pin_tools_through_mcp`
+  - [x] M5-27.3 Auto-pin: datums created pinned while `ProjectSettings.auto_pin_datums` (default false, omitted when false); `set_project_name {auto_pin_datums}` and Project settings "Pin new levels" change it; linked models: when links exist @agent-pin
+    - accept: `cargo test -p ferro-core auto_pin_follows_the_project_setting default_settings_are_not_written`
+  - [x] M5-27.4 File format 7 (no-op step: format 6 readers would drop `pinned` silently) @agent-pin
+    - accept: `cargo test -p ferro-io pinned`; a format-6 file loads with nothing pinned
+  - [x] M5-27.5 App: "Pinned" row with toggle in Properties, Pin / Unpin in the viewport context menu, `PN` / `UP` keys, refused moves in the status line, "Pinned (locked)" markers on selected pinned elements @agent-pin
+    - accept: `cargo test -p ferro-app pin_codes`; on screen: pin a wall (`PN`) → Properties "Pinned: yes (locked)", a "Pinned" marker; Move it → nothing moves, red "… is pinned: unpin it before moving it"; change its height → works; `UP` then Move works
+  - [x] M5-27.6 Revit: `pinned` in the plan ops of synced elements; `Applier.cs` sets `Element.Pinned` (unpins while applying); snapshot reports `pinned`, import follows Revit's pins @agent-pin
+    - accept: `cargo test -p ferro-revit pinned pins_follow_revit_on_import`; the add-in builds in CI
+  - [x] M5-27.7 Corpus `pinned.json` and fingerprint; Python SDK regenerated; spec (glossary, §3.13, failure code) @agent-pin
+    - accept: `cargo test -p ferro-cli --test corpus`; `python3 scripts/gen_python.py --check`
 - [~] **M5-26 Change format for sync and branches** (D-34, D-55, F10): every property has a stable path; a change is a list of path edits; diff / merge / sync use it @lead
   - [x] M5-26.1 `model::change`: JSON-pointer paths keyed by element uid (`/elements/<uid>/params/<key>`), `diff` (sorted, property-level), `apply` (ids kept, new ids for new uids, refs as uids), `conflicts`; one reference walk shared with ferro-io @lead
     - accept: `cargo test -p ferro-core change` passes (6 tests: every kind of edit round-trips, refs as uids, bad edits fail with `ferro.change.*` and change nothing, per-property conflicts, dangling `element_ref` params kept, RFC 6901 escaping); `cargo test -p ferro-io` passes
