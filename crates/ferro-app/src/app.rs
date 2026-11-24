@@ -334,6 +334,17 @@ impl FerroApp {
             AnyCommand::CopyElements(c) => Some(c.clone()),
             _ => None,
         };
+        // A cut made while phasing is used is made in the view phase
+        // (ADR 0006 §5): the removed part is demolished in that phase.
+        let cmd = match cmd {
+            AnyCommand::CreateRelationship(mut c)
+                if c.kind == ferro_core::model::RelationshipKind::Cut && c.phase.is_none() =>
+            {
+                c.phase = self.phase_for_new_elements();
+                AnyCommand::CreateRelationship(c)
+            }
+            other => other,
+        };
         let name = cmd.name();
         // While phasing is used, created elements get the view phase in the
         // same undo step (Revit behaviour, see `phases`).
@@ -1512,6 +1523,10 @@ impl FerroApp {
                 ui.separator();
                 ui.label(RichText::new("BIM").strong());
             }
+            if k == ToolKind::Subtract {
+                ui.separator();
+                ui.label(RichText::new("Solid").strong());
+            }
             let selected = self.tool.kind == k;
             let key = self.keymap.label_for(Target::from_tool(k));
             let b = egui::Button::new(RichText::new(k.label()).size(15.0))
@@ -2172,6 +2187,7 @@ impl FerroApp {
         let phased = self.phase_display();
         hidden.extend(phased.hidden.iter().copied());
         self.scene.phase = phased.looks;
+        self.scene.voids = phases::voids(self.doc());
         moving.extend(hidden.iter().copied());
         moving.sort();
         moving.dedup();
@@ -2442,8 +2458,11 @@ impl FerroApp {
             ToolEvent::None => {}
         }
 
-        // Document to display: the committed one, or the tool preview.
-        let mut display = self.doc().clone();
+        // Document to display: the committed one (as seen in the view
+        // phase when phased cuts differ, M5-23.6), or the tool preview.
+        let mut display = self
+            .phase_cut_display()
+            .unwrap_or_else(|| self.doc().clone());
         let mut preview_err = None;
         if let Some(cmd) = preview_cmd {
             match self.preview_here(&cmd) {

@@ -11,11 +11,18 @@
 //!   which get status graphics (existing grey, demolished / temporary
 //!   translucent red with dashed edges);
 //! * elements created while phasing is used get the view's phase (Revit
-//!   behaviour), in the same undo step as the command that made them.
+//!   behaviour), in the same undo step as the command that made them;
+//! * phased cuts (ADR 0006 §5, M5-23.6): an element whose `cut` row is
+//!   made in a later phase than the view's is drawn uncut (its body in the
+//!   view phase, through the session kernel); from the row's phase on it is
+//!   drawn cut. The removed part is counted as demolished volume
+//!   (`get_phase_quantities`) but not yet drawn as a red demolished solid.
 
 use super::FerroApp;
 use eframe::egui::{self, RichText, Vec2};
+use ferro_core::algo::Kernel;
 use ferro_core::model::phase::{is_phased_category, phase_status};
+use ferro_core::model::{cut, generate, ElementBody, RelationshipKind};
 use ferro_core::model::{PhaseFilter, PhaseGraphics, PhaseStatus};
 use ferro_core::ops::phase_commands::{
     CreatePhase, RenovationStatus, SetElementPhase, SetRenovationStatus,
@@ -41,6 +48,55 @@ pub struct PhaseState {
     pub(super) filter: PhaseFilter,
     /// Display computed for (document, view phase, filter).
     cache: Option<(Document, Option<ElementId>, PhaseFilter, PhaseDisplay)>,
+    /// Phased-cut document computed for (document, view phase).
+    cut_cache: Option<(Document, Option<ElementId>, Option<Document>)>,
+}
+
+/// Voids of `doc`: Forms of category `Forms` that cut (M5-5.3), drawn
+/// faint so they stay selectable.
+pub fn voids(doc: &Document) -> HashSet<ElementId> {
+    doc.relationships()
+        .filter(|r| r.kind == RelationshipKind::Cut)
+        .filter_map(|r| r.elements.first().copied())
+        .filter(|id| doc.get(*id).is_some_and(|e| cut::is_void(doc, e)))
+        .collect()
+}
+
+/// `doc` as drawn in view phase `view` (M5-23.6): elements with `cut` rows
+/// made after `view` get their body in that phase (uncut before the row's
+/// phase). `None` when nothing differs from `doc`. Without a kernel the
+/// rows that do not apply are simply left out (bodies stay uncut).
+pub fn phased_cut_doc(
+    doc: &Document,
+    view: Option<ElementId>,
+    kernel: Option<&dyn Kernel>,
+) -> Option<Document> {
+    let view = view?;
+    let targets: HashSet<ElementId> = doc
+        .relationships()
+        .filter(|r| r.kind == RelationshipKind::Cut && r.phase.is_some())
+        .filter_map(|r| r.elements.get(1).copied())
+        .filter(|t| cut::cuts_in_phase(doc, *t, view).len() != cut::cuts_of(doc, *t).len())
+        .collect();
+    if targets.is_empty() {
+        return None;
+    }
+    let bodies = generate::uncut_bodies(doc);
+    let cutter = |c: ElementId| bodies.get(&c).cloned();
+    let mut elements: Vec<ferro_core::Element> = doc.elements().cloned().collect();
+    for e in elements.iter_mut().filter(|e| targets.contains(&e.id)) {
+        let Some(uncut) = bodies.get(&e.id) else {
+            continue;
+        };
+        let b = cut::body_in_phase(doc, kernel, e.id, view, uncut, &cutter).body;
+        match &mut e.body {
+            ElementBody::Form(f) => f.cut_body = (b != f.body).then_some(b),
+            _ => generate::set_geometry(e, b),
+        }
+    }
+    Document::from_parts(doc.project().clone(), elements)
+        .and_then(|d| d.with_relationships(doc.relationships().cloned().collect()))
+        .ok()
 }
 
 /// Phase display of `doc` in view phase `view` under `filter`: pure, used
@@ -95,6 +151,23 @@ impl FerroApp {
         }
         let shown = phase_display(doc, view, filter);
         self.phasing.cache = Some((doc.clone(), view, filter, shown.clone()));
+        shown
+    }
+
+    /// The view document as drawn in the view phase when phased cuts make
+    /// it differ ([`phased_cut_doc`]), recomputed only when the document or
+    /// the view phase changes.
+    pub(super) fn phase_cut_display(&mut self) -> Option<Document> {
+        let view = self.view_phase();
+        let doc = self.doc().clone();
+        if let Some((d, v, shown)) = &self.phasing.cut_cache {
+            if *v == view && crate::scene::same_doc(d, &doc) {
+                return shown.clone();
+            }
+        }
+        let kernel = self.session.kernel().map(|k| k.as_ref());
+        let shown = phased_cut_doc(&doc, view, kernel);
+        self.phasing.cut_cache = Some((doc, view, shown.clone()));
         shown
     }
 
@@ -324,6 +397,45 @@ mod tests {
     use ferro_core::ops::{AnyCommand, ExecContext, SequentialIds};
     use ferro_core::Session;
     use serde_json::json;
+
+    #[test]
+    fn voids_and_phased_cuts_for_display() {
+        let mut s = Session::new(Document::new("T"), Box::new(SequentialIds::new(1)));
+        let mut run = |tool: &str, args: serde_json::Value| {
+            s.execute(
+                AnyCommand::from_tool(tool, &args).unwrap(),
+                &ExecContext::user(),
+            )
+            .unwrap()
+            .output
+        };
+        let id = |o: serde_json::Value| ElementId(o["element"].as_u64().unwrap());
+        let p1 = id(run("create_phase", json!({"name": "Existing"})));
+        let p2 = id(run("create_phase", json!({"name": "New Construction"})));
+        let a = id(run(
+            "create_box",
+            json!({"origin": {"x": 0, "y": 0, "z": 0}, "width": 1000, "depth": 1000, "height": 1000}),
+        ));
+        let c = id(run(
+            "create_box",
+            json!({"origin": {"x": 200, "y": 200, "z": 500}, "width": 200, "depth": 200, "height": 900}),
+        ));
+        run(
+            "create_relationship",
+            json!({"kind": "cut", "elements": [c, a], "phase": p2}),
+        );
+        let doc = s.doc();
+        assert_eq!(voids(doc), [c].into_iter().collect());
+        // No kernel here: the stored Form is uncut, and so is every phase.
+        assert!(phased_cut_doc(doc, None, None).is_none());
+        assert!(
+            phased_cut_doc(doc, Some(p2), None).is_none(),
+            "the cut's phase"
+        );
+        let early = phased_cut_doc(doc, Some(p1), None).expect("differs before the cut");
+        assert_eq!(early.get(a).unwrap().as_form().unwrap().cut_body, None);
+        assert_eq!(early.relationships().count(), 1);
+    }
 
     #[test]
     fn phase_display_hides_future_and_marks_existing_and_demolished() {

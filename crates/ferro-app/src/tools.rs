@@ -38,10 +38,17 @@ pub enum ToolKind {
     Floor,
     Door,
     Window,
+    /// Solid tools (two picks: target, then the other Form): booleans
+    /// through the kernel (ADR 0007) and the non-destructive cut (M5-5.3).
+    Subtract,
+    Unite,
+    Intersect,
+    /// Cut (keep cutter): a `cut` relationship row; the cutter stays.
+    CutGeometry,
 }
 
 impl ToolKind {
-    pub const ALL: [ToolKind; 19] = [
+    pub const ALL: [ToolKind; 23] = [
         ToolKind::Select,
         ToolKind::Line,
         ToolKind::Rectangle,
@@ -61,12 +68,23 @@ impl ToolKind {
         ToolKind::Floor,
         ToolKind::Door,
         ToolKind::Window,
+        ToolKind::Subtract,
+        ToolKind::Unite,
+        ToolKind::Intersect,
+        ToolKind::CutGeometry,
     ];
     /// Tools that draw a chain of clicked points.
     pub fn is_chain(self) -> bool {
         matches!(
             self,
             ToolKind::Line | ToolKind::Polygon | ToolKind::Wall | ToolKind::Floor
+        )
+    }
+    /// The solid tools: pick a target, then the other element.
+    pub fn is_solid(self) -> bool {
+        matches!(
+            self,
+            ToolKind::Subtract | ToolKind::Unite | ToolKind::Intersect | ToolKind::CutGeometry
         )
     }
     pub fn is_bim(self) -> bool {
@@ -96,7 +114,43 @@ impl ToolKind {
             ToolKind::Floor => "Floor",
             ToolKind::Door => "Door",
             ToolKind::Window => "Window",
+            ToolKind::Subtract => "Subtract",
+            ToolKind::Unite => "Unite",
+            ToolKind::Intersect => "Intersect",
+            ToolKind::CutGeometry => "Cut (keep cutter)",
         }
+    }
+}
+
+/// The command of a solid tool: `target` picked first, then `other`.
+pub fn solid_command(kind: ToolKind, target: ElementId, other: ElementId) -> AnyCommand {
+    use ferro_core::model::RelationshipKind;
+    use ferro_core::ops::relationship_commands::CreateRelationship;
+    match kind {
+        ToolKind::Unite => UniteForms {
+            target,
+            other,
+            keep_other: false,
+        }
+        .into(),
+        ToolKind::Intersect => IntersectForms {
+            target,
+            other,
+            keep_other: false,
+        }
+        .into(),
+        ToolKind::CutGeometry => CreateRelationship {
+            kind: RelationshipKind::Cut,
+            elements: vec![other, target],
+            phase: None,
+        }
+        .into(),
+        _ => SubtractForms {
+            target,
+            cutter: other,
+            keep_cutter: false,
+        }
+        .into(),
     }
 }
 
@@ -296,6 +350,8 @@ pub struct ToolState {
     tape: Option<Point3>,
     /// Section Plane: the clicked face (point and outward normal).
     section: Option<SectionPlane>,
+    /// Solid tools: the target picked first.
+    solid_target: Option<ElementId>,
 }
 
 fn is_point_snap(k: SnapKind) -> bool {
@@ -457,6 +513,7 @@ impl ToolState {
             arc: Vec::new(),
             tape: None,
             section: None,
+            solid_target: None,
         }
     }
 
@@ -471,6 +528,7 @@ impl ToolState {
             || self.offset.is_some()
             || self.move_base.is_some()
             || self.pivot.is_some()
+            || self.solid_target.is_some()
     }
 
     pub fn cancel(&mut self) {
@@ -989,6 +1047,14 @@ impl ToolState {
             ToolKind::Floor => "Click the next corner. Click the first point or press Enter to finish.",
             ToolKind::Door => "Hover a wall and click to place a 900 × 2100 door.",
             ToolKind::Window => "Hover a wall and click to place a 1200 × 1200 window (sill 900).",
+            ToolKind::Subtract if self.solid_target.is_none() => "Click the Form to cut (the target).",
+            ToolKind::Subtract => "Click the Form to cut away: it is subtracted and deleted.",
+            ToolKind::Unite if self.solid_target.is_none() => "Click the Form to keep (the target).",
+            ToolKind::Unite => "Click the Form to add: it is united with the target and deleted.",
+            ToolKind::Intersect if self.solid_target.is_none() => "Click the Form to keep (the target).",
+            ToolKind::Intersect => "Click the other Form: the target keeps what both share; the other is deleted.",
+            ToolKind::CutGeometry if self.solid_target.is_none() => "Click the element to cut (a wall, floor or Form).",
+            ToolKind::CutGeometry => "Click the cutter: it stays (a Form becomes a hidden void) and the cut follows it when it moves.",
         }
     }
 
@@ -1029,6 +1095,20 @@ impl ToolState {
                 Some(e) => ToolEvent::Commit(DeleteElements { elements: vec![e] }.into()),
                 None => ToolEvent::None,
             },
+            k @ (ToolKind::Subtract
+            | ToolKind::Unite
+            | ToolKind::Intersect
+            | ToolKind::CutGeometry) => {
+                let Some(e) = s.element else {
+                    return ToolEvent::None;
+                };
+                let Some(target) = self.solid_target.filter(|t| *t != e) else {
+                    self.solid_target = Some(e);
+                    return ToolEvent::None;
+                };
+                self.solid_target = None;
+                ToolEvent::Commit(solid_command(k, target, e))
+            }
             ToolKind::Paint => match (s.element, ctx.material) {
                 (Some(e), Some(m)) => ToolEvent::Commit(
                     SetParameter {
@@ -1643,6 +1723,47 @@ mod tests {
             .is_some_and(|v| v.len() >= 3));
         assert!(arc_points(&pl, p(0.0, 0.0), p(1000.0, 0.0), p(500.0, 0.0)).is_none());
         assert!(arc_points(&pl, p(0.0, 0.0), p(0.0, 0.0), p(500.0, 50.0)).is_none());
+    }
+
+    #[test]
+    fn solid_tools_pick_the_target_then_the_other() {
+        use ferro_core::model::RelationshipKind;
+        match solid_command(ToolKind::CutGeometry, ElementId(1), ElementId(2)) {
+            AnyCommand::CreateRelationship(c) => {
+                assert_eq!(c.kind, RelationshipKind::Cut);
+                assert_eq!(c.elements, [ElementId(2), ElementId(1)], "[cutter, cut]");
+                assert_eq!(c.phase, None);
+            }
+            other => panic!("{other:?}"),
+        }
+        assert!(matches!(
+            solid_command(ToolKind::Subtract, ElementId(1), ElementId(2)),
+            AnyCommand::SubtractForms(SubtractForms {
+                target: ElementId(1),
+                cutter: ElementId(2),
+                keep_cutter: false
+            })
+        ));
+        assert!(matches!(
+            solid_command(ToolKind::Unite, ElementId(1), ElementId(2)),
+            AnyCommand::UniteForms(UniteForms {
+                target: ElementId(1),
+                other: ElementId(2),
+                keep_other: false
+            })
+        ));
+        assert!(matches!(
+            solid_command(ToolKind::Intersect, ElementId(1), ElementId(2)),
+            AnyCommand::IntersectForms(IntersectForms {
+                target: ElementId(1),
+                other: ElementId(2),
+                ..
+            })
+        ));
+        assert!(ToolKind::ALL.iter().filter(|k| k.is_solid()).count() == 4);
+        let t = ToolState::new(ToolKind::Unite);
+        assert!(!t.is_active());
+        assert!(t.hint().contains("keep"));
     }
 
     #[test]

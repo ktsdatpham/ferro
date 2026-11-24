@@ -50,10 +50,15 @@ pub enum Target {
     Pin,
     /// Unpin the selection (Revit `UP`).
     Unpin,
+    /// Solid tools (ADR 0007, M5-5.3).
+    Subtract,
+    Unite,
+    Intersect,
+    CutGeometry,
 }
 
 impl Target {
-    pub const ALL: [Target; 25] = [
+    pub const ALL: [Target; 29] = [
         Target::Select,
         Target::Line,
         Target::Rectangle,
@@ -79,6 +84,10 @@ impl Target {
         Target::Delete,
         Target::Pin,
         Target::Unpin,
+        Target::Subtract,
+        Target::Unite,
+        Target::Intersect,
+        Target::CutGeometry,
     ];
 
     /// The tool this target activates, if it is a tool.
@@ -103,6 +112,10 @@ impl Target {
             Target::Floor => ToolKind::Floor,
             Target::Door => ToolKind::Door,
             Target::Window => ToolKind::Window,
+            Target::Subtract => ToolKind::Subtract,
+            Target::Unite => ToolKind::Unite,
+            Target::Intersect => ToolKind::Intersect,
+            Target::CutGeometry => ToolKind::CutGeometry,
             Target::Hide
             | Target::UnhideAll
             | Target::ZoomExtents
@@ -202,6 +215,12 @@ const REVIT: &[(&str, Target)] = &[
     ("ZX", Target::ZoomExtents),
     ("PN", Target::Pin),
     ("UP", Target::Unpin),
+    // Revit's Cut Geometry code; Revit has no codes for the booleans, so
+    // Ferro adds free two-letter codes: SU(btract), UN(ite), IN(tersect).
+    ("CG", Target::CutGeometry),
+    ("SU", Target::Subtract),
+    ("UN", Target::Unite),
+    ("IN", Target::Intersect),
     ("DELETE", Target::Delete),
 ];
 
@@ -417,6 +436,10 @@ mod tests {
         assert_eq!(k.label_for(Target::Line), "L");
         assert_eq!(k.label_for(Target::Pin), "PN");
         assert_eq!(k.label_for(Target::Unpin), "UP");
+        assert_eq!(k.label_for(Target::CutGeometry), "CG");
+        assert_eq!(k.label_for(Target::Subtract), "SU");
+        assert_eq!(k.label_for(Target::Unite), "UN");
+        assert_eq!(k.label_for(Target::Intersect), "IN");
     }
 
     #[test]
