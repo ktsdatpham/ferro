@@ -1518,12 +1518,14 @@ impl FerroApp {
 
     fn toolbar(&mut self, ui: &mut egui::Ui) {
         ui.add_space(4.0);
+        let mut solid_header = false;
         for k in ToolKind::ALL {
             if k == ToolKind::Wall {
                 ui.separator();
                 ui.label(RichText::new("BIM").strong());
             }
-            if k == ToolKind::Subtract {
+            if k.is_solid() && !solid_header {
+                solid_header = true;
                 ui.separator();
                 ui.label(RichText::new("Solid").strong());
             }
