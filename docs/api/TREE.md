@@ -56,6 +56,7 @@ Phases in the app (ADR 0006, M5-23): the active view's phase and phase filter (s
 - struct `PhaseDisplay` — What the view shows for phases: elements to hide and how to draw the
 - struct `PhaseState` — Phase view state of the app: a working copy of the active view's
 - fn `voids` — Voids of `doc`: Forms of category `Forms` that cut (M5-5.3), drawn
+- fn `hidden_voids` — Voids to leave out of the view, as Revit does once a void has cut: all
 - struct `PhaseCutDisplay` — What phased cuts change in the view (M5-23.6, M5-23.10): the document
 - fn `phased_cut_doc` — `doc` as drawn in view phase `view` under `filter` (M5-23.6,
 - fn `mark_parts` — Give demolished parts ([`PhaseCutDisplay::parts`]) their look: the

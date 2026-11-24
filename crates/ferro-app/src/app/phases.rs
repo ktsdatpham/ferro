@@ -76,6 +76,35 @@ pub fn voids(doc: &Document) -> HashSet<ElementId> {
         .collect()
 }
 
+/// Voids to leave out of the view, as Revit does once a void has cut: all
+/// of them, except when `show` (View > Show voids) is on, when the void
+/// itself is selected, or when an element it cuts is selected (so clicking
+/// a wall reveals its voids, and a second click picks one).
+pub fn hidden_voids(
+    doc: &Document,
+    voids: &HashSet<ElementId>,
+    selection: &HashSet<ElementId>,
+    show: bool,
+) -> Vec<ElementId> {
+    if show {
+        return Vec::new();
+    }
+    let mut out: Vec<ElementId> = voids
+        .iter()
+        .copied()
+        .filter(|v| {
+            !selection.contains(v)
+                && !doc.relationships().any(|r| {
+                    r.kind == RelationshipKind::Cut
+                        && r.elements.first() == Some(v)
+                        && r.elements.iter().skip(1).any(|t| selection.contains(t))
+                })
+        })
+        .collect();
+    out.sort();
+    out
+}
+
 /// What phased cuts change in the view (M5-23.6, M5-23.10): the document
 /// to draw and the display-only elements holding demolished parts.
 #[derive(Clone, PartialEq)]
@@ -545,6 +574,17 @@ mod tests {
         );
         let doc = s.doc();
         assert_eq!(voids(doc), [c].into_iter().collect());
+        // Hidden unless shown, selected, or what it cuts is selected.
+        let vs = voids(doc);
+        let none = HashSet::new();
+        assert_eq!(hidden_voids(doc, &vs, &none, false), [c]);
+        assert!(hidden_voids(doc, &vs, &none, true).is_empty());
+        assert!(hidden_voids(doc, &vs, &[c].into_iter().collect(), false).is_empty());
+        assert!(hidden_voids(doc, &vs, &[a].into_iter().collect(), false).is_empty());
+        assert_eq!(
+            hidden_voids(doc, &vs, &[p1].into_iter().collect(), false),
+            [c]
+        );
         // No kernel here: the stored Form is uncut, and so is every phase.
         let all = PhaseFilter::ShowAll;
         assert!(phased_cut_doc(doc, None, all, None).is_none());

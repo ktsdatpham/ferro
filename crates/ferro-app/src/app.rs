@@ -133,6 +133,9 @@ pub struct FerroApp {
     scene: SceneCache,
     snap_scene: Option<(Document, Vec<ElementId>, SnapScene)>,
     selection: HashSet<ElementId>,
+    /// View > Show voids: draw voids that have cut (hidden by default, as
+    /// Revit; a void still shows when it or what it cuts is selected).
+    show_voids: bool,
     vcb: String,
     status: Option<Status>,
     active_level: Option<ElementId>,
@@ -234,6 +237,7 @@ impl FerroApp {
             scene: SceneCache::default(),
             snap_scene: None,
             selection: HashSet::new(),
+            show_voids: false,
             vcb: String::new(),
             status: None,
             active_level: None,
@@ -1467,6 +1471,7 @@ impl FerroApp {
                 }
                 ui.separator();
                 ui.checkbox(&mut self.camera.parallel, "Parallel projection");
+                ui.checkbox(&mut self.show_voids, "Show voids");
                 // Display style of the active view (one undo step each).
                 let style = self.display_style();
                 for s in ferro_core::model::DisplayStyle::ALL {
@@ -2211,6 +2216,12 @@ impl FerroApp {
         hidden.extend(phased.hidden.iter().copied());
         self.scene.phase = phased.looks;
         self.scene.voids = phases::voids(self.doc());
+        hidden.extend(phases::hidden_voids(
+            self.doc(),
+            &self.scene.voids,
+            &self.selection,
+            self.show_voids,
+        ));
         moving.extend(hidden.iter().copied());
         moving.sort();
         moving.dedup();

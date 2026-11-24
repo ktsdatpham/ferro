@@ -218,9 +218,10 @@ a command. Geometry is derived from location + parameters + type.
   never changes a result.
 - **Voids.** A Form of category `Forms` that is the cutter of at least one
   `cut` row is a *void* (Revit: a void form). It is derived from the table,
-  not stored: views draw it faint (translucent, dashed edges) so it stays
-  selectable, and exports leave it out as an element (IFC, OBJ / glTF,
-  Revit). Deleting its last cut row makes it an ordinary Form again. Walls,
+  not stored. As in Revit, views hide a void once it cuts; it shows faint
+  (translucent, dashed edges, selectable) when View > Show voids is on, when
+  it is selected, or when an element it cuts is selected. Exports leave it
+  out as an element (IFC, OBJ / glTF, Revit) and quantities do not count it. Deleting its last cut row makes it an ordinary Form again. Walls,
   floors and openings used as cutters stay ordinary elements.
 - **Interop of cuts.** IFC: a cut wall or slab gets an `IfcOpeningElement`
   (the cutter's body; `GlobalId` from the row's uid) and an

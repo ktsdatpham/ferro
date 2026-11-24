@@ -40,7 +40,9 @@ impl PhaseQuantities {
             ..Default::default()
         };
         for e in doc.elements() {
-            if !super::phase::is_phased_category(e) {
+            // Voids only cut; they are not built (Revit leaves them out of
+            // schedules too).
+            if !super::phase::is_phased_category(e) || super::cut::is_void(doc, e) {
                 continue;
             }
             let status = doc.phase_status(e, phase);

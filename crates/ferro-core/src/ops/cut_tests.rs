@@ -416,10 +416,17 @@ fn a_phased_cut_applies_from_its_phase_on() {
 fn phase_quantities_count_the_removed_part_as_demolished() {
     use crate::model::{PhaseQuantities, PhaseStatus};
     let mut s = clip_session();
-    let (p1, p2, w, _) = phased(&mut s);
+    let (p1, p2, w, cutter) = phased(&mut s);
     let k = ClipKernel;
     let doc = s.doc().clone();
     let cat = doc.get(w).unwrap().category;
+    // The void only cuts: it is not counted (Revit leaves voids out too).
+    let vcat = doc.get(cutter).unwrap().category;
+    assert_ne!(vcat, cat);
+    for p in [p1, p2] {
+        let q = PhaseQuantities::from_document_with_kernel(&doc, p, Some(&k)).unwrap();
+        assert!(!q.categories.contains_key(&vcat), "void counted in {p}");
+    }
     let q1 = PhaseQuantities::from_document_with_kernel(&doc, p1, Some(&k)).unwrap();
     let e1 = q1.categories[&cat][&PhaseStatus::Existing];
     assert!(
