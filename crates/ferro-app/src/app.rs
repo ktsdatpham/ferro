@@ -3305,7 +3305,10 @@ impl eframe::App for FerroApp {
         egui::Panel::left("tools")
             .resizable(false)
             .default_size(136.0)
-            .show(ui, |ui| self.toolbar(ui));
+            // Scrolls: the Plugins group can make it taller than the window.
+            .show(ui, |ui| {
+                egui::ScrollArea::vertical().show(ui, |ui| self.toolbar(ui))
+            });
         egui::Panel::right("side")
             .resizable(true)
             .default_size(280.0)

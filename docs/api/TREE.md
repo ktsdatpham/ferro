@@ -1446,7 +1446,8 @@ Unpacking a plugin `.zip` (user input): stored and deflated entries only, no enc
 - struct `PythonRun` — One running script: its process, its token and the group it holds open.
 - fn `PythonRun::start` — Spawn the interpreter for `args.code` and open the run's group.
 - fn `PythonRun::elapsed` — How long the script has been running.
-- fn `PythonRun::extend_deadline` — Push the time limit back by `by`: the time the script spent waiting
+- fn `PythonRun::pause_time_limit` — Stop the time limit's clock while the script waits for the user
+- fn `PythonRun::resume_time_limit` — Restart the time limit's clock: the paused time is added to the
 - fn `PythonRun::targets` — Where the script's commands landed so far, in first-use order without
 - fn `PythonRun::cancel` — Stop the script now: kill its process tree (as on a timeout, so a
 - fn `PythonRun::token` — The one-time Ferro Link token of this run. It is valid only while the

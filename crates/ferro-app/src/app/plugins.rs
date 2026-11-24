@@ -37,7 +37,6 @@ struct Ask {
     prompt: String,
     value: String,
     reply: Sender<LinkResponse>,
-    since: Instant,
     focus: bool,
 }
 
@@ -348,9 +347,11 @@ impl FerroApp {
             prompt,
             value,
             reply,
-            since: Instant::now(),
             focus: true,
         });
+        if let Some(s) = &mut self.python {
+            s.run.pause_time_limit();
+        }
     }
 
     /// The `ferro.ask` dialog: OK (Enter) sends the text, Cancel (Esc) sends
@@ -395,7 +396,7 @@ impl FerroApp {
             return;
         };
         if let Some(s) = &mut self.python {
-            s.run.extend_deadline(ask.since.elapsed());
+            s.run.resume_time_limit();
         }
         let _ = ask.reply.send(LinkResponse {
             ok: true,

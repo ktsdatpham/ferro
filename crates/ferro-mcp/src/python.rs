@@ -94,7 +94,7 @@ pub const GET_USER_INPUT: &str = "get_user_input";
 pub const APP_ONLY: [&str; 3] = ["get_selection", "select_elements", GET_USER_INPUT];
 
 /// How long a script waits for the user to answer [`GET_USER_INPUT`]. The
-/// script's own time limit is paused meanwhile ([`PythonRun::extend_deadline`]).
+/// script's own time limit is paused meanwhile ([`PythonRun::pause_time_limit`]).
 pub const USER_INPUT_TIMEOUT: Duration = Duration::from_secs(600);
 
 /// The answer of a headless host (no app, so no user and no selection) to an
@@ -411,6 +411,8 @@ pub struct PythonRun {
     deadline: Instant,
     timeout: Duration,
     exited: Option<(Option<i32>, Instant)>,
+    /// Since when the time limit is paused ([`Self::pause_time_limit`]).
+    paused: Option<Instant>,
     dir: PathBuf,
     tool_failures: Vec<Value>,
     started: Instant,
@@ -556,6 +558,7 @@ impl PythonRun {
             deadline: Instant::now() + args.timeout,
             timeout: args.timeout,
             exited: None,
+            paused: None,
             dir,
             tool_failures: Vec::new(),
             started: Instant::now(),
@@ -569,10 +572,19 @@ impl PythonRun {
         self.started.elapsed()
     }
 
-    /// Push the time limit back by `by`: the time the script spent waiting
-    /// for the user ([`GET_USER_INPUT`]) does not count against it.
-    pub fn extend_deadline(&mut self, by: Duration) {
-        self.deadline += by;
+    /// Stop the time limit's clock while the script waits for the user
+    /// ([`GET_USER_INPUT`]): [`Self::poll`] never times it out meanwhile.
+    /// Pausing twice keeps the first start.
+    pub fn pause_time_limit(&mut self) {
+        self.paused.get_or_insert_with(Instant::now);
+    }
+
+    /// Restart the time limit's clock: the paused time is added to the
+    /// deadline, so waiting for the user does not count against it.
+    pub fn resume_time_limit(&mut self) {
+        if let Some(since) = self.paused.take() {
+            self.deadline += since.elapsed();
+        }
     }
 
     /// Where the script's commands landed so far, in first-use order without
@@ -700,7 +712,7 @@ impl PythonRun {
         if self.exited.is_none() {
             match self.child.try_wait() {
                 Ok(Some(status)) => self.exited = Some((status.code(), now)),
-                Ok(None) if now >= self.deadline => {
+                Ok(None) if self.paused.is_none() && now >= self.deadline => {
                     self.kill();
                     return Some(RunEnd::TimedOut);
                 }
@@ -1707,6 +1719,30 @@ print(p.pid, flush=True)\nimport time\nwhile True:\n    time.sleep(0.05)\n";
         let r = run.finish(&mut s.session, end).unwrap_err();
         assert_eq!(r["failures"][0]["code"], CANCELLED);
         assert_eq!(s.session.doc().len(), 3, "set and its two options only");
+    }
+
+    #[test]
+    fn a_paused_time_limit_does_not_time_out() {
+        let Some(s) = server() else { return };
+        let mut session = s.session;
+        let args = RunArgs::from_tool(
+            &json!({"code": "import time\ntime.sleep(0.6)\n", "timeout_s": 0.2}),
+        )
+        .unwrap();
+        let mut run =
+            PythonRun::start(&mut session, &s.python, &args, ExecContext::user(), 1, TOOL).unwrap();
+        run.pause_time_limit();
+        run.pause_time_limit();
+        let end = loop {
+            if let Some(end) = run.poll() {
+                break end;
+            }
+            std::thread::sleep(Duration::from_millis(10));
+        };
+        assert_eq!(end, RunEnd::Exited(Some(0)), "paused: no timeout");
+        run.resume_time_limit();
+        assert!(run.deadline > Instant::now(), "the paused time was added");
+        assert!(run.finish(&mut session, end).is_ok());
     }
 
     #[test]
