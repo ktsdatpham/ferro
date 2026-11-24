@@ -171,7 +171,9 @@ Legend: `[ ]` open · `[~]` in progress · `[x]` done · `✓` verified ·
   - [x] M5-24.3 Exports read settings: IFC `IfcSite` RefLatitude / RefLongitude / RefElevation, Revit SiteLocation, cost currency @agent-settings · branch `m5/settings`
     - accept: `cargo test -p ferro-io site_location_fills_ifcsite compound_angles` (16.05° → `(16,3,0,0)`, 108.2° → `(108,12,0,0)`, −33.87° → `(-33,-52,-12,0)`, no location → `$`) and `cargo test -p ferro-revit site_location_op` (op first, radians / feet / hours, signature changes with latitude, never deleted) pass; the C# add-in (`Applier.SiteLocationOf`) builds in CI; type Cost shows `… VND/m²` and an orange `… USD/m² ≠ project VND` when the materials' currency differs ✓ verified @lead (IFCSITE (16,3,0,0),(108,12,0,0),5000.)
 - [ ] **M5-25 Family and component definition format** (D-43, D-71): `.ffa` = parameters + formulas + geometry (Forms / profiles / sweeps) + type catalog; components are instances of a definition; what M6-4, M6-8–M6-10 build on
-- [ ] **M5-28 Open plugins** (ADR 0009, D-80): plugin folder + manifest + Python on the SDK, loader, template, hot reload, install screen; `run_python` allowed for plugins
+- [ ] **M5-28 Open plugins** (ADR 0009, D-80): plugin folder + manifest + Python on the SDK, loader, template, hot reload, install screen @lead
+  - [x] M5-28.1 `run_python` allowed for plugins (they commit like the user) @lead
+    - accept: `cargo test -p ferro-mcp python` (decide: plugin → Commit with and without agent proposals)
 - [ ] **M5-27 Pin** (ADR 0008, D-79, as Revit): `pinned` field, delete / move refused, auto-pin links (datums by setting), UI, Revit round trip
 - [~] **M5-26 Change format for sync and branches** (D-34, D-55, F10): every property has a stable path; a change is a list of path edits; diff / merge / sync use it @lead
   - [x] M5-26.1 `model::change`: JSON-pointer paths keyed by element uid (`/elements/<uid>/params/<key>`), `diff` (sorted, property-level), `apply` (ids kept, new ids for new uids, refs as uids), `conflicts`; one reference walk shared with ferro-io @lead

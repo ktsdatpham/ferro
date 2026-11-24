@@ -153,7 +153,7 @@ CSV/Excel, nhập PDF/ảnh làm nền để vẽ lại, nhập point cloud E57/
 **Khuyến nghị:** **B làm chuẩn phân phối**, script Python cho tự động hóa cá nhân
 trên desktop (Q-D4).
 **Độ khó đổi:** 🔴
-**TaD trả lời:** ☐ A ☐ B ☐ C · ghi chú:
+**TaD trả lời (2026-11-24):** không giới hạn như plugin Revit / SketchUp, viết bằng Python thật đơn giản cho người dùng phổ thông; chỉ duyệt kỹ khi gửi plugin thành tính năng → ADR 0009 (D-80), thay D-51.
 
 ---
 

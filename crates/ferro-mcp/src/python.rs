@@ -216,19 +216,15 @@ pub enum RunMode {
 }
 
 /// Who may start a script, and how its changes land (ADR 0005 implementation
-/// note): the user commits; an agent proposes unless the user raised its
-/// autonomy (`propose_agents` false); a plugin is refused with
-/// [`NOT_ALLOWED`], because a script has the user's own rights and plugins
-/// stay in their WASM sandbox (D-51, D-61).
+/// note, ADR 0009): the user and plugins commit (a plugin has the user's
+/// rights, like a Revit or SketchUp add-in); an agent proposes unless the
+/// user raised its autonomy (`propose_agents` false). Never fails today; the
+/// `Result` keeps room for a future refusal code.
 pub fn decide(actor: &Actor, propose_agents: bool) -> Result<RunMode, Value> {
     match actor.kind {
-        ActorKind::User => Ok(RunMode::Commit),
+        ActorKind::User | ActorKind::Plugin { .. } => Ok(RunMode::Commit),
         ActorKind::Agent { .. } if propose_agents => Ok(RunMode::Propose),
         ActorKind::Agent { .. } => Ok(RunMode::Commit),
-        ActorKind::Plugin { .. } => Err(failure(
-            NOT_ALLOWED,
-            "plugins cannot start Python scripts (they run in the WASM sandbox)",
-        )),
     }
 }
 
@@ -1410,8 +1406,10 @@ mod tests {
             kind: ActorKind::Plugin { id: "p".into() },
             name: "p".into(),
         };
-        let e = decide(&plugin, false).unwrap_err();
-        assert_eq!(e["failures"][0]["code"], NOT_ALLOWED);
+        // ADR 0009: a plugin has the user's rights, whatever the agents'
+        // autonomy.
+        assert_eq!(decide(&plugin, true), Ok(RunMode::Commit));
+        assert_eq!(decide(&plugin, false), Ok(RunMode::Commit));
     }
 
     /// Wait until `control` runs a script, then cancel it as `caller` after
