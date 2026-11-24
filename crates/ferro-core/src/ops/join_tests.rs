@@ -463,3 +463,58 @@ fn join_state_and_order_round_trip_through_the_change_format() {
     // Unknown states are refused by the tool schema path.
     assert!(AnyCommand::from_tool("set_wall", &json!({"wall": a, "join_end": "maybe"})).is_err());
 }
+
+/// [`ClipKernel`] counting its calls.
+struct Counting(std::sync::atomic::AtomicUsize);
+
+impl crate::algo::Kernel for Counting {
+    fn name(&self) -> &'static str {
+        "counting-join-test"
+    }
+    fn boolean(
+        &self,
+        op: crate::algo::BooleanOp,
+        a: &crate::topo::Body,
+        b: &crate::topo::Body,
+    ) -> Result<crate::algo::KernelResult, crate::algo::KernelError> {
+        self.0.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        crate::algo::Kernel::boolean(&ClipKernel, op, a, b)
+    }
+}
+
+#[test]
+fn join_rows_go_through_the_session_cut_cache() {
+    use std::sync::atomic::Ordering::SeqCst;
+    let k = Arc::new(Counting(Default::default()));
+    let mut s = session().with_kernel(k.clone());
+    let w = wall_at(&mut s, (0.0, 0.0), (4000.0, 0.0));
+    let other = wall_at(&mut s, (0.0, 9000.0), (4000.0, 9000.0));
+    let f = slab(&mut s);
+    let uid = join_row(&mut s, f, w);
+    assert_eq!(k.0.load(SeqCst), 1, "computed once");
+    // An unrelated wall edit regenerates every wall: no kernel call.
+    run(
+        &mut s,
+        "set_wall_height",
+        json!({"wall": other, "height": 3500}),
+    );
+    assert_eq!(k.0.load(SeqCst), 1, "cached");
+    // Switch order (same uid): never the old result.
+    run(
+        &mut s,
+        "set_relationship",
+        json!({"relationship": uid, "reverse": true}),
+    );
+    assert_eq!(k.0.load(SeqCst), 2, "reversed row recomputed");
+    assert!(close(volume(&s, w), 4000.0 * SECTION));
+    run(
+        &mut s,
+        "set_relationship",
+        json!({"relationship": uid, "reverse": true}),
+    );
+    assert_eq!(k.0.load(SeqCst), 2, "back: seen before");
+    assert!(close(volume(&s, w), 4000.0 * 200.0 * 2900.0));
+    // Stored geometry equals an uncached regeneration.
+    let fresh = crate::model::generate::regenerate_with(s.doc(), Some(&ClipKernel));
+    assert!(fresh.updates.is_empty() && fresh.cut_updates.is_empty());
+}

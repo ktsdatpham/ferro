@@ -254,7 +254,11 @@ a command. Geometry is derived from location + parameters + type.
   chain); joins apply before cuts; several rows on one element apply in uid
   order. A wall pair already settled by its ends (L, or T whose stem
   loses) needs no boolean, and bodies that only touch (bounding boxes
-  overlapping by no more than `VERTEX_TOL`) are left as they are. Walls and
+  overlapping by no more than `VERTEX_TOL`) are left as they are. Join
+  booleans share the session's `CutCache` (M5-5.7): the key chains the
+  second element's source body, the rows before, the row (uid, phase, kind
+  and element order, so a switched row never reuses an old result) and the
+  first element's body; the cut chain then starts from the joined body. Walls and
   floors carry the result in `geometry`, Forms in their derived `cut_body`
   (Foundation's name for "body less cuts and joins"). Failures never fail a
   transaction: without a kernel `second` keeps its body with one

@@ -30,10 +30,10 @@
 //! the face, exactly as before freezing.
 
 use super::bim::WallJoin;
-use super::cut::CutOutcome;
+use super::cut::{self, CutCache, CutOutcome};
 use super::generate::{GenIssue, JOIN_TOL};
 use super::{Category, Document, Element, ElementBody, ElementId, Relationship, RelationshipKind};
-use crate::algo::{BooleanOp, Kernel, KernelError};
+use crate::algo::{Kernel, KernelError};
 use crate::math::{tol, Point2, Vec2};
 use crate::topo::Body;
 use std::collections::{BTreeSet, HashMap};
@@ -438,12 +438,13 @@ pub fn wall_connections(doc: &Document) -> Vec<WallConnection> {
 /// regeneration by `generate::regenerate_with`).
 pub(crate) struct Joiner<'a> {
     doc: &'a Document,
+    cache: Option<&'a CutCache>,
     settled: BTreeSet<(ElementId, ElementId)>,
     warned: bool,
 }
 
 impl<'a> Joiner<'a> {
-    pub(crate) fn new(doc: &'a Document) -> Joiner<'a> {
+    pub(crate) fn new(doc: &'a Document, cache: Option<&'a CutCache>) -> Joiner<'a> {
         let any = doc
             .relationships()
             .any(|r| r.kind == RelationshipKind::Join);
@@ -454,6 +455,7 @@ impl<'a> Joiner<'a> {
         };
         Joiner {
             doc,
+            cache,
             settled,
             warned: false,
         }
@@ -479,7 +481,15 @@ impl<'a> Joiner<'a> {
         if rows.is_empty() {
             return None;
         }
-        let o = apply_joins(kernel, id, body, &rows, first_body, !self.warned);
+        let o = apply_joins_cached(
+            kernel,
+            id,
+            body,
+            &rows,
+            first_body,
+            !self.warned,
+            self.cache,
+        );
         if kernel.is_none() && !o.issues.is_empty() {
             self.warned = true;
         }
@@ -495,6 +505,7 @@ impl<'a> Joiner<'a> {
 /// body stays as it is with one `ferro.kernel.unavailable` warning
 /// (`warn_unavailable = false` leaves it out); a row whose boolean fails is
 /// skipped with a warning carrying the kernel's code. Never panics.
+/// [`apply_joins_cached`] without a cache.
 pub fn apply_joins(
     kernel: Option<&dyn Kernel>,
     second: ElementId,
@@ -502,6 +513,30 @@ pub fn apply_joins(
     rows: &[&Relationship],
     first_body: &dyn Fn(ElementId) -> Option<Body>,
     warn_unavailable: bool,
+) -> CutOutcome {
+    apply_joins_cached(
+        kernel,
+        second,
+        body,
+        rows,
+        first_body,
+        warn_unavailable,
+        None,
+    )
+}
+
+/// [`apply_joins`] through the session's [`CutCache`] (M5-5.7): the key
+/// chains `second`'s source body, the rows before, the row (uid, phase,
+/// kind, element order) and `first`'s body, so an unchanged join does not
+/// call the kernel. The outcome is the same as without the cache.
+pub fn apply_joins_cached(
+    kernel: Option<&dyn Kernel>,
+    second: ElementId,
+    body: &Body,
+    rows: &[&Relationship],
+    first_body: &dyn Fn(ElementId) -> Option<Body>,
+    warn_unavailable: bool,
+    cache: Option<&CutCache>,
 ) -> CutOutcome {
     let mut out = CutOutcome {
         body: body.clone(),
@@ -532,9 +567,12 @@ pub fn apply_joins(
         }
         return out;
     };
+    let mut chain = cut::chain_start(cache, &out.body);
     for (r, first, b) in overlapping {
-        match kernel.boolean(BooleanOp::Difference, &out.body, &b) {
-            Ok(res) => out.body = res.body,
+        let (res, next) = cut::cached_difference(kernel, cache, chain, r, &out.body, &b);
+        chain = next;
+        match res {
+            Ok(body) => out.body = body,
             Err(e) => out.issues.push(GenIssue::warning(
                 e.code,
                 format!("join {} with {first} is not applied: {}", r.uid, e.message),

@@ -1329,7 +1329,7 @@ mod tests {
             "set_wall",
             json!({"wall": 8, "join_start": "disallow"}),
         );
-        let ifc = export_ifc(s.doc()).unwrap();
+        let ifc = export_ifc(s.doc(), None).unwrap();
         assert_eq!(ifc.matches("=IFCRELCONNECTSPATHELEMENTS(").count(), 3);
         let line = ifc
             .lines()
@@ -1337,7 +1337,7 @@ mod tests {
             .expect("the row's connection");
         // Wall 6 (first) relates at its start; wall 5 is related at its end.
         assert!(line.ends_with(".ATEND.,.ATSTART.);"), "{line}");
-        assert_eq!(ifc, export_ifc(s.doc()).unwrap(), "deterministic");
+        assert_eq!(ifc, export_ifc(s.doc(), None).unwrap(), "deterministic");
     }
 
     #[test]

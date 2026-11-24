@@ -238,7 +238,7 @@ pub fn apply_cuts_cached(
 }
 
 /// A 128-bit key: two independent 64-bit hashes.
-type CutKey = [u64; 2];
+pub(crate) type CutKey = [u64; 2];
 
 /// Session-level cache of cut results (M5-5.7), keyed by the row's uid and
 /// phase, the cutter's body, and the body the row applies to (the target's
@@ -348,6 +348,48 @@ fn step_key(prev: CutKey, r: &Relationship, cutter: CutKey) -> CutKey {
         cutter.hash(h);
     }
     w.key()
+}
+
+/// One cached boolean difference `body − other` for row `r` (used by
+/// `model::join`, M5-5.2, so `join` rows share the session cache): `chain`
+/// is the key of `body` (start a chain with [`chain_start`]); returns the
+/// result and the key of the body after this row. The key also hashes the
+/// row's kind and element order, so a reversed row (Switch Join Order,
+/// same uid) never reuses an old result.
+pub(crate) fn cached_difference(
+    kernel: &dyn Kernel,
+    cache: Option<&CutCache>,
+    chain: Option<CutKey>,
+    r: &Relationship,
+    body: &Body,
+    other: &Body,
+) -> (Result<Body, KernelError>, Option<CutKey>) {
+    let key = chain.map(|k| {
+        let mut w = KeyWriter::new();
+        for h in [&mut w.0, &mut w.1] {
+            step_key(k, r, body_key(other)).hash(h);
+            r.kind.hash(h);
+            r.elements.hash(h);
+        }
+        w.key()
+    });
+    if let (Some(c), Some(k)) = (cache, key) {
+        if let Some(res) = c.get(k) {
+            return (res, key);
+        }
+    }
+    let res = kernel
+        .boolean(BooleanOp::Difference, body, other)
+        .map(|k| k.body);
+    if let (Some(c), Some(k)) = (cache, key) {
+        c.put(k, res.clone());
+    }
+    (res, key)
+}
+
+/// The key a cached chain over `body` starts from; `None` without a cache.
+pub(crate) fn chain_start(cache: Option<&CutCache>, body: &Body) -> Option<CutKey> {
+    cache.map(|_| body_key(body))
 }
 
 /// The body of element `id` in a view of phase `phase` (ADR 0006 §5): its

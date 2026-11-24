@@ -911,7 +911,7 @@ pub fn regenerate_cached(
     };
     // Geometry joins (M5-5.2) apply before cuts; their warnings join the
     // cut warnings.
-    let mut joiner = join::Joiner::new(doc);
+    let mut joiner = join::Joiner::new(doc, cache);
     for (id, body) in &bodies {
         let Some(e) = doc.get(*id) else { continue };
         let body = match e.body {

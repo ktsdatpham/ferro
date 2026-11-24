@@ -975,7 +975,7 @@ mod tests {
             .find(|e| e.as_form().is_some())
             .unwrap()
             .id;
-        let plain = plan(s.doc(), &RevitState::default());
+        let plain = plan(s.doc(), &RevitState::default(), None);
         assert!(plain
             .iter()
             .all(|o| !matches!(o, RevitOp::JoinGeometry { .. })));
@@ -1001,7 +1001,7 @@ mod tests {
             "create_relationship",
             json!({"kind": "join", "elements": [bx, walls[2]]}),
         );
-        let ops = plan(s.doc(), &RevitState::default());
+        let ops = plan(s.doc(), &RevitState::default(), None);
         let wall_op = ops
             .iter()
             .find(|o| o.uid() == s.doc().get(walls[0]).unwrap().uid.to_string())
