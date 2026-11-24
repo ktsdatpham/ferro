@@ -2,7 +2,9 @@
 
 - **Status:** Accepted (2026-11-24, owner approval, both parts). Part 1
   (generated client) is built; part 2 (`run_python`) is built in M5-14.4
-  (see the implementation note).
+  (see the implementation note); cancelling and user priority in M5-14.7,
+  one target rule for design options in M5-14.8 (owner's changes to the
+  busy policy, 2026-11-24).
 - **Affects:** D-44, D-46, D-51, D-65; chapter 7
 
 ## Context
@@ -53,10 +55,14 @@ short script that calls the same tools does the job in one step.
 - **Design options.** `run_python {in_design_option}` runs every command of
   the script inside that option (`Session::execute_in_option`, which commits
   through the open group, so savepoints and rollback cover option layers
-  too); calls naming their own option keep it. In the app the default is
-  the option the user is editing, so a script lands where the user's own
-  commands would; headless and plain agent calls default to the shared
-  model.
+  too); calls naming their own option keep it. **One rule (M5-14.8)** for
+  scripts and single agent commands: omitted (or `null`), the target is the
+  option the user is editing in the app, else the shared model; the string
+  `"shared"` names the shared model explicitly (as in `diff_documents`);
+  an id names that option. The rule lives in one function,
+  `ferro_tools::with_default_design_option`, used by the app for agent
+  commands and by the run for script calls. The Proposal bar names where
+  the changes land ("into option: X" or "shared model").
 - **Security.** A script has the user's own rights: it is the user's
   Python. Only a caller allowed to edit may start one: the user, or an agent,
   whose script then becomes (part of) its Proposal unless the user raised
@@ -70,8 +76,32 @@ short script that calls the same tools does the job in one step.
   that changes the document or its history (commands, `undo`, `redo`,
   `save_document`, `revit_import`, another `run_python`) is refused with
   `ferro.python.busy` rather than queued, so a client never waits for an
-  unknown time and nothing slips into the script's group. The user's own
-  edits in the app wait the same way (a status message says why).
+  unknown time and nothing slips into the script's group.
+- **The user has priority (M5-14.7).** While a script runs the status bar
+  shows "Script running · N s" with a Stop button; Esc twice within a
+  second also stops it. An edit the user tries meanwhile (a tool's command,
+  the palette, undo / redo, save, open, new, accept / reject, a typed value)
+  is held and a dialog asks "A script is running (N s). Stop it and do your
+  action?" [Stop script and continue] [Keep waiting]. Stopping rolls the
+  script back, then does the action; keeping waiting does it when the
+  script ends. A held action is never dropped.
+- **Cancel (M5-14.7).** `cancel_python` (new standard verb `cancel`,
+  chapter 5 §5.5; a stable name) stops the running script: the host kills
+  its process group with `SIGKILL` (Windows: `taskkill /T /F`), the same
+  path as a timeout, so a script ignoring `SIGTERM` or running child
+  processes is stopped too, and the whole group (or savepoint) rolls back;
+  the run answers `ferro.python.cancelled` with the output so far. Allowed
+  for the user and the client that started the run (same agent name, any
+  version); others get `ferro.python.not_allowed`. Clients name themselves
+  and all hold the link token, so this prevents mistakes between
+  cooperating clients, not a client that lies about its name. Headless
+  hosts expose a `RunControl` another thread cancels through; `ferro-mcp`
+  reads stdin on its own thread so `cancel_python` (and the MCP
+  `notifications/cancelled` for the waiting `run_python`) work while the
+  script runs. The SDK's `Link.call` sends `cancel_python` when Ctrl+C
+  interrupts a `run_python` call. The time limit (30 s by default, 300 s at
+  most) stays as the hard stop for a forgotten script. A child that
+  leaves the process group (`setsid`) is not reached.
 - **Never blocking the UI.** The app answers the script's calls between
   frames and polls the process once per frame; the `run_python` answer is
   sent when the script ends. Clients wait the script's time limit + 30 s.

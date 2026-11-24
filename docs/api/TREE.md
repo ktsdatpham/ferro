@@ -56,6 +56,12 @@ Phases in the app (ADR 0006, M5-23): the active view's phase and phase filter (s
 
 `run_python` in the app (ADR 0005 §5): the script runs out of process and calls back over Ferro Link with its one-time token; its calls are answered on the UI thread, inside the run's group, between frames. Nothing here waits for the script: [`FerroApp::poll_python`] checks it once per frame.
 
+- fn `ScriptWait::hold` — Hold `action` and ask the user.
+- fn `ScriptWait::asking` — Whether the dialog is shown.
+- fn `ScriptWait::waiting` — How many actions wait.
+- fn `ScriptWait::choose` — The user chose in the dialog; `running` says whether the script still
+- fn `ScriptWait::script_ended` — The script ended (finished, failed, timed out or stopped): close the
+- fn `ScriptWait::escape` — Esc pressed at `now` while a script runs: true on the second press
 
 ### `ferro_app::app::views`
 
@@ -1322,7 +1328,9 @@ ferro-mcp: lets any MCP client (Claude Desktop, Claude Code, Cursor, ...) model 
 - const `FAILED` — The script raised an exception or exited with a non-zero status; rolled
 - const `NESTED` — A script tried to start `run_python` itself.
 - const `BUSY` — Another script is running; the call was refused (retry when it is done).
-- const `NOT_ALLOWED` — The caller may not start scripts (plugins: D-51 keeps them in WASM).
+- const `NOT_ALLOWED` — The caller may not start scripts (plugins: D-51 keeps them in WASM), or
+- const `CANCELLED` — The script was stopped (`cancel_python`, the app's Stop button or Esc
+- const `CANCEL_TOOL` — Tool name of the cancel request (MCP and Ferro Link).
 - const `DEFAULT_TIMEOUT_S` — Time limit when the caller gives none (seconds).
 - const `MAX_TIMEOUT_S` — Longest time limit a caller may ask for (seconds).
 - const `OUTPUT_CAP` — Bytes of `stdout` / `stderr` kept each; the rest is counted and dropped.
@@ -1332,17 +1340,22 @@ ferro-mcp: lets any MCP client (Claude Desktop, Claude Code, Cursor, ...) model 
 - const `COMMIT_TRANSACTION` — Keep the changes since the innermost `begin_transaction`.
 - const `ROLLBACK_TRANSACTION` — Discard the changes since the innermost `begin_transaction`.
 - fn `tool` — The MCP / Ferro Link schema of `run_python`.
+- fn `cancel_tool` — The MCP / Ferro Link schema of `cancel_python`.
 - fn `failure` — A failure body like the tools return: `{error, failures: [{severity, code, message, elements}]}`.
 - struct `RunArgs` — Arguments of one `run_python` call.
 - fn `RunArgs::from_tool` — Read `{code, timeout_s?, in_design_option?}`. Fails (a tool error
 - fn `answer_timeout` — How long a Ferro Link client should wait for the answer to `tool`: the
 - enum `RunMode` — What becomes of a script's changes.
 - fn `decide` — Who may start a script, and how its changes land (ADR 0005 implementation
+- fn `may_cancel` — Whether `caller` may cancel a run started by `started_by`: the user
 - struct `PythonConfig` — Which interpreter to start and where the SDK comes from.
 - fn `PythonConfig::from_env` — From the environment (`FERRO_PYTHON`, `FERRO_PYTHON_SDK`).
 - enum `RunEnd` — How a script ended, as seen by [`PythonRun::poll`].
 - struct `PythonRun` — One running script: its process, its token and the group it holds open.
 - fn `PythonRun::start` — Spawn the interpreter for `args.code` and open the run's group.
+- fn `PythonRun::elapsed` — How long the script has been running.
+- fn `PythonRun::targets` — Where the script's commands landed so far, in first-use order without
+- fn `PythonRun::cancel` — Stop the script now: kill its process tree (as on a timeout, so a
 - fn `PythonRun::token` — The one-time Ferro Link token of this run. It is valid only while the
 - fn `PythonRun::ctx` — The caller that started the run (its actor goes on the journal).
 - fn `PythonRun::handle` — Answer one request from the script. `None` for tools the host must
@@ -1354,6 +1367,10 @@ ferro-mcp: lets any MCP client (Claude Desktop, Claude Code, Cursor, ...) model 
 - fn `ScriptLink::port` — Port to pass to [`PythonRun::start`].
 - fn `ScriptLink::set_token` — Accept requests carrying `token` (empty: refuse all).
 - fn `ScriptLink::next` — The next script call, waiting at most `wait`.
+- struct `RunControl` — Lets other threads cancel the script a headless host runs with
+- fn `RunControl::new` — No run yet.
+- fn `RunControl::is_running` — Whether a script is running.
+- fn `RunControl::cancel` — `cancel_python` from `caller`. Refused with [`NOT_ALLOWED`] unless
 - fn `run_blocking` — Run a script to the end on this thread (headless hosts: `ferro-mcp`
 - fn `interpreter_works` — Whether `path` names an interpreter that starts (used by tests to skip
 
@@ -1368,6 +1385,8 @@ MCP tool host. Tool schemas, unit conversion and command dispatch live in `ferro
 - fn `Server::headless` — A headless server that never forwards to the app (scripts, CI).
 - fn `Server::ctx` — Execution context for the next call: this server's actor, now.
 - fn `Server::call` — Run a tool. Ok = JSON result, Err = (message, failures JSON).
+- fn `forward_as` — Send one tool call to the linked app as `actor`. `None` when no app is
+- fn `cancel_python` — `cancel_python` from `actor` without the [`Server`] (it may be busy
 - fn `io_failure` — A file error as a tool error: `{"error", "failures": [{code: "ferro.io.*"}]}`.
 
 ## `ferro-revit`
@@ -1489,7 +1508,11 @@ Inference engine (D-60): finds the point the user means under the cursor.
 Shared tool surface (D-17, D-44) for MCP and Ferro Link: every kernel command is a tool with the same name, plus read-only tools. Descriptions are written for an AI reader. User units are converted here, at the edge (D-01, D-02): lengths accept numbers (mm) or strings ("3m", "300cm", "10'"), angles are in degrees, points are [x, y, z] in mm.
 
 - fn `list` — Tool definitions (name, description, JSON schema) for commands and the
+- const `IN_DESIGN_OPTION_DOC` — Schema text of the `in_design_option` argument (ADR 0006 implementation
+- const `SHARED` — Value of `in_design_option` naming the shared model explicitly.
 - fn `runs_in_design_option` — Whether the command tool `name` takes `in_design_option` (every command
+- fn `design_option_argument` — Read an `in_design_option` argument. `Ok(None)`: not given (absent or
+- fn `with_default_design_option` — Apply the default target of a command tool call (ADR 0006: while the
 - fn `normalize` — Convert agent-friendly arguments to kernel units.
 - fn `failures_json` — Failures as JSON for tool results.
 - fn `summary` — Model summary (`list_elements`).

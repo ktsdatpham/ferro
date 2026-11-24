@@ -58,6 +58,21 @@ Rules:
   design option's layer (ADR 0006, `Session::execute_in_option`) unless a
   call names its own; in the app it defaults to the option the user is
   editing. The shared model is then untouched and `changed` names the option.
+- **`cancel_python {}`** (ADR 0005, M5-14.7) stops the running script: its
+  process tree is killed (as on a timeout), everything it did is rolled
+  back and its `run_python` call fails with `ferro.python.cancelled`
+  (output so far kept). Allowed for the user (in the app: Stop button, Esc
+  twice) and the client that started the script; others get
+  `ferro.python.not_allowed`. Returns `{cancelled: true}`, or
+  `{cancelled: false}` when no script runs. `ferro-mcp` answers it (and the
+  MCP `notifications/cancelled` of a waiting `run_python`) while it waits
+  for the script; the Python SDK sends it on Ctrl+C during `run_python`.
+- **Target of a change** (ADR 0006, M5-14.8): every command tool and
+  `run_python` take `in_design_option`: a design option id, or the string
+  `"shared"` for the shared model. Omitted (or `null`): the option the user
+  is editing in the app, else the shared model, for single commands and
+  scripts alike. An agent's Proposal bar names the target ("into option:
+  X" or "shared model").
 
 ## 6.3 Revit mapping
 

@@ -96,6 +96,16 @@ D-32 reserves phase and design-option fields; nothing uses them yet.
   new; the journal replays the stored layer, so it stays deterministic.
   The app routes its commands this way while an option is being edited;
   MCP command tools take an optional `in_design_option`.
+- **Target rule for agents (M5-14.8).** Agent commands and `run_python`
+  scripts follow the user: while the user edits an option, they go into it
+  by default. `in_design_option` = an option id wins; `"shared"` targets
+  the shared model; omitted or `null` = the default (the edited option,
+  else the shared model; headless hosts have no edited option).
+  `ferro_tools::with_default_design_option` is the one place this rule
+  is written. An agent's Proposal bar shows "into option: X" or "shared
+  model". Agent commands into an option see the primary combination of the
+  other sets (as an explicit `in_design_option` always did), the user's
+  own commands the combination the view shows.
   `set_design_option {changes}` stays available for agents and sync.
 - **`design_option` field (D-32) stays**, as a derived index: always `None`
   in the shared model and in files; in a document resolved for a

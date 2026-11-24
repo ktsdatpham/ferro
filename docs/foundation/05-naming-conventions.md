@@ -127,6 +127,8 @@ an edge (FFI, MCP JSON, file), the name carries the unit: `height_mm`,
   (merge a proposal or a design option into the shared model:
   `accept_design_option`), `apply` (replay a change list: `apply_changes`),
   `diff` (compute a change list between two documents: `diff_documents`).
+- Verbs of scripts (ADR 0005): `run` (start a script: `run_python`),
+  `cancel` (stop a running script and roll it back: `cancel_python`).
 - Plural noun when the command takes many ids (`delete_elements`).
 
 ## 5.6 Parameters and failure codes
