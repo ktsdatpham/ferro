@@ -16,13 +16,22 @@
 //!   made in a later phase than the view's is drawn uncut (its body in the
 //!   view phase, through the session kernel); from the row's phase on it is
 //!   drawn cut. The removed part is counted as demolished volume
-//!   (`get_phase_quantities`) but not yet drawn as a red demolished solid.
+//!   (`get_phase_quantities`);
+//! * demolished parts (M5-23.10): in the phase of the row, when the element
+//!   existed before that phase, the removed part
+//!   (`model::cut::removed_in_phase`) follows the phase filter like a
+//!   demolished element: overridden (Show All, Show Previous + Demo, Show
+//!   Demo + New) it is drawn as a display-only solid with the demolished
+//!   look (translucent red, dashed edges, not pickable); hidden (Show
+//!   Complete, Show New, Show Previous + New) only the cut element is drawn;
+//!   normal (No overrides) the element is drawn as it was before the
+//!   phase's rows. Hiding the element hides its removed part.
 
 use super::FerroApp;
 use eframe::egui::{self, RichText, Vec2};
 use ferro_core::algo::Kernel;
 use ferro_core::model::phase::{is_phased_category, phase_status};
-use ferro_core::model::{cut, generate, ElementBody, RelationshipKind};
+use ferro_core::model::{cut, generate, ElementBody, RelationshipKind, Uid};
 use ferro_core::model::{PhaseFilter, PhaseGraphics, PhaseStatus};
 use ferro_core::ops::phase_commands::{
     CreatePhase, RenovationStatus, SetElementPhase, SetRenovationStatus,
@@ -48,8 +57,13 @@ pub struct PhaseState {
     pub(super) filter: PhaseFilter,
     /// Display computed for (document, view phase, filter).
     cache: Option<(Document, Option<ElementId>, PhaseFilter, PhaseDisplay)>,
-    /// Phased-cut document computed for (document, view phase).
-    cut_cache: Option<(Document, Option<ElementId>, Option<Document>)>,
+    /// Phased-cut display computed for (document, view phase, filter).
+    cut_cache: Option<(
+        Document,
+        Option<ElementId>,
+        PhaseFilter,
+        Option<PhaseCutDisplay>,
+    )>,
 }
 
 /// Voids of `doc`: Forms of category `Forms` that cut (M5-5.3), drawn
@@ -62,41 +76,144 @@ pub fn voids(doc: &Document) -> HashSet<ElementId> {
         .collect()
 }
 
-/// `doc` as drawn in view phase `view` (M5-23.6): elements with `cut` rows
-/// made after `view` get their body in that phase (uncut before the row's
-/// phase). `None` when nothing differs from `doc`. Without a kernel the
-/// rows that do not apply are simply left out (bodies stay uncut).
+/// What phased cuts change in the view (M5-23.6, M5-23.10): the document
+/// to draw and the display-only elements holding demolished parts.
+#[derive(Clone, PartialEq)]
+pub struct PhaseCutDisplay {
+    /// `doc` as drawn in the view phase: bodies of elements with phased
+    /// cuts, plus one display-only element per demolished part.
+    pub doc: Document,
+    /// Display-only elements of demolished parts, each with the element
+    /// it was removed from (`(part, element)`). Draw them with the
+    /// demolished look; they are not in the session's document.
+    pub parts: Vec<(ElementId, ElementId)>,
+}
+
+/// Seed mixed into the uid of a display-only demolished part.
+const PART_UID_SEED: u128 = 0x6465_6d6f_6c69_7368_6564_2d70_6172_7400;
+
+/// `doc` as drawn in view phase `view` under `filter` (M5-23.6,
+/// M5-23.10): elements with `cut` rows made after `view` get their body
+/// in that phase (uncut before the row's phase); an element that existed
+/// before `view` and has rows made in `view` shows its removed part as
+/// the filter shows demolished elements (see the module docs). `None`
+/// when nothing differs from `doc`. Without a kernel the rows that do not
+/// apply are left out (bodies stay uncut) and no removed part is drawn.
 pub fn phased_cut_doc(
     doc: &Document,
     view: Option<ElementId>,
+    filter: PhaseFilter,
     kernel: Option<&dyn Kernel>,
-) -> Option<Document> {
+) -> Option<PhaseCutDisplay> {
     let view = view?;
     let targets: HashSet<ElementId> = doc
         .relationships()
         .filter(|r| r.kind == RelationshipKind::Cut && r.phase.is_some())
         .filter_map(|r| r.elements.get(1).copied())
+        .collect();
+    // Elements drawn with fewer rows than stored (rows of later phases).
+    let later: HashSet<ElementId> = targets
+        .iter()
+        .copied()
         .filter(|t| cut::cuts_in_phase(doc, *t, view).len() != cut::cuts_of(doc, *t).len())
         .collect();
-    if targets.is_empty() {
+    // Elements existing in `view` with rows made in `view`.
+    let demo = filter.graphics(PhaseStatus::Demolished);
+    let removing: Vec<ElementId> = if kernel.is_none() || demo == PhaseGraphics::Hidden {
+        Vec::new()
+    } else {
+        let mut v: Vec<ElementId> = targets
+            .iter()
+            .copied()
+            .filter(|t| {
+                doc.get(*t)
+                    .is_some_and(|e| doc.phase_status(e, view) == PhaseStatus::Existing)
+                    && cut::cuts_in_phase(doc, *t, view).len()
+                        != cut::cuts_before_phase(doc, *t, view).len()
+            })
+            .collect();
+        v.sort();
+        v
+    };
+    if later.is_empty() && removing.is_empty() {
         return None;
     }
     let bodies = generate::uncut_bodies(doc);
     let cutter = |c: ElementId| bodies.get(&c).cloned();
     let mut elements: Vec<ferro_core::Element> = doc.elements().cloned().collect();
-    for e in elements.iter_mut().filter(|e| targets.contains(&e.id)) {
+    let mut parts = Vec::new();
+    let mut next = doc.elements().map(|e| e.id.0).max().unwrap_or(0) + 1;
+    let mut uids: HashSet<Uid> = doc.elements().map(|e| e.uid).collect();
+    let mut extra = Vec::new();
+    for e in elements.iter_mut() {
         let Some(uncut) = bodies.get(&e.id) else {
             continue;
         };
-        let b = cut::body_in_phase(doc, kernel, e.id, view, uncut, &cutter).body;
-        match &mut e.body {
+        let show = |e: &mut ferro_core::Element, b: ferro_core::topo::Body| match &mut e.body {
             ElementBody::Form(f) => f.cut_body = (b != f.body).then_some(b),
             _ => generate::set_geometry(e, b),
+        };
+        if removing.contains(&e.id) {
+            if demo == PhaseGraphics::Normal {
+                // No overrides: drawn as it was before the phase's rows.
+                let rows = cut::cuts_before_phase(doc, e.id, view);
+                let b = cut::apply_cuts(kernel, e.id, uncut, &rows, &cutter, false).body;
+                show(e, b);
+                continue;
+            }
+            let removed = cut::removed_in_phase(doc, kernel, e.id, view, uncut, &cutter);
+            if later.contains(&e.id) {
+                let b = cut::body_in_phase(doc, kernel, e.id, view, uncut, &cutter).body;
+                show(e, b);
+            }
+            let Some(removed) = removed.filter(|b| b.face_count() > 0) else {
+                continue;
+            };
+            let mut uid = Uid(e.uid.0 ^ PART_UID_SEED);
+            while !uids.insert(uid) {
+                uid = Uid(uid.0.wrapping_add(1));
+            }
+            let mut part = e.clone();
+            part.id = ElementId(next);
+            next += 1;
+            part.uid = uid;
+            part.host_id = None;
+            part.pinned = false;
+            match &mut part.body {
+                ElementBody::Form(f) => {
+                    f.body = removed;
+                    f.cut_body = None;
+                }
+                _ => generate::set_geometry(&mut part, removed),
+            }
+            parts.push((part.id, e.id));
+            extra.push(part);
+        } else if later.contains(&e.id) {
+            let b = cut::body_in_phase(doc, kernel, e.id, view, uncut, &cutter).body;
+            show(e, b);
         }
     }
+    elements.extend(extra);
     Document::from_parts(doc.project().clone(), elements)
         .and_then(|d| d.with_relationships(doc.relationships().cloned().collect()))
         .ok()
+        .map(|doc| PhaseCutDisplay { doc, parts })
+}
+
+/// Give demolished parts ([`PhaseCutDisplay::parts`]) their look: the
+/// demolished status, or hidden with the element they come from.
+pub fn mark_parts(
+    parts: &[(ElementId, ElementId)],
+    hidden: &mut HashSet<ElementId>,
+    looks: &mut HashMap<ElementId, PhaseStatus>,
+) {
+    for (part, element) in parts {
+        if hidden.contains(element) {
+            hidden.insert(*part);
+        } else {
+            looks.insert(*part, PhaseStatus::Demolished);
+        }
+    }
 }
 
 /// Phase display of `doc` in view phase `view` under `filter`: pure, used
@@ -155,19 +272,21 @@ impl FerroApp {
     }
 
     /// The view document as drawn in the view phase when phased cuts make
-    /// it differ ([`phased_cut_doc`]), recomputed only when the document or
-    /// the view phase changes.
-    pub(super) fn phase_cut_display(&mut self) -> Option<Document> {
+    /// it differ, with its demolished parts ([`phased_cut_doc`]),
+    /// recomputed only when the document, the view phase or the phase
+    /// filter changes.
+    pub(super) fn phase_cut_display(&mut self) -> Option<PhaseCutDisplay> {
         let view = self.view_phase();
+        let filter = self.phasing.filter;
         let doc = self.doc().clone();
-        if let Some((d, v, shown)) = &self.phasing.cut_cache {
-            if *v == view && crate::scene::same_doc(d, &doc) {
+        if let Some((d, v, f, shown)) = &self.phasing.cut_cache {
+            if *v == view && *f == filter && crate::scene::same_doc(d, &doc) {
                 return shown.clone();
             }
         }
         let kernel = self.session.kernel().map(|k| k.as_ref());
-        let shown = phased_cut_doc(&doc, view, kernel);
-        self.phasing.cut_cache = Some((doc, view, shown.clone()));
+        let shown = phased_cut_doc(&doc, view, filter, kernel);
+        self.phasing.cut_cache = Some((doc, view, filter, shown.clone()));
         shown
     }
 
@@ -427,14 +546,143 @@ mod tests {
         let doc = s.doc();
         assert_eq!(voids(doc), [c].into_iter().collect());
         // No kernel here: the stored Form is uncut, and so is every phase.
-        assert!(phased_cut_doc(doc, None, None).is_none());
+        let all = PhaseFilter::ShowAll;
+        assert!(phased_cut_doc(doc, None, all, None).is_none());
         assert!(
-            phased_cut_doc(doc, Some(p2), None).is_none(),
-            "the cut's phase"
+            phased_cut_doc(doc, Some(p2), all, None).is_none(),
+            "the cut's phase, no kernel: no removed part"
         );
-        let early = phased_cut_doc(doc, Some(p1), None).expect("differs before the cut");
-        assert_eq!(early.get(a).unwrap().as_form().unwrap().cut_body, None);
-        assert_eq!(early.relationships().count(), 1);
+        let early = phased_cut_doc(doc, Some(p1), all, None).expect("differs before the cut");
+        assert_eq!(early.doc.get(a).unwrap().as_form().unwrap().cut_body, None);
+        assert_eq!(early.doc.relationships().count(), 1);
+        assert!(early.parts.is_empty());
+    }
+
+    /// An existing wall (4000 x 200 x 3000) cut in the second phase by a
+    /// box through it: a 1000 x 1200 window.
+    fn phased_window() -> (Session, ElementId, ElementId, ElementId) {
+        let k = std::sync::Arc::new(ferro_kernel::SolidcoreKernel::new());
+        let mut s =
+            Session::new(Document::new("T"), Box::new(SequentialIds::new(1))).with_kernel(k);
+        let mut run = |tool: &str, args: serde_json::Value| {
+            s.execute(
+                AnyCommand::from_tool(tool, &args).unwrap(),
+                &ExecContext::user(),
+            )
+            .unwrap()
+            .output
+        };
+        let id = |o: serde_json::Value| ElementId(o["element"].as_u64().unwrap());
+        let p1 = id(run("create_phase", json!({"name": "Existing"})));
+        let p2 = id(run("create_phase", json!({"name": "New Construction"})));
+        let w = id(run(
+            "create_wall",
+            json!({"start": {"x": 0, "y": 0, "z": 0}, "end": {"x": 4000, "y": 0, "z": 0}}),
+        ));
+        let c = id(run(
+            "create_box",
+            json!({"origin": {"x": 1000, "y": -500, "z": 800}, "width": 1000, "depth": 1000, "height": 1200}),
+        ));
+        run(
+            "create_relationship",
+            json!({"kind": "cut", "elements": [c, w], "phase": p2}),
+        );
+        (s, p1, p2, w)
+    }
+
+    fn volume_of(doc: &Document, id: ElementId) -> f64 {
+        doc.get(id)
+            .and_then(|e| e.geometry())
+            .map(|b| b.volume().abs())
+            .unwrap_or(0.0)
+    }
+
+    #[test]
+    fn the_removed_part_follows_the_phase_filter_as_demolished() {
+        let (s, p1, p2, w) = phased_window();
+        let k = s.kernel().map(|k| k.as_ref());
+        let doc = s.doc();
+        let wall = 4000.0 * 200.0 * 3000.0;
+        let window = 1000.0 * 200.0 * 1200.0;
+        let close = |a: f64, b: f64| (a - b).abs() < 1e-3 * b;
+        assert!(close(volume_of(doc, w), wall - window), "stored: cut");
+        // Show All in the cut's phase: one display-only part, the window.
+        let shown = phased_cut_doc(doc, Some(p2), PhaseFilter::ShowAll, k).expect("a part");
+        assert_eq!(shown.parts.len(), 1);
+        let (part, from) = shown.parts[0];
+        assert_eq!(from, w);
+        assert!(!doc.contains(part), "not in the session's document");
+        assert!(close(volume_of(&shown.doc, part), window));
+        assert!(close(volume_of(&shown.doc, w), wall - window));
+        assert_eq!(
+            shown.doc.get(part).unwrap().category,
+            doc.get(w).unwrap().category
+        );
+        // Show Previous + Demo and Show Demo + New show it too.
+        for f in [
+            PhaseFilter::ShowPreviousAndDemo,
+            PhaseFilter::ShowDemoAndNew,
+        ] {
+            let d = phased_cut_doc(doc, Some(p2), f, k).expect("a part");
+            assert_eq!(d.parts.len(), 1, "{f:?}");
+        }
+        // Show Complete / Show New / Show Previous + New: hidden, nothing
+        // differs from the stored (cut) document.
+        for f in [
+            PhaseFilter::ShowComplete,
+            PhaseFilter::ShowNew,
+            PhaseFilter::ShowPreviousAndNew,
+        ] {
+            assert!(phased_cut_doc(doc, Some(p2), f, k).is_none(), "{f:?}");
+        }
+        // No overrides: drawn as it was before the phase, no part.
+        let plain = phased_cut_doc(doc, Some(p2), PhaseFilter::NoOverrides, k).expect("uncut");
+        assert!(plain.parts.is_empty());
+        assert!(close(volume_of(&plain.doc, w), wall));
+        // Before the cut's phase: uncut, no part. Without a kernel: none.
+        let early = phased_cut_doc(doc, Some(p1), PhaseFilter::ShowAll, k).expect("uncut");
+        assert!(early.parts.is_empty());
+        assert!(close(volume_of(&early.doc, w), wall));
+        assert!(phased_cut_doc(doc, Some(p2), PhaseFilter::ShowAll, None).is_none());
+    }
+
+    #[test]
+    fn a_wall_new_in_the_cuts_phase_has_no_demolished_part() {
+        let (mut s, _, p2, w) = phased_window();
+        s.execute(
+            AnyCommand::from_tool(
+                "set_element_phase",
+                &json!({"elements": [w], "created": p2}),
+            )
+            .unwrap(),
+            &ExecContext::user(),
+        )
+        .unwrap();
+        let k = s.kernel().map(|k| k.as_ref());
+        assert!(phased_cut_doc(s.doc(), Some(p2), PhaseFilter::ShowAll, k).is_none());
+    }
+
+    #[test]
+    fn demolished_parts_are_drawn_red_dashed_and_hidden_with_their_element() {
+        use crate::scene::{SceneCache, DEMOLISHED, DEMOLISHED_EDGE};
+        let (s, _, p2, w) = phased_window();
+        let k = s.kernel().map(|k| k.as_ref());
+        let shown = phased_cut_doc(s.doc(), Some(p2), PhaseFilter::ShowAll, k).unwrap();
+        let part = shown.parts[0].0;
+        let mut c = SceneCache::default();
+        let none = HashSet::new();
+        mark_parts(&shown.parts, &mut c.hidden, &mut c.phase);
+        assert_eq!(c.phase.get(&part), Some(&PhaseStatus::Demolished));
+        c.update(&shown.doc, ferro_core::Point3::ORIGIN, &none);
+        assert!(c.tris.iter().any(|v| v.color == DEMOLISHED));
+        assert!(c.lines.iter().any(|v| v.color == DEMOLISHED_EDGE));
+        // Translucent faces come last.
+        assert_eq!(c.tris.last().map(|v| v.color), Some(DEMOLISHED));
+        // Hiding the wall hides its removed part.
+        let mut hidden: HashSet<ElementId> = [w].into_iter().collect();
+        let mut looks = HashMap::new();
+        mark_parts(&shown.parts, &mut hidden, &mut looks);
+        assert!(hidden.contains(&part) && looks.is_empty());
     }
 
     #[test]

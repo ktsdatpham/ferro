@@ -84,6 +84,16 @@ D-32 reserves phase and design-option fields; nothing uses them yet.
   the element's category when the element is existing in that phase.
 - The app switches cut / uncut by view phase; drawing the removed part as
   a red demolished solid is left for later (Foundation §3.10).
+- 2026-11-24 (M5-23.10): the app draws the removed part in the row's phase
+  for an element existing there, as the phase filter shows demolished
+  elements: a display-only element (not in the document, not selectable)
+  with the demolished look when overridden; nothing when hidden; the
+  element as before the phase's rows under *No overrides*
+  (`ferro-app` `phases::phased_cut_doc`).
+- 2026-11-24 (M5-5.6): resolving a combination (`resolve`,
+  `Session::resolve`, `execute_in_option`) regenerates with the session's
+  kernel, so cuts on elements an option layer changes stay applied;
+  `resolve` / `resolve_options` and `export_ifc*` take the kernel.
 
 ## Implementation notes (M5-23.9, design options; M5-26.2, M5-26.3)
 

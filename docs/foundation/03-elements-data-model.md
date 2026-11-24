@@ -206,7 +206,15 @@ a command. Geometry is derived from location + parameters + type.
   that row with a warning carrying the kernel's code. A cut on a pinned
   element is allowed (a pin blocks only moving and deleting, ADR 0008).
   Freezing a cut wall or floor (`set_geometry_source`) freezes it uncut, so
-  its rows keep cutting the Form.
+  its rows keep cutting the Form. Every regeneration of a session goes
+  through its kernel, including documents resolved for a design-option
+  combination, edits in an option, previews and exports of a combination,
+  so an option layer that changes a cut element keeps its cut (M5-5.6).
+  The session keeps a cache of row results (`model::cut::CutCache`,
+  M5-5.7) keyed by the target's source body, the rows before, the row
+  (uid, phase) and the cutter's body: a regeneration calls the kernel only
+  for rows whose inputs changed. The cache is not part of the document and
+  never changes a result.
 - **Voids.** A Form of category `Forms` that is the cutter of at least one
   `cut` row is a *void* (Revit: a void form). It is derived from the table,
   not stored: views draw it faint (translucent, dashed edges) so it stays
@@ -304,9 +312,13 @@ its body in the phase and, for an element *existing* in the cut's phase,
 adds the removed volume to its category's `demolished` volume (count
 unchanged: a removed part is not an element). A wall *new* in the cut's
 phase has no demolished part. The app draws the target uncut before the
-row's phase and cut from it on; it does not yet draw the removed part as a
-red demolished solid. A cut made in the app while phasing is used is made
-in the view's phase.
+row's phase and cut from it on. In the row's phase, for an element
+*existing* there, the removed part follows the view's phase filter like a
+demolished element (M5-23.10): overridden, it is drawn as a display-only
+solid with the demolished look (translucent red, dashed edges, not
+selectable); hidden, only the cut element is drawn; *No overrides* draws
+the element as it was before the phase's rows. A cut made in the app while
+phasing is used is made in the view's phase.
 
 ## 3.11 Views (D-33, M5-22)
 

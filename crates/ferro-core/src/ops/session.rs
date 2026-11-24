@@ -238,9 +238,10 @@ impl Session {
         self.redo.last().map(|s| s.name.as_str())
     }
 
-    /// Replace the document (open file); clears history.
+    /// Replace the document (open file); clears history and the cut cache.
     pub fn replace_document(&mut self, doc: Document) {
         self.doc = doc;
+        self.cut_cache.clear();
         self.undo.clear();
         self.redo.clear();
         self.group = None;

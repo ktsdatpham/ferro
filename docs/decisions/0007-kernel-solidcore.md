@@ -69,3 +69,10 @@ port of SMLib, Apache-2.0):
   `RelationshipKind` and is never a boolean. Regeneration reaches the
   kernel too (`generate::regenerate_with`), for `cut` rows; without one
   the cut is skipped with a warning, never an error.
+- 2026-11-24 (M5-5.6, M5-5.7): every transaction a session builds (commands,
+  edits in a design option, previews, resolved combinations) gets its
+  kernel; exports and the Revit plan of a combination take one. The
+  session also owns a `CutCache` (shared like the kernel, `Arc`) that
+  transactions use to skip kernel calls for unchanged cut rows. It is
+  session state, never document state: a document regenerated with or
+  without it is identical, so files and journals stay deterministic.

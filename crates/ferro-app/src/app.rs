@@ -2481,10 +2481,15 @@ impl FerroApp {
         }
 
         // Document to display: the committed one (as seen in the view
-        // phase when phased cuts differ, M5-23.6), or the tool preview.
-        let mut display = self
-            .phase_cut_display()
-            .unwrap_or_else(|| self.doc().clone());
+        // phase when phased cuts differ, M5-23.6, with demolished parts,
+        // M5-23.10), or the tool preview.
+        let mut display = match self.phase_cut_display() {
+            Some(shown) => {
+                phases::mark_parts(&shown.parts, &mut self.scene.hidden, &mut self.scene.phase);
+                shown.doc
+            }
+            None => self.doc().clone(),
+        };
         let mut preview_err = None;
         if let Some(cmd) = preview_cmd {
             match self.preview_here(&cmd) {
