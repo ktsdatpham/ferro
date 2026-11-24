@@ -772,3 +772,59 @@ fn ifc_of_a_combination_keeps_the_cut_of_a_wall_an_option_changes() {
         with
     );
 }
+
+#[test]
+fn join_states_and_join_rows_survive_json_and_fro() {
+    let mut s = Session::new(
+        Document::new("Joins"),
+        Box::new(SequentialIds::new(1_800_000_000_000)),
+    );
+    let wall = |s: &mut Session, a: (f64, f64), b: (f64, f64)| {
+        el(&run(
+            s,
+            "create_wall",
+            json!({"start": p(a.0, a.1, 0.0), "end": p(b.0, b.1, 0.0)}),
+        ))
+    };
+    let a = wall(&mut s, (-4000.0, 0.0), (0.0, 0.0));
+    let b = wall(&mut s, (0.0, 0.0), (0.0, 4000.0));
+    let c = wall(&mut s, (0.0, 4000.0), (4000.0, 4000.0));
+    run(
+        &mut s,
+        "set_wall",
+        json!({"wall": c, "join_start": "disallow"}),
+    );
+    run(
+        &mut s,
+        "create_relationship",
+        json!({"kind": "join", "elements": [b, a]}),
+    );
+    let text = document_to_json(s.doc()).expect("save");
+    let v: Value = serde_json::from_str(&text).expect("json");
+    let walls: Vec<&Value> = v["elements"]
+        .as_array()
+        .expect("elements")
+        .iter()
+        .filter(|e| e["body"]["kind"] == "wall")
+        .collect();
+    assert_eq!(walls.len(), 3);
+    let states: Vec<&Value> = walls.iter().map(|w| &w["body"]["join_start"]).collect();
+    assert_eq!(states.iter().filter(|s| **s == "disallow").count(), 1);
+    assert_eq!(
+        states.iter().filter(|s| s.is_null()).count(),
+        2,
+        "auto is omitted"
+    );
+    let back = document_from_json(&text).expect("load");
+    assert_same(s.doc(), &back, "json with joins");
+    let dir = tempfile::tempdir().expect("tempdir");
+    let path = dir.path().join("joins.fro");
+    save_fro(&path, s.doc(), s.journal()).expect("save");
+    let (fro, _) = load_fro(&path).expect("load");
+    assert_same(s.doc(), &fro, "fro with joins");
+    let r = fro.relationships().next().expect("join row");
+    assert_eq!(r.elements, vec![ElementId(b), ElementId(a)]);
+    // Regenerating the loaded file changes nothing.
+    let regen = generate::regenerate(&fro);
+    assert!(regen.updates.is_empty() && regen.issues.is_empty());
+}

@@ -229,8 +229,8 @@ pub fn list() -> Vec<Value> {
             json!({"wall": id("Host wall id"), "kind": {"type":"string","enum":["door","window"]}, "position": length(), "width": length(), "height": length(), "sill": length(), "name": {"type":"string"}}), &["wall", "kind", "position"]),
         tool("set_opening", "Change a door or window: position along the wall, width, height, sill. Omitted fields keep their value.",
             json!({"opening": id("Door or window id"), "position": length(), "width": length(), "height": length(), "sill": length()}), &["opening"]),
-        tool("set_wall", "Change a wall: start + end (+ mid for a curved wall), base_offset, height (fixed top) or top_level (+ top_offset), location_line. Omitted fields keep their value.",
-            json!({"wall": id("Wall id"), "start": point("Start"), "end": point("End"), "mid": point("Point on the arc (curved walls)"), "base_offset": length(), "height": length(), "top_level": id("Level the top attaches to"), "top_offset": length(), "location_line": {"type":"string","enum":["wall_centerline","core_centerline","finish_exterior","finish_interior"]}}), &["wall"]),
+        tool("set_wall", "Change a wall: start + end (+ mid for a curved wall), base_offset, height (fixed top) or top_level (+ top_offset), location_line, join_start / join_end. Walls whose ends meet join automatically (L mitre, T); join_start / join_end = \"disallow\" keeps that end square and unjoined (Revit Disallow Join), \"auto\" allows it again. Omitted fields keep their value.",
+            json!({"wall": id("Wall id"), "start": point("Start"), "end": point("End"), "mid": point("Point on the arc (curved walls)"), "base_offset": length(), "height": length(), "top_level": id("Level the top attaches to"), "top_offset": length(), "location_line": {"type":"string","enum":["wall_centerline","core_centerline","finish_exterior","finish_interior"]}, "join_start": {"type":"string","enum":["auto","disallow"],"description":"Join state at the start"}, "join_end": {"type":"string","enum":["auto","disallow"],"description":"Join state at the end"}}), &["wall"]),
         tool("set_floor", "Change a floor's outline (points [x, y]), holes or offset. Omitted fields keep their value.",
             json!({"floor": id("Floor id"), "points": {"type":"array","items": point("Vertex"), "minItems": 3}, "holes": {"type":"array","items":{"type":"array","items": point("Vertex")}}, "offset": length()}), &["floor"]),
         // SketchUp-style Form editing.
@@ -268,10 +268,12 @@ pub fn list() -> Vec<Value> {
         tool("get_phase_quantities", "Quantities in the view of a phase, per category split by status (existing / new / demolished / temporary): count, volume (m³) and area (m²; floors plan area, walls gross length × height). The basis for demolition and new-build costs. A cut relationship made in a phase (an opening in an existing wall) counts the removed part as demolished volume in that phase; before it the element is uncut. `phase` defaults to the last phase.",
             json!({"phase": id("Phase id (default: last phase)")}), &[]),
         // Relationships (ADR 0004 §5).
-        tool("create_relationship", "Link elements with a relationship row (stored as data, saved, undoable). Order of `elements` by kind: join [first, second] (first wins where they overlap), cut [cutter, cut] (non-destructive void: the cut element, a wall, floor or Form, shows its body minus the cutter's, regenerated when either changes; a Form used only as a cutter becomes a hidden void), host [host, hosted], attach [attached, target], bounds [space, boundary], connect [a, b], aggregate [whole, part, ...]. Only elements with geometry. `phase`: the phase it is made in. Returns {relationship: uid}. Fails with ferro.model.invalid_relationship, missing_element or duplicate_relationship.",
+        tool("create_relationship", "Link elements with a relationship row (stored as data, saved, undoable). Order of `elements` by kind: join [first, second] (Revit Join Geometry between walls, floors and Forms: first wins where they overlap, second shows its body minus first's, regenerated through the kernel; between two walls whose ends meet it makes a butt corner where first runs through), cut [cutter, cut] (non-destructive void: the cut element, a wall, floor or Form, shows its body minus the cutter's, regenerated when either changes; a Form used only as a cutter becomes a hidden void), host [host, hosted], attach [attached, target], bounds [space, boundary], connect [a, b], aggregate [whole, part, ...]. Only elements with geometry. `phase`: the phase it is made in. Returns {relationship: uid}. Fails with ferro.model.invalid_relationship, missing_element or duplicate_relationship.",
             json!({"kind": {"type":"string","enum":["join","cut","host","attach","bounds","connect","aggregate"]}, "elements": ids("Element ids, ordered as the kind says"), "phase": id("Optional phase id")}), &["kind", "elements"]),
         tool("delete_relationship", "Remove a relationship row by uid; the elements stay. Deleting an element removes its rows automatically.",
             json!({"relationship": {"type":"string","description":"Relationship uid (from create_relationship or list_relationships)"}}), &["relationship"]),
+        tool("set_relationship", "Change a relationship row in place (its uid stays): `elements` replaces the linked elements, or `reverse: true` swaps a two-element row; for a join that is Revit's Switch Join Order (the other element wins). Returns {relationship, elements}. Fails with ferro.model.invalid_uid, missing_relationship, invalid_relationship, missing_element or duplicate_relationship.",
+            json!({"relationship": {"type":"string","description":"Relationship uid"}, "elements": ids("New element ids, ordered as the kind says"), "reverse": {"type":"boolean","description":"Swap the two elements (Switch Join Order)"}}), &["relationship"]),
         // Design options (ADR 0006) and change lists (M5-26).
     ]
     .into_iter()
@@ -1163,6 +1165,13 @@ mod tests {
             of_x["relationships"],
             json!([{"relationship": u, "kind": "join", "elements": [x, y], "phase": null}])
         );
+        // Switch join order keeps the uid.
+        let sw = ok(
+            &mut s,
+            "set_relationship",
+            json!({"relationship": u, "reverse": true}),
+        );
+        assert_eq!(sw["result"]["elements"], json!([y, x]));
         ok(&mut s, "delete_relationship", json!({"relationship": u}));
         let of_x = ok(&mut s, "list_relationships", json!({"element": x}));
         assert_eq!(of_x["relationships"], json!([]));

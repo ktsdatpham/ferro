@@ -31,8 +31,8 @@
 use crate::IoError;
 use ferro_core::algo::{body_mesh, Kernel};
 use ferro_core::model::bim::{CompoundStructure, OpeningKind};
-use ferro_core::model::generate;
 use ferro_core::model::structure_quantities::StructureQuantities;
+use ferro_core::model::{generate, join};
 use ferro_core::model::{
     keys, Category, Document, Element, ElementBody, ElementId, ParamValue, Uid,
 };
@@ -955,6 +955,39 @@ fn export_resolved(doc: &Document, phase: Option<ElementId>) -> Result<String, I
         ));
     }
 
+    // Wall joins (M5-5.2): every L / T end join as an
+    // `IfcRelConnectsPathElements`; the relating wall is the `first` of the
+    // pair's `join` row (it runs through), the row's uid its GlobalId.
+    // Geometry joins need nothing more: the joined bodies are written.
+    for c in join::wall_connections(doc) {
+        let (Some(&a), Some(&b)) = (ifc_of.get(&c.relating), ifc_of.get(&c.related)) else {
+            continue;
+        };
+        let at = |x: join::WallConnectionAt| match x {
+            join::WallConnectionAt::Start => ".ATSTART.",
+            join::WallConnectionAt::End => ".ATEND.",
+            join::WallConnectionAt::Path => ".ATPATH.",
+        };
+        let guid = match c.row {
+            Some(u) => ifc_guid(u.0),
+            None => {
+                let uid = |id: ElementId| doc.get(id).map(|e| e.uid).unwrap_or(Uid(0));
+                derived(&format!(
+                    "connects:{}:{}:{}",
+                    uid(c.relating),
+                    uid(c.related),
+                    at(c.related_at)
+                ))
+            }
+        };
+        w.add(format!(
+            "IFCRELCONNECTSPATHELEMENTS({},$,$,$,$,#{a},#{b},(),(),{},{})",
+            s(&guid),
+            at(c.related_at),
+            at(c.relating_at)
+        ));
+    }
+
     for (t, elems) in &by_type {
         let (it, _) = type_of[t];
         let uid = doc.get(*t).map(|e| e.uid).unwrap_or(Uid(0));
@@ -1274,6 +1307,40 @@ mod tests {
     }
 
     #[test]
+    fn wall_joins_become_path_connections() {
+        let mut s = house();
+        let run = |s: &mut Session, name: &str, args: serde_json::Value| {
+            s.execute(
+                AnyCommand::from_tool(name, &args).unwrap(),
+                &ExecContext::user(),
+            )
+            .unwrap_or_else(|f| panic!("{name}: {f:?}"))
+        };
+        // Walls 5..8 form a closed loop; wall 6 runs through at its corner
+        // with 5, and the corner of 7 and 8 is disallowed.
+        let o = run(
+            &mut s,
+            "create_relationship",
+            json!({"kind": "join", "elements": [6, 5]}),
+        );
+        let row: Uid = o.output["relationship"].as_str().unwrap().parse().unwrap();
+        run(
+            &mut s,
+            "set_wall",
+            json!({"wall": 8, "join_start": "disallow"}),
+        );
+        let ifc = export_ifc(s.doc()).unwrap();
+        assert_eq!(ifc.matches("=IFCRELCONNECTSPATHELEMENTS(").count(), 3);
+        let line = ifc
+            .lines()
+            .find(|l| l.contains(&format!("IFCRELCONNECTSPATHELEMENTS('{}'", ifc_guid(row.0))))
+            .expect("the row's connection");
+        // Wall 6 (first) relates at its start; wall 5 is related at its end.
+        assert!(line.ends_with(".ATEND.,.ATSTART.);"), "{line}");
+        assert_eq!(ifc, export_ifc(s.doc()).unwrap(), "deterministic");
+    }
+
+    #[test]
     fn strings_are_escaped() {
         assert_eq!(s("it's"), "'it''s'");
         assert_eq!(s("Tầng"), "'T\\X2\\1EA7\\X0\\ng'");
@@ -1297,6 +1364,12 @@ mod tests {
         assert_eq!(ifc.matches("=IFCBUILDINGELEMENTPROXY(").count(), 1);
         assert!(ifc.contains("Qto_WallBaseQuantities"));
         assert!(ifc.contains("IFCMATERIAL('G\\X2\\1EA1\\X0\\ch'"));
+        // Four L corners: one path connection each, end to start.
+        assert_eq!(ifc.matches("=IFCRELCONNECTSPATHELEMENTS(").count(), 4);
+        assert_eq!(
+            ifc.matches(".ATSTART.,.ATEND.)").count() + ifc.matches(".ATEND.,.ATSTART.)").count(),
+            4
+        );
         if let Ok(path) = std::env::var("FERRO_IFC_OUT") {
             std::fs::write(path, &ifc).unwrap();
         }

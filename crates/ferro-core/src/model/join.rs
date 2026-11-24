@@ -105,6 +105,8 @@ pub(crate) struct StraightWall {
 #[derive(Debug, Default)]
 pub(crate) struct WallEnds {
     pub corners: HashMap<ElementId, [Option<EndCorners>; 2]>,
+    /// The wall each end is joined to (L or T), when it is a wall.
+    pub partners: HashMap<ElementId, [Option<ElementId>; 2]>,
     pub settled: BTreeSet<(ElementId, ElementId)>,
 }
 
@@ -260,6 +262,7 @@ pub(crate) fn wall_ends(doc: &Document, walls: &[StraightWall]) -> WallEnds {
     let mut out = WallEnds::default();
     for (i, x) in walls.iter().enumerate() {
         let mut ends = [None, None];
+        let mut partners = [None, None];
         for (k, at_start) in [true, false].into_iter().enumerate() {
             if x.disallow[k] {
                 continue; // square, sees nothing
@@ -305,6 +308,7 @@ pub(crate) fn wall_ends(doc: &Document, walls: &[StraightWall]) -> WallEnds {
                     if settled {
                         out.settled.insert(pair(x.id, y));
                     }
+                    partners[k] = Some(y);
                     Some(c)
                 }
                 None if found.is_empty() => frozen_end(doc, x, at_start),
@@ -312,6 +316,7 @@ pub(crate) fn wall_ends(doc: &Document, walls: &[StraightWall]) -> WallEnds {
             };
         }
         out.corners.insert(x.id, ends);
+        out.partners.insert(x.id, partners);
     }
     out
 }
@@ -319,39 +324,105 @@ pub(crate) fn wall_ends(doc: &Document, walls: &[StraightWall]) -> WallEnds {
 /// The walls joined to wall `id` by its ends (L or T, either wall's end),
 /// as inferred now; what freezing `id` turns into `join` rows. Sorted.
 pub fn wall_join_partners(doc: &Document, id: ElementId) -> Vec<ElementId> {
-    let walls = super::generate::straight_walls(doc);
-    let Some(x) = walls.iter().find(|w| w.id == id) else {
-        return Vec::new();
-    };
-    let ends = wall_ends(doc, &walls);
+    let ends = wall_ends(doc, &super::generate::straight_walls(doc));
     let mut out: BTreeSet<ElementId> = BTreeSet::new();
-    let ext_of = |w: &StraightWall, at_start: bool| {
-        ends.corners
-            .get(&w.id)
-            .and_then(|c| c[usize::from(!at_start)])
-    };
-    for y in walls.iter().filter(|w| w.id != id) {
-        let touches = |a: &StraightWall, b: &StraightWall| {
-            [true, false].into_iter().any(|at_start| {
-                let p = if at_start { a.s } else { a.e };
-                ext_of(a, at_start).is_some()
-                    && (b.s.distance_to(p) <= JOIN_TOL
-                        || b.e.distance_to(p) <= JOIN_TOL
-                        || on_line(b, p))
-            })
-        };
-        if touches(x, y) || touches(y, x) {
-            out.insert(y.id);
+    for (w, ps) in &ends.partners {
+        for p in ps.iter().flatten() {
+            if *w == id {
+                out.insert(*p);
+            } else if *p == id {
+                out.insert(*w);
+            }
         }
     }
     out.into_iter().collect()
 }
 
-fn on_line(w: &StraightWall, p: Point2) -> bool {
-    let len = (w.e - w.s).length();
-    let u = (p - w.s).dot(w.d);
-    let off = (p - w.s).dot(Vec2::new(-w.d.y, w.d.x));
-    u > JOIN_TOL && u < len - JOIN_TOL && off.abs() <= JOIN_TOL
+/// Where a wall connection sits on a wall (IFC `IfcConnectionTypeEnum`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WallConnectionAt {
+    /// The start of the location curve (`ATSTART`).
+    Start,
+    /// The end of the location curve (`ATEND`).
+    End,
+    /// Along the wall, away from its ends (`ATPATH`, the crossed wall of a T).
+    Path,
+}
+
+/// One joined pair of walls (L or T), for exports (IFC
+/// `IfcRelConnectsPathElements`). `relating` is the `first` of the pair's
+/// `join` row when there is one (the wall that runs through), else the
+/// lower id; `row` is that row.
+#[derive(Debug, Clone, PartialEq)]
+pub struct WallConnection {
+    pub relating: ElementId,
+    pub relating_at: WallConnectionAt,
+    pub related: ElementId,
+    pub related_at: WallConnectionAt,
+    pub row: Option<super::Uid>,
+}
+
+/// Every wall–wall end join of `doc`, as inferred now (disallowed ends and
+/// frozen walls take no part), once per pair and joint, sorted.
+pub fn wall_connections(doc: &Document) -> Vec<WallConnection> {
+    let walls = super::generate::straight_walls(doc);
+    let ends = wall_ends(doc, &walls);
+    let by_id: HashMap<ElementId, &StraightWall> = walls.iter().map(|w| (w.id, w)).collect();
+    let mut seen: BTreeSet<(ElementId, ElementId, i64, i64)> = BTreeSet::new();
+    let mut out = Vec::new();
+    let mut ids: Vec<&ElementId> = ends.partners.keys().collect();
+    ids.sort();
+    for xid in ids {
+        let (Some(x), Some(ps)) = (by_id.get(xid), ends.partners.get(xid)) else {
+            continue;
+        };
+        for (k, p) in ps.iter().enumerate() {
+            let Some(y) = p.and_then(|p| by_id.get(&p)) else {
+                continue;
+            };
+            let j = if k == 0 { x.s } else { x.e };
+            let key = (
+                x.id.min(y.id),
+                x.id.max(y.id),
+                j.x.round() as i64,
+                j.y.round() as i64,
+            );
+            if !seen.insert(key) {
+                continue;
+            }
+            let x_at = if k == 0 {
+                WallConnectionAt::Start
+            } else {
+                WallConnectionAt::End
+            };
+            let y_at = if y.s.distance_to(j) <= JOIN_TOL {
+                WallConnectionAt::Start
+            } else if y.e.distance_to(j) <= JOIN_TOL {
+                WallConnectionAt::End
+            } else {
+                WallConnectionAt::Path
+            };
+            let row = join_between(doc, x.id, y.id);
+            let x_first = match row.and_then(|r| r.elements.first()) {
+                Some(f) => *f == x.id,
+                None => x.id < y.id,
+            };
+            let (relating, relating_at, related, related_at) = if x_first {
+                (x.id, x_at, y.id, y_at)
+            } else {
+                (y.id, y_at, x.id, x_at)
+            };
+            out.push(WallConnection {
+                relating,
+                relating_at,
+                related,
+                related_at,
+                row: row.map(|r| r.uid),
+            });
+        }
+    }
+    out.sort_by_key(|c| (c.relating, c.related));
+    out
 }
 
 // --------------------------------------------------------- geometry joins
@@ -528,6 +599,18 @@ mod tests {
             "square: its partner disallows"
         );
         assert!(ends.corners[&y.id][0].is_none());
+    }
+
+    #[test]
+    fn partners_record_l_and_t_joins() {
+        let doc = Document::new("t");
+        let x = wall(1, (-4000.0, 0.0), (4000.0, 0.0));
+        let stem = wall(2, (0.0, 0.0), (0.0, 3000.0));
+        let leg = wall(3, (4000.0, 0.0), (4000.0, 3000.0));
+        let ends = wall_ends(&doc, &[x, stem, leg]);
+        assert_eq!(ends.partners[&stem.id], [Some(x.id), None], "T");
+        assert_eq!(ends.partners[&x.id], [None, Some(leg.id)], "L");
+        assert!(ends.settled.contains(&(x.id, stem.id)));
     }
 
     #[test]
