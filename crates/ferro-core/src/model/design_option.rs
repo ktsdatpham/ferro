@@ -463,14 +463,15 @@ pub fn apply_layers(doc: &Document, options: &[ElementId]) -> Result<Document, D
 }
 
 /// `true` for paths of derived data that a layer must not store: the
-/// regenerated geometry of walls, floors and openings, and computed
+/// regenerated geometry of walls, floors and openings, a Form's
+/// `cut_body`, and computed
 /// parameters. Resolving regenerates them.
 pub fn is_derived_path(path: &str) -> bool {
     let Some((_, rest)) = layer_target(path) else {
         return false;
     };
     match rest.as_slice() {
-        ["body", "geometry", ..] => true,
+        ["body", "geometry", ..] | ["body", "cut_body", ..] => true,
         ["params", key, ..] => super::keys::is_read_only(&change::unescape_segment(key)),
         _ => false,
     }

@@ -35,6 +35,8 @@ mod bim_tests;
 #[cfg(test)]
 mod change_tests;
 #[cfg(test)]
+mod cut_tests;
+#[cfg(test)]
 mod design_option_tests;
 #[cfg(test)]
 mod form_tests;

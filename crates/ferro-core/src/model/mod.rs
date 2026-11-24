@@ -8,6 +8,7 @@
 pub mod bim;
 mod category;
 pub mod change;
+pub mod cut;
 pub mod design_option;
 mod document;
 mod element;
