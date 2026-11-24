@@ -66,7 +66,59 @@ fn a_good_manifest_parses() {
     assert_eq!(t.timeout_s, Some(60.0));
     // Written back and read again: the same manifest.
     assert_eq!(PluginManifest::parse(&m.to_json(), Some(&d)).unwrap(), m);
+    // No marketplace fields: a free, locally made plugin that needs nothing.
+    assert_eq!((m.publisher.as_ref(), m.price.as_ref()), (None, None));
+    assert!(!m.is_paid());
+    assert_eq!(m.required_entitlement(), None);
+    assert!(check_entitlement(&m, |_| false).is_ok());
     let _ = std::fs::remove_dir_all(root);
+}
+
+fn with_market(fields: &str) -> Result<PluginManifest, String> {
+    PluginManifest::parse(
+        &format!(
+            r#"{{"id": "stairs", "name": "Stairs", "version": "1", "author": "a", {fields}
+                "commands": [{{"id": "go", "label": "Go", "run": "main:go"}}]}}"#
+        ),
+        None,
+    )
+}
+
+#[test]
+fn marketplace_fields_parse_and_paid_commands_need_their_entitlement() {
+    let m = with_market(r#""publisher": "acme", "price": {"kind": "one_time", "amount": 490000},"#)
+        .unwrap();
+    assert_eq!(m.publisher.as_deref(), Some("acme"));
+    assert!(m.is_paid());
+    assert_eq!(m.required_entitlement().as_deref(), Some("plugin:stairs"));
+    let e = check_entitlement(&m, |_| false).unwrap_err();
+    assert_eq!(e["failures"][0]["code"], LICENSE_MISSING);
+    assert_eq!(e["failures"][0]["plugin"], "stairs");
+    assert_eq!(e["failures"][0]["entitlement"], "plugin:stairs");
+    assert!(check_entitlement(&m, |ent| ent == "plugin:stairs").is_ok());
+    assert_eq!(PluginManifest::parse(&m.to_json(), None).unwrap(), m);
+    // An explicit entitlement wins; a free price needs nothing.
+    let m = with_market(r#""entitlement": "plugin:acme.suite","#).unwrap();
+    assert_eq!(
+        m.required_entitlement().as_deref(),
+        Some("plugin:acme.suite")
+    );
+    let m = with_market(r#""price": {"kind": "free"},"#).unwrap();
+    assert!(!m.is_paid() && m.required_entitlement().is_none());
+    let m =
+        with_market(r#""price": {"kind": "subscription", "amount": 99000, "period": "month"},"#)
+            .unwrap();
+    assert!(m.is_paid());
+    // Malformed fields are refused with the reason.
+    for bad in [
+        r#""price": {"kind": "gift"},"#,
+        r#""price": {"kind": "one_time"},"#,
+        r#""price": {"kind": "subscription", "amount": 1, "period": "day"},"#,
+        r#""entitlement": "Plugin Stairs","#,
+        r#""publisher": 3,"#,
+    ] {
+        assert!(with_market(bad).is_err(), "{bad}");
+    }
 }
 
 #[test]
