@@ -1,0 +1,4026 @@
+{
+  "tools": [
+    {
+      "description": "Create a level (named elevation, e.g. a storey). Elements placed on a level move with it.",
+      "inputSchema": {
+        "properties": {
+          "elevation": {
+            "description": "Length: number = millimetres, or a string with units such as \"3m\", \"300cm\", \"10'\".",
+            "type": [
+              "number",
+              "string"
+            ]
+          },
+          "in_design_option": {
+            "description": "Where the change lands: a design option id (the change goes into that option's layer), or \"shared\" for the shared model. Omitted (or null): the option the user is editing in the Ferro app, else the shared model",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "is_building_storey": {
+            "description": "Default true.",
+            "type": "boolean"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "elevation"
+        ],
+        "type": "object"
+      },
+      "name": "create_level"
+    },
+    {
+      "description": "Change a level's elevation. Elements on that level move with it.",
+      "inputSchema": {
+        "properties": {
+          "elevation": {
+            "description": "Length: number = millimetres, or a string with units such as \"3m\", \"300cm\", \"10'\".",
+            "type": [
+              "number",
+              "string"
+            ]
+          },
+          "in_design_option": {
+            "description": "Where the change lands: a design option id (the change goes into that option's layer), or \"shared\" for the shared model. Omitted (or null): the option the user is editing in the Ferro app, else the shared model",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "level": {
+            "description": "Level element id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "level",
+          "elevation"
+        ],
+        "type": "object"
+      },
+      "name": "set_level_elevation"
+    },
+    {
+      "description": "Draw a horizontal rectangular face (SketchUp Rectangle tool). Returns {element, face}. With `level`, origin z is relative to the level elevation.",
+      "inputSchema": {
+        "properties": {
+          "depth": {
+            "description": "Length: number = millimetres, or a string with units such as \"3m\", \"300cm\", \"10'\".",
+            "type": [
+              "number",
+              "string"
+            ]
+          },
+          "in_design_option": {
+            "description": "Where the change lands: a design option id (the change goes into that option's layer), or \"shared\" for the shared model. Omitted (or null): the option the user is editing in the Ferro app, else the shared model",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "level": {
+            "description": "Optional level id",
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "origin": {
+            "description": "Corner [x, y, z] (z optional): numbers in millimetres or strings with units (\"3m\"). Z is up, X east, Y north.",
+            "items": {
+              "type": [
+                "number",
+                "string"
+              ]
+            },
+            "maxItems": 3,
+            "minItems": 2,
+            "type": "array"
+          },
+          "width": {
+            "description": "Length: number = millimetres, or a string with units such as \"3m\", \"300cm\", \"10'\".",
+            "type": [
+              "number",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "origin",
+          "width",
+          "depth"
+        ],
+        "type": "object"
+      },
+      "name": "create_rectangle"
+    },
+    {
+      "description": "Draw a planar polygon face from 3+ points. Returns {element, face}.",
+      "inputSchema": {
+        "properties": {
+          "in_design_option": {
+            "description": "Where the change lands: a design option id (the change goes into that option's layer), or \"shared\" for the shared model. Omitted (or null): the option the user is editing in the Ferro app, else the shared model",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "level": {
+            "description": "Optional level id",
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "points": {
+            "items": {
+              "description": "Vertex [x, y, z] (z optional): numbers in millimetres or strings with units (\"3m\"). Z is up, X east, Y north.",
+              "items": {
+                "type": [
+                  "number",
+                  "string"
+                ]
+              },
+              "maxItems": 3,
+              "minItems": 2,
+              "type": "array"
+            },
+            "minItems": 3,
+            "type": "array"
+          },
+          "relative_to_level": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "points"
+        ],
+        "type": "object"
+      },
+      "name": "create_polygon"
+    },
+    {
+      "description": "Create a box (rectangle pulled up). Fastest way to block out a volume. Returns {element}.",
+      "inputSchema": {
+        "properties": {
+          "depth": {
+            "description": "Length: number = millimetres, or a string with units such as \"3m\", \"300cm\", \"10'\".",
+            "type": [
+              "number",
+              "string"
+            ]
+          },
+          "height": {
+            "description": "Length: number = millimetres, or a string with units such as \"3m\", \"300cm\", \"10'\".",
+            "type": [
+              "number",
+              "string"
+            ]
+          },
+          "in_design_option": {
+            "description": "Where the change lands: a design option id (the change goes into that option's layer), or \"shared\" for the shared model. Omitted (or null): the option the user is editing in the Ferro app, else the shared model",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "level": {
+            "description": "Optional level id",
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "origin": {
+            "description": "Bottom corner [x, y, z] (z optional): numbers in millimetres or strings with units (\"3m\"). Z is up, X east, Y north.",
+            "items": {
+              "type": [
+                "number",
+                "string"
+              ]
+            },
+            "maxItems": 3,
+            "minItems": 2,
+            "type": "array"
+          },
+          "width": {
+            "description": "Length: number = millimetres, or a string with units such as \"3m\", \"300cm\", \"10'\".",
+            "type": [
+              "number",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "origin",
+          "width",
+          "depth",
+          "height"
+        ],
+        "type": "object"
+      },
+      "name": "create_box"
+    },
+    {
+      "description": "Push / pull a face along its normal (SketchUp Push/Pull). Negative distance pushes inward. On a Form it edits geometry; on a wall, floor, door or window it edits parameters instead (top face → height, end face → length, side face → moves the wall, opening edges → size). Get face ids from get_element.",
+      "inputSchema": {
+        "properties": {
+          "distance": {
+            "description": "Length: number = millimetres, or a string with units such as \"3m\", \"300cm\", \"10'\".",
+            "type": [
+              "number",
+              "string"
+            ]
+          },
+          "element": {
+            "description": "Form element id",
+            "type": "integer"
+          },
+          "face": {
+            "description": "Face id within the Form",
+            "type": "integer"
+          },
+          "in_design_option": {
+            "description": "Where the change lands: a design option id (the change goes into that option's layer), or \"shared\" for the shared model. Omitted (or null): the option the user is editing in the Ferro app, else the shared model",
+            "type": [
+              "integer",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "element",
+          "face",
+          "distance"
+        ],
+        "type": "object"
+      },
+      "name": "push_pull_face"
+    },
+    {
+      "description": "Move elements by a vector.",
+      "inputSchema": {
+        "properties": {
+          "elements": {
+            "description": "Element ids",
+            "items": {
+              "type": "integer"
+            },
+            "type": "array"
+          },
+          "in_design_option": {
+            "description": "Where the change lands: a design option id (the change goes into that option's layer), or \"shared\" for the shared model. Omitted (or null): the option the user is editing in the Ferro app, else the shared model",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "vector": {
+            "description": "Displacement [x, y, z] (z optional): numbers in millimetres or strings with units (\"3m\"). Z is up, X east, Y north.",
+            "items": {
+              "type": [
+                "number",
+                "string"
+              ]
+            },
+            "maxItems": 3,
+            "minItems": 2,
+            "type": "array"
+          }
+        },
+        "required": [
+          "elements",
+          "vector"
+        ],
+        "type": "object"
+      },
+      "name": "move_elements"
+    },
+    {
+      "description": "Rotate elements about a vertical axis through `center`. Angle in degrees, counter-clockwise positive.",
+      "inputSchema": {
+        "properties": {
+          "angle": {
+            "description": "Degrees",
+            "type": "number"
+          },
+          "center": {
+            "description": "Axis point [x, y, z] (z optional): numbers in millimetres or strings with units (\"3m\"). Z is up, X east, Y north.",
+            "items": {
+              "type": [
+                "number",
+                "string"
+              ]
+            },
+            "maxItems": 3,
+            "minItems": 2,
+            "type": "array"
+          },
+          "elements": {
+            "description": "Element ids",
+            "items": {
+              "type": "integer"
+            },
+            "type": "array"
+          },
+          "in_design_option": {
+            "description": "Where the change lands: a design option id (the change goes into that option's layer), or \"shared\" for the shared model. Omitted (or null): the option the user is editing in the Ferro app, else the shared model",
+            "type": [
+              "integer",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "elements",
+          "center",
+          "angle"
+        ],
+        "type": "object"
+      },
+      "name": "rotate_elements"
+    },
+    {
+      "description": "Copy elements offset by a vector; count > 1 makes a linear array. Returns new ids.",
+      "inputSchema": {
+        "properties": {
+          "count": {
+            "maximum": 1000,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "elements": {
+            "description": "Element ids",
+            "items": {
+              "type": "integer"
+            },
+            "type": "array"
+          },
+          "in_design_option": {
+            "description": "Where the change lands: a design option id (the change goes into that option's layer), or \"shared\" for the shared model. Omitted (or null): the option the user is editing in the Ferro app, else the shared model",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "vector": {
+            "description": "Offset per copy [x, y, z] (z optional): numbers in millimetres or strings with units (\"3m\"). Z is up, X east, Y north.",
+            "items": {
+              "type": [
+                "number",
+                "string"
+              ]
+            },
+            "maxItems": 3,
+            "minItems": 2,
+            "type": "array"
+          }
+        },
+        "required": [
+          "elements",
+          "vector"
+        ],
+        "type": "object"
+      },
+      "name": "copy_elements"
+    },
+    {
+      "description": "Delete elements. References from other elements are cleared with a warning.",
+      "inputSchema": {
+        "properties": {
+          "elements": {
+            "description": "Element ids",
+            "items": {
+              "type": "integer"
+            },
+            "type": "array"
+          },
+          "in_design_option": {
+            "description": "Where the change lands: a design option id (the change goes into that option's layer), or \"shared\" for the shared model. Omitted (or null): the option the user is editing in the Ferro app, else the shared model",
+            "type": [
+              "integer",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "elements"
+        ],
+        "type": "object"
+      },
+      "name": "delete_elements"
+    },
+    {
+      "description": "Rename an element (null clears).",
+      "inputSchema": {
+        "properties": {
+          "element": {
+            "description": "Element id",
+            "type": "integer"
+          },
+          "in_design_option": {
+            "description": "Where the change lands: a design option id (the change goes into that option's layer), or \"shared\" for the shared model. Omitted (or null): the option the user is editing in the Ferro app, else the shared model",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "element",
+          "name"
+        ],
+        "type": "object"
+      },
+      "name": "set_name"
+    },
+    {
+      "description": "Set a typed parameter. Key format namespace.group.name (e.g. ferro.common.comments, acme.energy.conductivity). Value forms: (1) a quantity with a unit as text: \"0.8 W/mK\", \"1200 kg/m3\", \"35 MPa\", \"0.25 W/m2K\", \"20 °C\", \"120 kgCO2e\", \"3m\" (if the key has a quantity definition, a bare number in text uses its default unit); (2) {\"spec\": \"density\", \"value\": 1200, \"unit\": \"kg/m3\"} (no unit = SI storage unit; length mm, angle rad); (3) {\"type\": \"text\"|\"integer\"|\"bool\"|\"tags\"|\"element_ref\"|\"number\", \"value\": ...}; also plain numbers, booleans and string arrays (tags). Specs: length, area, volume, angle, mass, density, force, moment, pressure, stress, thermal_conductivity, thermal_resistance, u_value, heat_capacity, temperature, power, illuminance, flow, currency, carbon_mass, time, ratio, number. Fails if the key's definition has another type. Computed keys (ferro.form.*, ferro.dimensions.*) are read-only.",
+      "inputSchema": {
+        "properties": {
+          "element": {
+            "description": "Element id",
+            "type": "integer"
+          },
+          "in_design_option": {
+            "description": "Where the change lands: a design option id (the change goes into that option's layer), or \"shared\" for the shared model. Omitted (or null): the option the user is editing in the Ferro app, else the shared model",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "key": {
+            "type": "string"
+          },
+          "value": {
+            "type": [
+              "object",
+              "string",
+              "number",
+              "boolean",
+              "array"
+            ]
+          }
+        },
+        "required": [
+          "element",
+          "key",
+          "value"
+        ],
+        "type": "object"
+      },
+      "name": "set_parameter"
+    },
+    {
+      "description": "Define a project parameter key (like a Revit shared parameter): data type, group, instance / type binding, description and optional IFC property set mapping. Values set later must fit the type. Built-in ferro.* keys cannot be defined. Returns {key, uid}; pass `uid` (a Revit shared parameter GUID) to match an existing Revit parameter.",
+      "inputSchema": {
+        "properties": {
+          "binding": {
+            "enum": [
+              "instance",
+              "type"
+            ],
+            "type": "string"
+          },
+          "data_type": {
+            "description": "\"text\"|\"integer\"|\"bool\"|\"tags\"|\"element_ref\" or {\"quantity\": \"<spec>\"}, e.g. {\"quantity\": \"u_value\"}. Specs: length, area, volume, angle, mass, density, force, moment, pressure, stress, thermal_conductivity, thermal_resistance, u_value, heat_capacity, temperature, power, illuminance, flow, currency, carbon_mass, time, ratio, number",
+            "type": [
+              "string",
+              "object"
+            ]
+          },
+          "description": {
+            "type": "string"
+          },
+          "group": {
+            "enum": [
+              "constraints",
+              "dimensions",
+              "identity_data",
+              "materials",
+              "analysis",
+              "structural",
+              "data"
+            ],
+            "type": "string"
+          },
+          "ifc": {
+            "properties": {
+              "property": {
+                "type": "string"
+              },
+              "property_set": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "property_set",
+              "property"
+            ],
+            "type": "object"
+          },
+          "in_design_option": {
+            "description": "Where the change lands: a design option id (the change goes into that option's layer), or \"shared\" for the shared model. Omitted (or null): the option the user is editing in the Ferro app, else the shared model",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "key": {
+            "type": "string"
+          },
+          "uid": {
+            "description": "Optional UUID (8-4-4-4-12)",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "data_type"
+        ],
+        "type": "object"
+      },
+      "name": "set_parameter_definition"
+    },
+    {
+      "description": "Classify directly edited geometry (a Form, or a frozen wall / floor) as a BIM category: a free-form wall keeps its shape and becomes a Wall with type, materials and parameters, exported to Revit / IFC as a wall. A type that no longer fits is removed.",
+      "inputSchema": {
+        "properties": {
+          "category": {
+            "enum": [
+              "forms",
+              "walls",
+              "floors",
+              "roofs",
+              "ceilings",
+              "columns",
+              "doors",
+              "windows",
+              "stairs",
+              "railings",
+              "furniture",
+              "generic_models"
+            ],
+            "type": "string"
+          },
+          "element": {
+            "description": "Element with direct geometry",
+            "type": "integer"
+          },
+          "in_design_option": {
+            "description": "Where the change lands: a design option id (the change goes into that option's layer), or \"shared\" for the shared model. Omitted (or null): the option the user is editing in the Ferro app, else the shared model",
+            "type": [
+              "integer",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "element",
+          "category"
+        ],
+        "type": "object"
+      },
+      "name": "set_category"
+    },
+    {
+      "description": "Switch where an element's geometry comes from. 'direct': freeze a parametric wall / floor so it can be edited freely like a SketchUp group (keeps category, type, parameters; hosted doors / windows freeze with it). 'parametric': turn a directly edited wall (rectangular box) or floor (flat slab with vertical sides) back into a parametric one, using a type of the same thickness; fails with ferro.model.not_recognised or ferro.model.no_matching_type. Returns {element, changed}.",
+      "inputSchema": {
+        "properties": {
+          "element": {
+            "description": "Element id",
+            "type": "integer"
+          },
+          "in_design_option": {
+            "description": "Where the change lands: a design option id (the change goes into that option's layer), or \"shared\" for the shared model. Omitted (or null): the option the user is editing in the Ferro app, else the shared model",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "source": {
+            "enum": [
+              "direct",
+              "parametric"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "element",
+          "source"
+        ],
+        "type": "object"
+      },
+      "name": "set_geometry_source"
+    },
+    {
+      "description": "Choose how a quantity is shown and typed in this project, e.g. {spec: length, unit: m, decimals: 2}. unit null = back to the default (mm for length). Values are always stored in mm / SI; this changes display only.",
+      "inputSchema": {
+        "properties": {
+          "decimals": {
+            "maximum": 9,
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "in_design_option": {
+            "description": "Where the change lands: a design option id (the change goes into that option's layer), or \"shared\" for the shared model. Omitted (or null): the option the user is editing in the Ferro app, else the shared model",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "spec": {
+            "enum": [
+              "length",
+              "area",
+              "volume",
+              "angle",
+              "mass",
+              "density",
+              "force",
+              "moment",
+              "pressure",
+              "stress",
+              "thermal_conductivity",
+              "thermal_resistance",
+              "u_value",
+              "heat_capacity",
+              "temperature",
+              "power",
+              "illuminance",
+              "flow",
+              "currency",
+              "carbon_mass",
+              "time",
+              "ratio",
+              "number"
+            ],
+            "type": "string"
+          },
+          "unit": {
+            "description": "A unit of that quantity, e.g. mm, m, ft, W/(m·K)",
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "spec"
+        ],
+        "type": "object"
+      },
+      "name": "set_project_units"
+    },
+    {
+      "description": "Set where the project is (sun, energy, weather): latitude / longitude in degrees (north / east positive), elevation of the internal origin above sea level (length), UTC offset in minutes (Vietnam 420), place name, weather file (EPW). Omitted fields keep their value; clear: true removes the location.",
+      "inputSchema": {
+        "properties": {
+          "clear": {
+            "type": "boolean"
+          },
+          "elevation": {
+            "description": "Length: number = millimetres, or a string with units such as \"3m\", \"300cm\", \"10'\".",
+            "type": [
+              "number",
+              "string"
+            ]
+          },
+          "in_design_option": {
+            "description": "Where the change lands: a design option id (the change goes into that option's layer), or \"shared\" for the shared model. Omitted (or null): the option the user is editing in the Ferro app, else the shared model",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "latitude": {
+            "description": "Degrees, -90..90",
+            "type": "number"
+          },
+          "longitude": {
+            "description": "Degrees, -180..180",
+            "type": "number"
+          },
+          "place": {
+            "type": "string"
+          },
+          "utc_offset_minutes": {
+            "type": "integer"
+          },
+          "weather_file": {
+            "type": "string"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "name": "set_site_location"
+    },
+    {
+      "description": "Set the currency for costs (ISO 4217, e.g. VND, USD); null clears it.",
+      "inputSchema": {
+        "properties": {
+          "currency": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "in_design_option": {
+            "description": "Where the change lands: a design option id (the change goes into that option's layer), or \"shared\" for the shared model. Omitted (or null): the option the user is editing in the Ferro app, else the shared model",
+            "type": [
+              "integer",
+              "string"
+            ]
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "name": "set_project_currency"
+    },
+    {
+      "description": "Rename the project and / or switch auto-pinning: with auto_pin_datums true new levels are created pinned (default false, as Revit). Omitted fields keep their value.",
+      "inputSchema": {
+        "properties": {
+          "auto_pin_datums": {
+            "description": "New levels (datums) are created pinned",
+            "type": "boolean"
+          },
+          "in_design_option": {
+            "description": "Where the change lands: a design option id (the change goes into that option's layer), or \"shared\" for the shared model. Omitted (or null): the option the user is editing in the Ferro app, else the shared model",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "name": "set_project_name"
+    },
+    {
+      "description": "Pin or unpin elements (Revit Pin / Unpin). As in Revit, a pinned element cannot be moved (move, rotate, dragging it or its ends, a level's elevation, a door's position) or deleted, nor can the wall hosting a pinned door be deleted (ferro.model.pinned); everything else stays editable: parameters, type, name, phase, shape and profile, copying. Unpin first to move it. Returns {elements, changed}.",
+      "inputSchema": {
+        "properties": {
+          "elements": {
+            "description": "Element ids",
+            "items": {
+              "type": "integer"
+            },
+            "type": "array"
+          },
+          "in_design_option": {
+            "description": "Where the change lands: a design option id (the change goes into that option's layer), or \"shared\" for the shared model. Omitted (or null): the option the user is editing in the Ferro app, else the shared model",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "pinned": {
+            "description": "true = pin, false = unpin",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "elements",
+          "pinned"
+        ],
+        "type": "object"
+      },
+      "name": "set_pinned"
+    },
+    {
+      "description": "Create a material with a base colour and optional assets (all optional, SI units named in each field): appearance (OpenPBR), physical, thermal, environmental (GWP from an EPD), cost. Wall / floor types using it then report U-value, mass, carbon and cost per m² (get_element on the type). Returns {element}.",
+      "inputSchema": {
+        "properties": {
+          "appearance": {
+            "description": "OpenPBR surface parameters beyond colour (= base_color) and roughness (= specular_roughness)",
+            "properties": {
+              "base_color_image": {
+                "description": "Image laid on faces at real-world size (placeholder, not rendered yet)",
+                "properties": {
+                  "height_mm": {
+                    "type": "number"
+                  },
+                  "path": {
+                    "type": "string"
+                  },
+                  "rotation_rad": {
+                    "type": "number"
+                  },
+                  "width_mm": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "path",
+                  "width_mm",
+                  "height_mm"
+                ],
+                "type": [
+                  "object",
+                  "null"
+                ]
+              },
+              "base_metalness": {
+                "description": "0..1, OpenPBR base_metalness",
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "coat_weight": {
+                "description": "0..1, varnish / lacquer",
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "emission_color": {
+                "description": "sRGB 0..1",
+                "items": {
+                  "type": "number"
+                },
+                "maxItems": 3,
+                "minItems": 3,
+                "type": [
+                  "array",
+                  "null"
+                ]
+              },
+              "emission_luminance": {
+                "description": "cd/m² (nits)",
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "geometry_opacity": {
+                "description": "0..1, 1 = opaque",
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "normal_image": {
+                "description": "Image laid on faces at real-world size (placeholder, not rendered yet)",
+                "properties": {
+                  "height_mm": {
+                    "type": "number"
+                  },
+                  "path": {
+                    "type": "string"
+                  },
+                  "rotation_rad": {
+                    "type": "number"
+                  },
+                  "width_mm": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "path",
+                  "width_mm",
+                  "height_mm"
+                ],
+                "type": [
+                  "object",
+                  "null"
+                ]
+              },
+              "specular_ior": {
+                "description": "Index of refraction, default 1.5",
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "transmission_weight": {
+                "description": "0..1, glass ≈ 1",
+                "type": [
+                  "number",
+                  "null"
+                ]
+              }
+            },
+            "type": "object"
+          },
+          "color": {
+            "description": "#rrggbb",
+            "type": "string"
+          },
+          "cost": {
+            "description": "Unit price",
+            "properties": {
+              "currency": {
+                "description": "ISO 4217, e.g. VND, USD",
+                "type": "string"
+              },
+              "unit": {
+                "description": "Per cubic metre, kilogram or square metre of material",
+                "enum": [
+                  "m3",
+                  "kg",
+                  "m2"
+                ],
+                "type": "string"
+              },
+              "unit_price": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "unit_price",
+              "currency",
+              "unit"
+            ],
+            "type": "object"
+          },
+          "environmental": {
+            "description": "Embodied carbon (GWP-total, EN 15804 stages) in kg CO2e per declared unit",
+            "properties": {
+              "declared_unit": {
+                "description": "Per cubic metre, kilogram or square metre of material",
+                "enum": [
+                  "m3",
+                  "kg",
+                  "m2"
+                ],
+                "type": "string"
+              },
+              "epd_source": {
+                "description": "EPD number / database",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "gwp_a1_a3": {
+                "description": "Product stage A1-A3",
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "gwp_a4": {
+                "description": "A4 transport",
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "gwp_a5": {
+                "description": "A5 installation",
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "gwp_b": {
+                "description": "B1-B7 use",
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "gwp_c": {
+                "description": "C1-C4 end of life",
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "gwp_d": {
+                "description": "D beyond system boundary",
+                "type": [
+                  "number",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "declared_unit"
+            ],
+            "type": "object"
+          },
+          "in_design_option": {
+            "description": "Where the change lands: a design option id (the change goes into that option's layer), or \"shared\" for the shared model. Omitted (or null): the option the user is editing in the Ferro app, else the shared model",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "name": {
+            "type": "string"
+          },
+          "physical": {
+            "description": "Mechanical data, SI units",
+            "properties": {
+              "compressive_strength_pa": {
+                "description": "Pa",
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "density_kg_m3": {
+                "description": "kg/m³",
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "poisson_ratio": {
+                "description": "-1..0.5",
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "tensile_strength_pa": {
+                "description": "Pa",
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "thermal_expansion_per_k": {
+                "description": "1/K",
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "youngs_modulus_pa": {
+                "description": "Young's modulus, Pa (concrete ≈ 3.1e10)",
+                "type": [
+                  "number",
+                  "null"
+                ]
+              }
+            },
+            "type": "object"
+          },
+          "roughness": {
+            "description": "OpenPBR specular_roughness, default 0.8",
+            "maximum": 1,
+            "minimum": 0,
+            "type": "number"
+          },
+          "thermal": {
+            "description": "Thermal data, SI units; conductivity gives wall / floor U-values",
+            "properties": {
+              "conductivity_w_mk": {
+                "description": "λ, W/(m·K), > 0",
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "density_kg_m3": {
+                "description": "kg/m³ (used when physical has none)",
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "emissivity": {
+                "description": "0..1",
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "solar_absorptance": {
+                "description": "0..1",
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "specific_heat_j_kgk": {
+                "description": "J/(kg·K)",
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "vapour_resistance_factor": {
+                "description": "μ, ≥ 1",
+                "type": [
+                  "number",
+                  "null"
+                ]
+              }
+            },
+            "type": "object"
+          }
+        },
+        "required": [
+          "name",
+          "color"
+        ],
+        "type": "object"
+      },
+      "name": "create_material"
+    },
+    {
+      "description": "Edit a material; omitted fields keep their value. Each asset is a partial update: given fields are set, fields set to null are cleared, others kept (e.g. {\"material\": 3, \"thermal\": {\"conductivity_w_mk\": 0.8}}). `clear` removes whole assets. Unknown field names fail.",
+      "inputSchema": {
+        "properties": {
+          "appearance": {
+            "description": "OpenPBR surface parameters beyond colour (= base_color) and roughness (= specular_roughness)",
+            "properties": {
+              "base_color_image": {
+                "description": "Image laid on faces at real-world size (placeholder, not rendered yet)",
+                "properties": {
+                  "height_mm": {
+                    "type": "number"
+                  },
+                  "path": {
+                    "type": "string"
+                  },
+                  "rotation_rad": {
+                    "type": "number"
+                  },
+                  "width_mm": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "path",
+                  "width_mm",
+                  "height_mm"
+                ],
+                "type": [
+                  "object",
+                  "null"
+                ]
+              },
+              "base_metalness": {
+                "description": "0..1, OpenPBR base_metalness",
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "coat_weight": {
+                "description": "0..1, varnish / lacquer",
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "emission_color": {
+                "description": "sRGB 0..1",
+                "items": {
+                  "type": "number"
+                },
+                "maxItems": 3,
+                "minItems": 3,
+                "type": [
+                  "array",
+                  "null"
+                ]
+              },
+              "emission_luminance": {
+                "description": "cd/m² (nits)",
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "geometry_opacity": {
+                "description": "0..1, 1 = opaque",
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "normal_image": {
+                "description": "Image laid on faces at real-world size (placeholder, not rendered yet)",
+                "properties": {
+                  "height_mm": {
+                    "type": "number"
+                  },
+                  "path": {
+                    "type": "string"
+                  },
+                  "rotation_rad": {
+                    "type": "number"
+                  },
+                  "width_mm": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "path",
+                  "width_mm",
+                  "height_mm"
+                ],
+                "type": [
+                  "object",
+                  "null"
+                ]
+              },
+              "specular_ior": {
+                "description": "Index of refraction, default 1.5",
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "transmission_weight": {
+                "description": "0..1, glass ≈ 1",
+                "type": [
+                  "number",
+                  "null"
+                ]
+              }
+            },
+            "type": "object"
+          },
+          "clear": {
+            "description": "Assets to remove before applying the updates",
+            "items": {
+              "enum": [
+                "appearance",
+                "physical",
+                "thermal",
+                "environmental",
+                "cost"
+              ],
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "color": {
+            "description": "#rrggbb",
+            "type": "string"
+          },
+          "cost": {
+            "description": "Unit price",
+            "properties": {
+              "currency": {
+                "description": "ISO 4217, e.g. VND, USD",
+                "type": "string"
+              },
+              "unit": {
+                "description": "Per cubic metre, kilogram or square metre of material",
+                "enum": [
+                  "m3",
+                  "kg",
+                  "m2"
+                ],
+                "type": "string"
+              },
+              "unit_price": {
+                "type": "number"
+              }
+            },
+            "required": [],
+            "type": "object"
+          },
+          "environmental": {
+            "description": "Embodied carbon (GWP-total, EN 15804 stages) in kg CO2e per declared unit",
+            "properties": {
+              "declared_unit": {
+                "description": "Per cubic metre, kilogram or square metre of material",
+                "enum": [
+                  "m3",
+                  "kg",
+                  "m2"
+                ],
+                "type": "string"
+              },
+              "epd_source": {
+                "description": "EPD number / database",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "gwp_a1_a3": {
+                "description": "Product stage A1-A3",
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "gwp_a4": {
+                "description": "A4 transport",
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "gwp_a5": {
+                "description": "A5 installation",
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "gwp_b": {
+                "description": "B1-B7 use",
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "gwp_c": {
+                "description": "C1-C4 end of life",
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "gwp_d": {
+                "description": "D beyond system boundary",
+                "type": [
+                  "number",
+                  "null"
+                ]
+              }
+            },
+            "required": [],
+            "type": "object"
+          },
+          "in_design_option": {
+            "description": "Where the change lands: a design option id (the change goes into that option's layer), or \"shared\" for the shared model. Omitted (or null): the option the user is editing in the Ferro app, else the shared model",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "material": {
+            "description": "Material id",
+            "type": "integer"
+          },
+          "physical": {
+            "description": "Mechanical data, SI units",
+            "properties": {
+              "compressive_strength_pa": {
+                "description": "Pa",
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "density_kg_m3": {
+                "description": "kg/m³",
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "poisson_ratio": {
+                "description": "-1..0.5",
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "tensile_strength_pa": {
+                "description": "Pa",
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "thermal_expansion_per_k": {
+                "description": "1/K",
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "youngs_modulus_pa": {
+                "description": "Young's modulus, Pa (concrete ≈ 3.1e10)",
+                "type": [
+                  "number",
+                  "null"
+                ]
+              }
+            },
+            "type": "object"
+          },
+          "roughness": {
+            "maximum": 1,
+            "minimum": 0,
+            "type": "number"
+          },
+          "thermal": {
+            "description": "Thermal data, SI units; conductivity gives wall / floor U-values",
+            "properties": {
+              "conductivity_w_mk": {
+                "description": "λ, W/(m·K), > 0",
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "density_kg_m3": {
+                "description": "kg/m³ (used when physical has none)",
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "emissivity": {
+                "description": "0..1",
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "solar_absorptance": {
+                "description": "0..1",
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "specific_heat_j_kgk": {
+                "description": "J/(kg·K)",
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "vapour_resistance_factor": {
+                "description": "μ, ≥ 1",
+                "type": [
+                  "number",
+                  "null"
+                ]
+              }
+            },
+            "type": "object"
+          }
+        },
+        "required": [
+          "material"
+        ],
+        "type": "object"
+      },
+      "name": "set_material"
+    },
+    {
+      "description": "Create a wall type: either one layer of `thickness` (+ optional material id) or `layers` listed from the exterior face to the interior face, each {function: structure|substrate|insulation|finish|membrane, thickness, material?}.",
+      "inputSchema": {
+        "properties": {
+          "in_design_option": {
+            "description": "Where the change lands: a design option id (the change goes into that option's layer), or \"shared\" for the shared model. Omitted (or null): the option the user is editing in the Ferro app, else the shared model",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "layers": {
+            "items": {
+              "properties": {
+                "function": {
+                  "enum": [
+                    "structure",
+                    "substrate",
+                    "insulation",
+                    "finish",
+                    "membrane"
+                  ],
+                  "type": "string"
+                },
+                "material": {
+                  "description": "Material id",
+                  "type": "integer"
+                },
+                "thickness": {
+                  "description": "Length: number = millimetres, or a string with units such as \"3m\", \"300cm\", \"10'\".",
+                  "type": [
+                    "number",
+                    "string"
+                  ]
+                }
+              },
+              "required": [
+                "function",
+                "thickness"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "material": {
+            "description": "Optional material id",
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "thickness": {
+            "description": "Length: number = millimetres, or a string with units such as \"3m\", \"300cm\", \"10'\".",
+            "type": [
+              "number",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "type": "object"
+      },
+      "name": "create_wall_type"
+    },
+    {
+      "description": "Create a floor type (layers from top to bottom), like create_wall_type.",
+      "inputSchema": {
+        "properties": {
+          "in_design_option": {
+            "description": "Where the change lands: a design option id (the change goes into that option's layer), or \"shared\" for the shared model. Omitted (or null): the option the user is editing in the Ferro app, else the shared model",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "layers": {
+            "items": {
+              "properties": {
+                "function": {
+                  "enum": [
+                    "structure",
+                    "substrate",
+                    "insulation",
+                    "finish",
+                    "membrane"
+                  ],
+                  "type": "string"
+                },
+                "material": {
+                  "description": "Material id",
+                  "type": "integer"
+                },
+                "thickness": {
+                  "description": "Length: number = millimetres, or a string with units such as \"3m\", \"300cm\", \"10'\".",
+                  "type": [
+                    "number",
+                    "string"
+                  ]
+                }
+              },
+              "required": [
+                "function",
+                "thickness"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "material": {
+            "description": "Optional material id",
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "thickness": {
+            "description": "Length: number = millimetres, or a string with units such as \"3m\", \"300cm\", \"10'\".",
+            "type": [
+              "number",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "type": "object"
+      },
+      "name": "create_floor_type"
+    },
+    {
+      "description": "Create a straight wall from start to end (z ignored; the base is the level elevation + base_offset). The exterior face is on the LEFT of the direction of travel, so draw outer walls clockwise seen from above (as in Revit). Height: top_level (+ top_offset), else height (default 3 m). Default type \"Generic - 200mm\". Returns {element}.",
+      "inputSchema": {
+        "properties": {
+          "base_offset": {
+            "description": "Length: number = millimetres, or a string with units such as \"3m\", \"300cm\", \"10'\".",
+            "type": [
+              "number",
+              "string"
+            ]
+          },
+          "end": {
+            "description": "End [x, y, z] (z optional): numbers in millimetres or strings with units (\"3m\"). Z is up, X east, Y north.",
+            "items": {
+              "type": [
+                "number",
+                "string"
+              ]
+            },
+            "maxItems": 3,
+            "minItems": 2,
+            "type": "array"
+          },
+          "height": {
+            "description": "Length: number = millimetres, or a string with units such as \"3m\", \"300cm\", \"10'\".",
+            "type": [
+              "number",
+              "string"
+            ]
+          },
+          "in_design_option": {
+            "description": "Where the change lands: a design option id (the change goes into that option's layer), or \"shared\" for the shared model. Omitted (or null): the option the user is editing in the Ferro app, else the shared model",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "level": {
+            "description": "Base level id",
+            "type": "integer"
+          },
+          "location_line": {
+            "enum": [
+              "wall_centerline",
+              "core_centerline",
+              "finish_exterior",
+              "finish_interior"
+            ],
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "start": {
+            "description": "Start [x, y, z] (z optional): numbers in millimetres or strings with units (\"3m\"). Z is up, X east, Y north.",
+            "items": {
+              "type": [
+                "number",
+                "string"
+              ]
+            },
+            "maxItems": 3,
+            "minItems": 2,
+            "type": "array"
+          },
+          "top_level": {
+            "description": "Level the top is attached to",
+            "type": "integer"
+          },
+          "top_offset": {
+            "description": "Length: number = millimetres, or a string with units such as \"3m\", \"300cm\", \"10'\".",
+            "type": [
+              "number",
+              "string"
+            ]
+          },
+          "wall_type": {
+            "description": "Wall type id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "start",
+          "end"
+        ],
+        "type": "object"
+      },
+      "name": "create_wall"
+    },
+    {
+      "description": "Create a chain of walls through points (closed adds the closing wall). Corners are mitred automatically. Returns {elements}.",
+      "inputSchema": {
+        "properties": {
+          "base_offset": {
+            "description": "Length: number = millimetres, or a string with units such as \"3m\", \"300cm\", \"10'\".",
+            "type": [
+              "number",
+              "string"
+            ]
+          },
+          "closed": {
+            "type": "boolean"
+          },
+          "height": {
+            "description": "Length: number = millimetres, or a string with units such as \"3m\", \"300cm\", \"10'\".",
+            "type": [
+              "number",
+              "string"
+            ]
+          },
+          "in_design_option": {
+            "description": "Where the change lands: a design option id (the change goes into that option's layer), or \"shared\" for the shared model. Omitted (or null): the option the user is editing in the Ferro app, else the shared model",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "level": {
+            "description": "Base level id",
+            "type": "integer"
+          },
+          "location_line": {
+            "enum": [
+              "wall_centerline",
+              "core_centerline",
+              "finish_exterior",
+              "finish_interior"
+            ],
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "points": {
+            "items": {
+              "description": "Vertex [x, y, z] (z optional): numbers in millimetres or strings with units (\"3m\"). Z is up, X east, Y north.",
+              "items": {
+                "type": [
+                  "number",
+                  "string"
+                ]
+              },
+              "maxItems": 3,
+              "minItems": 2,
+              "type": "array"
+            },
+            "minItems": 2,
+            "type": "array"
+          },
+          "top_level": {
+            "description": "Level the top is attached to",
+            "type": "integer"
+          },
+          "top_offset": {
+            "description": "Length: number = millimetres, or a string with units such as \"3m\", \"300cm\", \"10'\".",
+            "type": [
+              "number",
+              "string"
+            ]
+          },
+          "wall_type": {
+            "description": "Wall type id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "points"
+        ],
+        "type": "object"
+      },
+      "name": "create_walls"
+    },
+    {
+      "description": "Create a curved wall along the arc start → mid → end. Openings in curved walls are not supported yet.",
+      "inputSchema": {
+        "properties": {
+          "base_offset": {
+            "description": "Length: number = millimetres, or a string with units such as \"3m\", \"300cm\", \"10'\".",
+            "type": [
+              "number",
+              "string"
+            ]
+          },
+          "end": {
+            "description": "End [x, y, z] (z optional): numbers in millimetres or strings with units (\"3m\"). Z is up, X east, Y north.",
+            "items": {
+              "type": [
+                "number",
+                "string"
+              ]
+            },
+            "maxItems": 3,
+            "minItems": 2,
+            "type": "array"
+          },
+          "height": {
+            "description": "Length: number = millimetres, or a string with units such as \"3m\", \"300cm\", \"10'\".",
+            "type": [
+              "number",
+              "string"
+            ]
+          },
+          "in_design_option": {
+            "description": "Where the change lands: a design option id (the change goes into that option's layer), or \"shared\" for the shared model. Omitted (or null): the option the user is editing in the Ferro app, else the shared model",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "level": {
+            "description": "Base level id",
+            "type": "integer"
+          },
+          "location_line": {
+            "enum": [
+              "wall_centerline",
+              "core_centerline",
+              "finish_exterior",
+              "finish_interior"
+            ],
+            "type": "string"
+          },
+          "mid": {
+            "description": "A point on the arc [x, y, z] (z optional): numbers in millimetres or strings with units (\"3m\"). Z is up, X east, Y north.",
+            "items": {
+              "type": [
+                "number",
+                "string"
+              ]
+            },
+            "maxItems": 3,
+            "minItems": 2,
+            "type": "array"
+          },
+          "name": {
+            "type": "string"
+          },
+          "start": {
+            "description": "Start [x, y, z] (z optional): numbers in millimetres or strings with units (\"3m\"). Z is up, X east, Y north.",
+            "items": {
+              "type": [
+                "number",
+                "string"
+              ]
+            },
+            "maxItems": 3,
+            "minItems": 2,
+            "type": "array"
+          },
+          "top_level": {
+            "description": "Level the top is attached to",
+            "type": "integer"
+          },
+          "top_offset": {
+            "description": "Length: number = millimetres, or a string with units such as \"3m\", \"300cm\", \"10'\".",
+            "type": [
+              "number",
+              "string"
+            ]
+          },
+          "wall_type": {
+            "description": "Wall type id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "start",
+          "mid",
+          "end"
+        ],
+        "type": "object"
+      },
+      "name": "create_arc_wall"
+    },
+    {
+      "description": "Give a wall a fixed (unconnected) height.",
+      "inputSchema": {
+        "properties": {
+          "height": {
+            "description": "Length: number = millimetres, or a string with units such as \"3m\", \"300cm\", \"10'\".",
+            "type": [
+              "number",
+              "string"
+            ]
+          },
+          "in_design_option": {
+            "description": "Where the change lands: a design option id (the change goes into that option's layer), or \"shared\" for the shared model. Omitted (or null): the option the user is editing in the Ferro app, else the shared model",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "wall": {
+            "description": "Wall id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "wall",
+          "height"
+        ],
+        "type": "object"
+      },
+      "name": "set_wall_height"
+    },
+    {
+      "description": "Change the type of a wall (wall type) or floor (floor type).",
+      "inputSchema": {
+        "properties": {
+          "element": {
+            "description": "Wall or floor id",
+            "type": "integer"
+          },
+          "element_type": {
+            "description": "Type id",
+            "type": "integer"
+          },
+          "in_design_option": {
+            "description": "Where the change lands: a design option id (the change goes into that option's layer), or \"shared\" for the shared model. Omitted (or null): the option the user is editing in the Ferro app, else the shared model",
+            "type": [
+              "integer",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "element",
+          "element_type"
+        ],
+        "type": "object"
+      },
+      "name": "set_element_type"
+    },
+    {
+      "description": "Create a floor slab from a plan outline: points [x, y] in mm, optional holes. Its top sits at level elevation + offset; it extends down by the type thickness. Returns {element}.",
+      "inputSchema": {
+        "properties": {
+          "floor_type": {
+            "description": "Optional floor type id",
+            "type": "integer"
+          },
+          "holes": {
+            "items": {
+              "items": {
+                "description": "Vertex [x, y, z] (z optional): numbers in millimetres or strings with units (\"3m\"). Z is up, X east, Y north.",
+                "items": {
+                  "type": [
+                    "number",
+                    "string"
+                  ]
+                },
+                "maxItems": 3,
+                "minItems": 2,
+                "type": "array"
+              },
+              "type": "array"
+            },
+            "type": "array"
+          },
+          "in_design_option": {
+            "description": "Where the change lands: a design option id (the change goes into that option's layer), or \"shared\" for the shared model. Omitted (or null): the option the user is editing in the Ferro app, else the shared model",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "level": {
+            "description": "Optional level id",
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "offset": {
+            "description": "Length: number = millimetres, or a string with units such as \"3m\", \"300cm\", \"10'\".",
+            "type": [
+              "number",
+              "string"
+            ]
+          },
+          "points": {
+            "items": {
+              "description": "Vertex (z ignored) [x, y, z] (z optional): numbers in millimetres or strings with units (\"3m\"). Z is up, X east, Y north.",
+              "items": {
+                "type": [
+                  "number",
+                  "string"
+                ]
+              },
+              "maxItems": 3,
+              "minItems": 2,
+              "type": "array"
+            },
+            "minItems": 3,
+            "type": "array"
+          }
+        },
+        "required": [
+          "points"
+        ],
+        "type": "object"
+      },
+      "name": "create_floor"
+    },
+    {
+      "description": "Place a door or window in a straight wall. position = distance from the wall start to the opening centre. Defaults: door 900 × 2100; window 1200 × 1200 with 900 sill. Fails if it does not fit. Returns {element}.",
+      "inputSchema": {
+        "properties": {
+          "height": {
+            "description": "Length: number = millimetres, or a string with units such as \"3m\", \"300cm\", \"10'\".",
+            "type": [
+              "number",
+              "string"
+            ]
+          },
+          "in_design_option": {
+            "description": "Where the change lands: a design option id (the change goes into that option's layer), or \"shared\" for the shared model. Omitted (or null): the option the user is editing in the Ferro app, else the shared model",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "kind": {
+            "enum": [
+              "door",
+              "window"
+            ],
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "position": {
+            "description": "Length: number = millimetres, or a string with units such as \"3m\", \"300cm\", \"10'\".",
+            "type": [
+              "number",
+              "string"
+            ]
+          },
+          "sill": {
+            "description": "Length: number = millimetres, or a string with units such as \"3m\", \"300cm\", \"10'\".",
+            "type": [
+              "number",
+              "string"
+            ]
+          },
+          "wall": {
+            "description": "Host wall id",
+            "type": "integer"
+          },
+          "width": {
+            "description": "Length: number = millimetres, or a string with units such as \"3m\", \"300cm\", \"10'\".",
+            "type": [
+              "number",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "wall",
+          "kind",
+          "position"
+        ],
+        "type": "object"
+      },
+      "name": "create_opening"
+    },
+    {
+      "description": "Change a door or window: position along the wall, width, height, sill. Omitted fields keep their value.",
+      "inputSchema": {
+        "properties": {
+          "height": {
+            "description": "Length: number = millimetres, or a string with units such as \"3m\", \"300cm\", \"10'\".",
+            "type": [
+              "number",
+              "string"
+            ]
+          },
+          "in_design_option": {
+            "description": "Where the change lands: a design option id (the change goes into that option's layer), or \"shared\" for the shared model. Omitted (or null): the option the user is editing in the Ferro app, else the shared model",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "opening": {
+            "description": "Door or window id",
+            "type": "integer"
+          },
+          "position": {
+            "description": "Length: number = millimetres, or a string with units such as \"3m\", \"300cm\", \"10'\".",
+            "type": [
+              "number",
+              "string"
+            ]
+          },
+          "sill": {
+            "description": "Length: number = millimetres, or a string with units such as \"3m\", \"300cm\", \"10'\".",
+            "type": [
+              "number",
+              "string"
+            ]
+          },
+          "width": {
+            "description": "Length: number = millimetres, or a string with units such as \"3m\", \"300cm\", \"10'\".",
+            "type": [
+              "number",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "opening"
+        ],
+        "type": "object"
+      },
+      "name": "set_opening"
+    },
+    {
+      "description": "Change a wall: start + end (+ mid for a curved wall), base_offset, height (fixed top) or top_level (+ top_offset), location_line, join_start / join_end. Walls whose ends meet join automatically (L mitre, T); join_start / join_end = \"disallow\" keeps that end square and unjoined (Revit Disallow Join), \"auto\" allows it again. Omitted fields keep their value.",
+      "inputSchema": {
+        "properties": {
+          "base_offset": {
+            "description": "Length: number = millimetres, or a string with units such as \"3m\", \"300cm\", \"10'\".",
+            "type": [
+              "number",
+              "string"
+            ]
+          },
+          "end": {
+            "description": "End [x, y, z] (z optional): numbers in millimetres or strings with units (\"3m\"). Z is up, X east, Y north.",
+            "items": {
+              "type": [
+                "number",
+                "string"
+              ]
+            },
+            "maxItems": 3,
+            "minItems": 2,
+            "type": "array"
+          },
+          "height": {
+            "description": "Length: number = millimetres, or a string with units such as \"3m\", \"300cm\", \"10'\".",
+            "type": [
+              "number",
+              "string"
+            ]
+          },
+          "in_design_option": {
+            "description": "Where the change lands: a design option id (the change goes into that option's layer), or \"shared\" for the shared model. Omitted (or null): the option the user is editing in the Ferro app, else the shared model",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "join_end": {
+            "description": "Join state at the end",
+            "enum": [
+              "auto",
+              "disallow"
+            ],
+            "type": "string"
+          },
+          "join_start": {
+            "description": "Join state at the start",
+            "enum": [
+              "auto",
+              "disallow"
+            ],
+            "type": "string"
+          },
+          "location_line": {
+            "enum": [
+              "wall_centerline",
+              "core_centerline",
+              "finish_exterior",
+              "finish_interior"
+            ],
+            "type": "string"
+          },
+          "mid": {
+            "description": "Point on the arc (curved walls) [x, y, z] (z optional): numbers in millimetres or strings with units (\"3m\"). Z is up, X east, Y north.",
+            "items": {
+              "type": [
+                "number",
+                "string"
+              ]
+            },
+            "maxItems": 3,
+            "minItems": 2,
+            "type": "array"
+          },
+          "start": {
+            "description": "Start [x, y, z] (z optional): numbers in millimetres or strings with units (\"3m\"). Z is up, X east, Y north.",
+            "items": {
+              "type": [
+                "number",
+                "string"
+              ]
+            },
+            "maxItems": 3,
+            "minItems": 2,
+            "type": "array"
+          },
+          "top_level": {
+            "description": "Level the top attaches to",
+            "type": "integer"
+          },
+          "top_offset": {
+            "description": "Length: number = millimetres, or a string with units such as \"3m\", \"300cm\", \"10'\".",
+            "type": [
+              "number",
+              "string"
+            ]
+          },
+          "wall": {
+            "description": "Wall id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "wall"
+        ],
+        "type": "object"
+      },
+      "name": "set_wall"
+    },
+    {
+      "description": "Change a floor's outline (points [x, y]), holes or offset. Omitted fields keep their value.",
+      "inputSchema": {
+        "properties": {
+          "floor": {
+            "description": "Floor id",
+            "type": "integer"
+          },
+          "holes": {
+            "items": {
+              "items": {
+                "description": "Vertex [x, y, z] (z optional): numbers in millimetres or strings with units (\"3m\"). Z is up, X east, Y north.",
+                "items": {
+                  "type": [
+                    "number",
+                    "string"
+                  ]
+                },
+                "maxItems": 3,
+                "minItems": 2,
+                "type": "array"
+              },
+              "type": "array"
+            },
+            "type": "array"
+          },
+          "in_design_option": {
+            "description": "Where the change lands: a design option id (the change goes into that option's layer), or \"shared\" for the shared model. Omitted (or null): the option the user is editing in the Ferro app, else the shared model",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "offset": {
+            "description": "Length: number = millimetres, or a string with units such as \"3m\", \"300cm\", \"10'\".",
+            "type": [
+              "number",
+              "string"
+            ]
+          },
+          "points": {
+            "items": {
+              "description": "Vertex [x, y, z] (z optional): numbers in millimetres or strings with units (\"3m\"). Z is up, X east, Y north.",
+              "items": {
+                "type": [
+                  "number",
+                  "string"
+                ]
+              },
+              "maxItems": 3,
+              "minItems": 2,
+              "type": "array"
+            },
+            "minItems": 3,
+            "type": "array"
+          }
+        },
+        "required": [
+          "floor"
+        ],
+        "type": "object"
+      },
+      "name": "set_floor"
+    },
+    {
+      "description": "Draw on a face of a Form (lines or a closed shape, points on the face plane): the face splits, like drawing on a face in SketchUp. Returns new_faces, ready for push_pull_face (push in to make a pocket, push to the opposite face to cut a hole).",
+      "inputSchema": {
+        "properties": {
+          "closed": {
+            "type": "boolean"
+          },
+          "element": {
+            "description": "Form id",
+            "type": "integer"
+          },
+          "face": {
+            "description": "Face id",
+            "type": "integer"
+          },
+          "in_design_option": {
+            "description": "Where the change lands: a design option id (the change goes into that option's layer), or \"shared\" for the shared model. Omitted (or null): the option the user is editing in the Ferro app, else the shared model",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "points": {
+            "items": {
+              "description": "Point on the face [x, y, z] (z optional): numbers in millimetres or strings with units (\"3m\"). Z is up, X east, Y north.",
+              "items": {
+                "type": [
+                  "number",
+                  "string"
+                ]
+              },
+              "maxItems": 3,
+              "minItems": 2,
+              "type": "array"
+            },
+            "minItems": 2,
+            "type": "array"
+          }
+        },
+        "required": [
+          "element",
+          "face",
+          "points"
+        ],
+        "type": "object"
+      },
+      "name": "imprint_face"
+    },
+    {
+      "description": "Draw a circle (segments, default 24). With element + face it is drawn on that face; otherwise a new circular face (normal defaults to up). Pulling it gives a smooth cylinder.",
+      "inputSchema": {
+        "properties": {
+          "center": {
+            "description": "Centre [x, y, z] (z optional): numbers in millimetres or strings with units (\"3m\"). Z is up, X east, Y north.",
+            "items": {
+              "type": [
+                "number",
+                "string"
+              ]
+            },
+            "maxItems": 3,
+            "minItems": 2,
+            "type": "array"
+          },
+          "element": {
+            "description": "Form id",
+            "type": "integer"
+          },
+          "face": {
+            "description": "Face id",
+            "type": "integer"
+          },
+          "in_design_option": {
+            "description": "Where the change lands: a design option id (the change goes into that option's layer), or \"shared\" for the shared model. Omitted (or null): the option the user is editing in the Ferro app, else the shared model",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "level": {
+            "description": "Optional level id",
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "normal": {
+            "description": "Normal direction [x, y, z] (z optional): numbers in millimetres or strings with units (\"3m\"). Z is up, X east, Y north.",
+            "items": {
+              "type": [
+                "number",
+                "string"
+              ]
+            },
+            "maxItems": 3,
+            "minItems": 2,
+            "type": "array"
+          },
+          "radius": {
+            "description": "Length: number = millimetres, or a string with units such as \"3m\", \"300cm\", \"10'\".",
+            "type": [
+              "number",
+              "string"
+            ]
+          },
+          "segments": {
+            "maximum": 360,
+            "minimum": 3,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "center",
+          "radius"
+        ],
+        "type": "object"
+      },
+      "name": "create_circle"
+    },
+    {
+      "description": "Offset a face's outline inwards by a distance (SketchUp Offset); the inner copy splits the face.",
+      "inputSchema": {
+        "properties": {
+          "distance": {
+            "description": "Length: number = millimetres, or a string with units such as \"3m\", \"300cm\", \"10'\".",
+            "type": [
+              "number",
+              "string"
+            ]
+          },
+          "element": {
+            "description": "Form id",
+            "type": "integer"
+          },
+          "face": {
+            "description": "Face id",
+            "type": "integer"
+          },
+          "in_design_option": {
+            "description": "Where the change lands: a design option id (the change goes into that option's layer), or \"shared\" for the shared model. Omitted (or null): the option the user is editing in the Ferro app, else the shared model",
+            "type": [
+              "integer",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "element",
+          "face",
+          "distance"
+        ],
+        "type": "object"
+      },
+      "name": "offset_face"
+    },
+    {
+      "description": "Move vertices, edges or faces of a Form (connected faces stretch), e.g. move a top edge sideways to make a sloped roof. Faces must stay flat.",
+      "inputSchema": {
+        "properties": {
+          "edges": {
+            "description": "Edge ids",
+            "items": {
+              "type": "integer"
+            },
+            "type": "array"
+          },
+          "element": {
+            "description": "Form id",
+            "type": "integer"
+          },
+          "faces": {
+            "description": "Face ids",
+            "items": {
+              "type": "integer"
+            },
+            "type": "array"
+          },
+          "in_design_option": {
+            "description": "Where the change lands: a design option id (the change goes into that option's layer), or \"shared\" for the shared model. Omitted (or null): the option the user is editing in the Ferro app, else the shared model",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "vector": {
+            "description": "Displacement [x, y, z] (z optional): numbers in millimetres or strings with units (\"3m\"). Z is up, X east, Y north.",
+            "items": {
+              "type": [
+                "number",
+                "string"
+              ]
+            },
+            "maxItems": 3,
+            "minItems": 2,
+            "type": "array"
+          },
+          "vertices": {
+            "description": "Vertex ids",
+            "items": {
+              "type": "integer"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "element",
+          "vector"
+        ],
+        "type": "object"
+      },
+      "name": "move_geometry"
+    },
+    {
+      "description": "Scale Forms about a centre: factor (uniform) or factors [x, y, z].",
+      "inputSchema": {
+        "properties": {
+          "center": {
+            "description": "Centre [x, y, z] (z optional): numbers in millimetres or strings with units (\"3m\"). Z is up, X east, Y north.",
+            "items": {
+              "type": [
+                "number",
+                "string"
+              ]
+            },
+            "maxItems": 3,
+            "minItems": 2,
+            "type": "array"
+          },
+          "elements": {
+            "description": "Form ids",
+            "items": {
+              "type": "integer"
+            },
+            "type": "array"
+          },
+          "factor": {
+            "type": "number"
+          },
+          "factors": {
+            "items": {
+              "type": "number"
+            },
+            "maxItems": 3,
+            "minItems": 3,
+            "type": "array"
+          },
+          "in_design_option": {
+            "description": "Where the change lands: a design option id (the change goes into that option's layer), or \"shared\" for the shared model. Omitted (or null): the option the user is editing in the Ferro app, else the shared model",
+            "type": [
+              "integer",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "elements",
+          "center"
+        ],
+        "type": "object"
+      },
+      "name": "scale_elements"
+    },
+    {
+      "description": "Erase edges of a Form: an edge between faces in one plane merges them; other edges remove their faces.",
+      "inputSchema": {
+        "properties": {
+          "edges": {
+            "description": "Edge ids",
+            "items": {
+              "type": "integer"
+            },
+            "type": "array"
+          },
+          "element": {
+            "description": "Form id",
+            "type": "integer"
+          },
+          "in_design_option": {
+            "description": "Where the change lands: a design option id (the change goes into that option's layer), or \"shared\" for the shared model. Omitted (or null): the option the user is editing in the Ferro app, else the shared model",
+            "type": [
+              "integer",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "element",
+          "edges"
+        ],
+        "type": "object"
+      },
+      "name": "erase_edges"
+    },
+    {
+      "description": "Erase faces of a Form (it becomes open); erasing all faces deletes it.",
+      "inputSchema": {
+        "properties": {
+          "element": {
+            "description": "Form id",
+            "type": "integer"
+          },
+          "faces": {
+            "description": "Face ids",
+            "items": {
+              "type": "integer"
+            },
+            "type": "array"
+          },
+          "in_design_option": {
+            "description": "Where the change lands: a design option id (the change goes into that option's layer), or \"shared\" for the shared model. Omitted (or null): the option the user is editing in the Ferro app, else the shared model",
+            "type": [
+              "integer",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "element",
+          "faces"
+        ],
+        "type": "object"
+      },
+      "name": "erase_faces"
+    },
+    {
+      "description": "Cut one Form out of another (solid boolean difference): the target becomes target minus cutter, e.g. a box pushed into a wall makes a niche or an opening. Both must be closed solids with flat faces. The cutter is deleted unless keep_cutter is true. Faces of the target that survive keep their ids; returns lineage (kept / created / deleted faces) and faces (each result face with the input faces it came from: from_a = target, from_b = cutter). Fails with ferro.kernel.empty_result when nothing is left, ferro.kernel.unavailable when no geometry kernel is attached.",
+      "inputSchema": {
+        "properties": {
+          "cutter": {
+            "description": "Form to cut away",
+            "type": "integer"
+          },
+          "in_design_option": {
+            "description": "Where the change lands: a design option id (the change goes into that option's layer), or \"shared\" for the shared model. Omitted (or null): the option the user is editing in the Ferro app, else the shared model",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "keep_cutter": {
+            "description": "Keep the cutter Form (default false: it is deleted)",
+            "type": "boolean"
+          },
+          "target": {
+            "description": "Form to cut",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "target",
+          "cutter"
+        ],
+        "type": "object"
+      },
+      "name": "subtract_forms"
+    },
+    {
+      "description": "Unite two Forms (solid boolean union): the target becomes target plus other, in one body (several shells when they do not touch). Both must be closed solids with flat faces. The other Form is deleted unless keep_other is true. Faces of the target that survive keep their ids; returns lineage and faces (from_a = target, from_b = other). Fails with ferro.kernel.non_manifold_result when they touch only along an edge, ferro.kernel.unavailable when no geometry kernel is attached.",
+      "inputSchema": {
+        "properties": {
+          "in_design_option": {
+            "description": "Where the change lands: a design option id (the change goes into that option's layer), or \"shared\" for the shared model. Omitted (or null): the option the user is editing in the Ferro app, else the shared model",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "keep_other": {
+            "description": "Keep the other Form (default false: it is deleted)",
+            "type": "boolean"
+          },
+          "other": {
+            "description": "Form to add",
+            "type": "integer"
+          },
+          "target": {
+            "description": "Form to grow",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "target",
+          "other"
+        ],
+        "type": "object"
+      },
+      "name": "unite_forms"
+    },
+    {
+      "description": "Intersect two Forms (solid boolean intersection): the target becomes what lies in both. Both must be closed solids with flat faces. The other Form is deleted unless keep_other is true. Returns lineage and faces as unite_forms. Fails with ferro.kernel.empty_result when they do not overlap.",
+      "inputSchema": {
+        "properties": {
+          "in_design_option": {
+            "description": "Where the change lands: a design option id (the change goes into that option's layer), or \"shared\" for the shared model. Omitted (or null): the option the user is editing in the Ferro app, else the shared model",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "keep_other": {
+            "description": "Keep the other Form (default false: it is deleted)",
+            "type": "boolean"
+          },
+          "other": {
+            "description": "Form to intersect with",
+            "type": "integer"
+          },
+          "target": {
+            "description": "Form to trim",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "target",
+          "other"
+        ],
+        "type": "object"
+      },
+      "name": "intersect_forms"
+    },
+    {
+      "description": "Create a construction phase (Revit Phase), appended at the end or inserted before `before`. Phases are ordered; elements are created / demolished in phases. Dates are YYYY-MM-DD. Returns {element, phases}.",
+      "inputSchema": {
+        "properties": {
+          "before": {
+            "description": "Optional phase to insert before",
+            "type": "integer"
+          },
+          "end_date": {
+            "description": "YYYY-MM-DD",
+            "type": "string"
+          },
+          "in_design_option": {
+            "description": "Where the change lands: a design option id (the change goes into that option's layer), or \"shared\" for the shared model. Omitted (or null): the option the user is editing in the Ferro app, else the shared model",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "name": {
+            "type": "string"
+          },
+          "start_date": {
+            "description": "YYYY-MM-DD",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "type": "object"
+      },
+      "name": "create_phase"
+    },
+    {
+      "description": "Rename a phase, move it to `position` (0 = first) or change its dates (\"\" clears a date). Fails with ferro.model.invalid_phase_order if some element would be demolished before it is created.",
+      "inputSchema": {
+        "properties": {
+          "end_date": {
+            "type": "string"
+          },
+          "in_design_option": {
+            "description": "Where the change lands: a design option id (the change goes into that option's layer), or \"shared\" for the shared model. Omitted (or null): the option the user is editing in the Ferro app, else the shared model",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "name": {
+            "type": "string"
+          },
+          "phase": {
+            "description": "Phase id",
+            "type": "integer"
+          },
+          "position": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "start_date": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "phase"
+        ],
+        "type": "object"
+      },
+      "name": "set_phase"
+    },
+    {
+      "description": "Delete a phase. A phase used by elements needs `merge_into`: the phase just before or after it, which its elements then use (Revit: combine with previous / next).",
+      "inputSchema": {
+        "properties": {
+          "in_design_option": {
+            "description": "Where the change lands: a design option id (the change goes into that option's layer), or \"shared\" for the shared model. Omitted (or null): the option the user is editing in the Ferro app, else the shared model",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "merge_into": {
+            "description": "Neighbouring phase that takes over its elements",
+            "type": "integer"
+          },
+          "phase": {
+            "description": "Phase id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "phase"
+        ],
+        "type": "object"
+      },
+      "name": "delete_phase"
+    },
+    {
+      "description": "Set the phase elements are created in and / or demolished in (Revit Phase Created / Phase Demolished). Omit a field to keep it, null clears it. Demolished must be the same phase as created or later. Elements without a created phase count as existing in every phase.",
+      "inputSchema": {
+        "properties": {
+          "created": {
+            "description": "Phase id",
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "demolished": {
+            "description": "Phase id",
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "elements": {
+            "description": "Element ids (walls, floors, doors, windows, Forms)",
+            "items": {
+              "type": "integer"
+            },
+            "type": "array"
+          },
+          "in_design_option": {
+            "description": "Where the change lands: a design option id (the change goes into that option's layer), or \"shared\" for the shared model. Omitted (or null): the option the user is editing in the Ferro app, else the shared model",
+            "type": [
+              "integer",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "elements"
+        ],
+        "type": "object"
+      },
+      "name": "set_element_phase"
+    },
+    {
+      "description": "Simple renovation mode (ArchiCAD-like): mark elements existing, to be demolished, or new. Uses the first and last phase; creates \"Existing\" and \"New Construction\" if the project has fewer than two phases.",
+      "inputSchema": {
+        "properties": {
+          "elements": {
+            "description": "Element ids",
+            "items": {
+              "type": "integer"
+            },
+            "type": "array"
+          },
+          "in_design_option": {
+            "description": "Where the change lands: a design option id (the change goes into that option's layer), or \"shared\" for the shared model. Omitted (or null): the option the user is editing in the Ferro app, else the shared model",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "status": {
+            "enum": [
+              "existing",
+              "demolish",
+              "new"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "elements",
+          "status"
+        ],
+        "type": "object"
+      },
+      "name": "set_renovation_status"
+    },
+    {
+      "description": "Quantities in the view of a phase, per category split by status (existing / new / demolished / temporary): count, volume (m³) and area (m²; floors plan area, walls gross length × height). The basis for demolition and new-build costs. A cut relationship made in a phase (an opening in an existing wall) counts the removed part as demolished volume in that phase; before it the element is uncut. `phase` defaults to the last phase.",
+      "inputSchema": {
+        "properties": {
+          "phase": {
+            "description": "Phase id (default: last phase)",
+            "type": "integer"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "name": "get_phase_quantities"
+    },
+    {
+      "description": "Link elements with a relationship row (stored as data, saved, undoable). Order of `elements` by kind: join [first, second] (Revit Join Geometry between walls, floors and Forms: first wins where they overlap, second shows its body minus first's, regenerated through the kernel; between two walls whose ends meet it makes a butt corner where first runs through), cut [cutter, cut] (non-destructive void: the cut element, a wall, floor or Form, shows its body minus the cutter's, regenerated when either changes; a Form used only as a cutter becomes a hidden void), host [host, hosted], attach [attached, target], bounds [space, boundary], connect [a, b], aggregate [whole, part, ...]. Only elements with geometry. `phase`: the phase it is made in. Returns {relationship: uid}. Fails with ferro.model.invalid_relationship, missing_element or duplicate_relationship.",
+      "inputSchema": {
+        "properties": {
+          "elements": {
+            "description": "Element ids, ordered as the kind says",
+            "items": {
+              "type": "integer"
+            },
+            "type": "array"
+          },
+          "in_design_option": {
+            "description": "Where the change lands: a design option id (the change goes into that option's layer), or \"shared\" for the shared model. Omitted (or null): the option the user is editing in the Ferro app, else the shared model",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "kind": {
+            "enum": [
+              "join",
+              "cut",
+              "host",
+              "attach",
+              "bounds",
+              "connect",
+              "aggregate"
+            ],
+            "type": "string"
+          },
+          "phase": {
+            "description": "Optional phase id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "kind",
+          "elements"
+        ],
+        "type": "object"
+      },
+      "name": "create_relationship"
+    },
+    {
+      "description": "Remove a relationship row by uid; the elements stay. Deleting an element removes its rows automatically.",
+      "inputSchema": {
+        "properties": {
+          "in_design_option": {
+            "description": "Where the change lands: a design option id (the change goes into that option's layer), or \"shared\" for the shared model. Omitted (or null): the option the user is editing in the Ferro app, else the shared model",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "relationship": {
+            "description": "Relationship uid (from create_relationship or list_relationships)",
+            "type": "string"
+          }
+        },
+        "required": [
+          "relationship"
+        ],
+        "type": "object"
+      },
+      "name": "delete_relationship"
+    },
+    {
+      "description": "Change a relationship row in place (its uid stays): `elements` replaces the linked elements, or `reverse: true` swaps a two-element row; for a join that is Revit's Switch Join Order (the other element wins). Returns {relationship, elements}. Fails with ferro.model.invalid_uid, missing_relationship, invalid_relationship, missing_element or duplicate_relationship.",
+      "inputSchema": {
+        "properties": {
+          "elements": {
+            "description": "New element ids, ordered as the kind says",
+            "items": {
+              "type": "integer"
+            },
+            "type": "array"
+          },
+          "in_design_option": {
+            "description": "Where the change lands: a design option id (the change goes into that option's layer), or \"shared\" for the shared model. Omitted (or null): the option the user is editing in the Ferro app, else the shared model",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "relationship": {
+            "description": "Relationship uid",
+            "type": "string"
+          },
+          "reverse": {
+            "description": "Swap the two elements (Switch Join Order)",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "relationship"
+        ],
+        "type": "object"
+      },
+      "name": "set_relationship"
+    },
+    {
+      "description": "Create a design option set (Revit Option Set) with its first option \"Option 1\" (primary, empty). Options are alternatives shown one per set; each is a layer of changes over the shared model. Returns {element: set, option}.",
+      "inputSchema": {
+        "properties": {
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "type": "object"
+      },
+      "name": "create_option_set"
+    },
+    {
+      "description": "Rename an option set or move it to `position` (0 = first). Layers of a combination apply in set order.",
+      "inputSchema": {
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "position": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "set": {
+            "description": "Option set id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "set"
+        ],
+        "type": "object"
+      },
+      "name": "set_option_set"
+    },
+    {
+      "description": "Delete an option set with all its options (their layers stop being shown; the shared model is unchanged).",
+      "inputSchema": {
+        "properties": {
+          "set": {
+            "description": "Option set id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "set"
+        ],
+        "type": "object"
+      },
+      "name": "delete_option_set"
+    },
+    {
+      "description": "Add an option to a set: empty, or a copy of `copy_from`'s layer. Primary only if the set has no other open option. To fill it, run any command with `in_design_option` set to its id. Returns {element, is_primary}.",
+      "inputSchema": {
+        "properties": {
+          "copy_from": {
+            "description": "Option whose layer to copy",
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "set": {
+            "description": "Option set id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "set"
+        ],
+        "type": "object"
+      },
+      "name": "create_design_option"
+    },
+    {
+      "description": "Edit an open design option: rename, make it primary (is_primary: true), or replace its layer (`changes`, checked against the shared model; usually easier: run commands with `in_design_option`). Change list: [{\"op\": \"set\", \"path\": \"/elements/<uid>/name\", \"value\": ...} | {\"op\": \"remove\", \"path\": \"/elements/<uid>\"}]; paths are JSON pointers into {project, elements: {uid: element}, relationships: {uid: row}}, references between elements are uids.",
+      "inputSchema": {
+        "properties": {
+          "changes": {
+            "description": "Change list: [{\"op\": \"set\", \"path\": \"/elements/<uid>/name\", \"value\": ...} | {\"op\": \"remove\", \"path\": \"/elements/<uid>\"}]; paths are JSON pointers into {project, elements: {uid: element}, relationships: {uid: row}}, references between elements are uids.",
+            "items": {
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "is_primary": {
+            "type": "boolean"
+          },
+          "name": {
+            "type": "string"
+          },
+          "option": {
+            "description": "Design option id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "option"
+        ],
+        "type": "object"
+      },
+      "name": "set_design_option"
+    },
+    {
+      "description": "Delete a design option and its layer. The primary option cannot be deleted (make another primary first).",
+      "inputSchema": {
+        "properties": {
+          "option": {
+            "description": "Design option id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "option"
+        ],
+        "type": "object"
+      },
+      "name": "delete_design_option"
+    },
+    {
+      "description": "Accept a design option: merge its layer into the shared model (like merging a branch). The other options of its set are archived (kept, not deleted). Returns {accepted, archived}.",
+      "inputSchema": {
+        "properties": {
+          "option": {
+            "description": "Design option id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "option"
+        ],
+        "type": "object"
+      },
+      "name": "accept_design_option"
+    },
+    {
+      "description": "Apply a change list to the document, all or nothing (e.g. from diff_documents). Change list: [{\"op\": \"set\", \"path\": \"/elements/<uid>/name\", \"value\": ...} | {\"op\": \"remove\", \"path\": \"/elements/<uid>\"}]; paths are JSON pointers into {project, elements: {uid: element}, relationships: {uid: row}}, references between elements are uids.",
+      "inputSchema": {
+        "properties": {
+          "changes": {
+            "description": "Change list: [{\"op\": \"set\", \"path\": \"/elements/<uid>/name\", \"value\": ...} | {\"op\": \"remove\", \"path\": \"/elements/<uid>\"}]; paths are JSON pointers into {project, elements: {uid: element}, relationships: {uid: row}}, references between elements are uids.",
+            "items": {
+              "type": "object"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "changes"
+        ],
+        "type": "object"
+      },
+      "name": "apply_changes"
+    },
+    {
+      "description": "Option sets in order with their options: id, name, primary, status (open / accepted / archived), what each layer adds / removes / overrides, and failures (layers that no longer apply, conflicts in the primary combination).",
+      "inputSchema": {
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "name": "list_design_options"
+    },
+    {
+      "description": "Change list from one view of the open document to another, e.g. what option B changes compared with the primary combination. Feed it to apply_changes to reproduce it.",
+      "inputSchema": {
+        "properties": {
+          "from": {
+            "description": "From (default \"shared\"): \"shared\" (the shared model, no option layers), [] (primary combination), or option ids (one per option set; other sets show their primary)",
+            "items": {
+              "type": "integer"
+            },
+            "type": [
+              "array",
+              "string"
+            ]
+          },
+          "to": {
+            "description": "To (default [] = primary combination): \"shared\" (the shared model, no option layers), [] (primary combination), or option ids (one per option set; other sets show their primary)",
+            "items": {
+              "type": "integer"
+            },
+            "type": [
+              "array",
+              "string"
+            ]
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "name": "diff_documents"
+    },
+    {
+      "description": "Relationship rows, all or those linking `element`: [{relationship, kind, elements, phase}].",
+      "inputSchema": {
+        "properties": {
+          "element": {
+            "description": "Optional element id",
+            "type": "integer"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "name": "list_relationships"
+    },
+    {
+      "description": "Create a view (Revit View): `view_3d` (camera, optional section plane / section box), `plan_view` (needs `level`; cut at view_range.cut_height above it, default 1200 mm) or `section_view` (needs `section_plane`; shows `depth` beyond it, default 10 m). View names are unique. A view keeps camera, display style, hidden elements / tags and its phase; the Ferro app shows the active view. Returns {element}.",
+      "inputSchema": {
+        "properties": {
+          "camera": {
+            "description": "Camera; points in mm",
+            "properties": {
+              "eye": {
+                "description": "Camera position [x, y, z] (z optional): numbers in millimetres or strings with units (\"3m\"). Z is up, X east, Y north.",
+                "items": {
+                  "type": [
+                    "number",
+                    "string"
+                  ]
+                },
+                "maxItems": 3,
+                "minItems": 2,
+                "type": "array"
+              },
+              "fov_y": {
+                "description": "Vertical field of view, degrees (default 45)",
+                "type": [
+                  "number",
+                  "string"
+                ]
+              },
+              "projection": {
+                "enum": [
+                  "perspective",
+                  "parallel"
+                ],
+                "type": "string"
+              },
+              "target": {
+                "description": "Point looked at [x, y, z] (z optional): numbers in millimetres or strings with units (\"3m\"). Z is up, X east, Y north.",
+                "items": {
+                  "type": [
+                    "number",
+                    "string"
+                  ]
+                },
+                "maxItems": 3,
+                "minItems": 2,
+                "type": "array"
+              },
+              "up": {
+                "description": "Up direction [x, y, z] (z optional): numbers in millimetres or strings with units (\"3m\"). Z is up, X east, Y north.",
+                "items": {
+                  "type": [
+                    "number",
+                    "string"
+                  ]
+                },
+                "maxItems": 3,
+                "minItems": 2,
+                "type": "array"
+              }
+            },
+            "required": [
+              "eye",
+              "target",
+              "up"
+            ],
+            "type": "object"
+          },
+          "depth": {
+            "description": "Length: number = millimetres, or a string with units such as \"3m\", \"300cm\", \"10'\".",
+            "type": [
+              "number",
+              "string"
+            ]
+          },
+          "display_style": {
+            "enum": [
+              "shaded",
+              "x_ray",
+              "wireframe",
+              "hidden_line"
+            ],
+            "type": "string"
+          },
+          "in_design_option": {
+            "description": "Where the change lands: a design option id (the change goes into that option's layer), or \"shared\" for the shared model. Omitted (or null): the option the user is editing in the Ferro app, else the shared model",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "level": {
+            "description": "Level of a plan view",
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "phase": {
+            "description": "Phase shown by the view (null = the last phase)",
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "phase_filter": {
+            "description": "Revit phase filter: which statuses are shown and with status graphics (default show_all)",
+            "enum": [
+              "show_all",
+              "show_complete",
+              "show_new",
+              "show_previous_and_demo",
+              "show_previous_and_new",
+              "show_demo_and_new",
+              "no_overrides"
+            ],
+            "type": "string"
+          },
+          "section_box": {
+            "description": "3D views: only what is inside is drawn (stored; not drawn by the app yet)",
+            "properties": {
+              "max": {
+                "description": "Highest corner [x, y, z] (z optional): numbers in millimetres or strings with units (\"3m\"). Z is up, X east, Y north.",
+                "items": {
+                  "type": [
+                    "number",
+                    "string"
+                  ]
+                },
+                "maxItems": 3,
+                "minItems": 2,
+                "type": "array"
+              },
+              "min": {
+                "description": "Lowest corner [x, y, z] (z optional): numbers in millimetres or strings with units (\"3m\"). Z is up, X east, Y north.",
+                "items": {
+                  "type": [
+                    "number",
+                    "string"
+                  ]
+                },
+                "maxItems": 3,
+                "minItems": 2,
+                "type": "array"
+              }
+            },
+            "required": [
+              "min",
+              "max"
+            ],
+            "type": [
+              "object",
+              "null"
+            ]
+          },
+          "section_plane": {
+            "description": "Cutting plane: geometry on the side the normal points to is not drawn",
+            "properties": {
+              "normal": {
+                "description": "Normal of the side cut away [x, y, z] (z optional): numbers in millimetres or strings with units (\"3m\"). Z is up, X east, Y north.",
+                "items": {
+                  "type": [
+                    "number",
+                    "string"
+                  ]
+                },
+                "maxItems": 3,
+                "minItems": 2,
+                "type": "array"
+              },
+              "point": {
+                "description": "A point on the plane [x, y, z] (z optional): numbers in millimetres or strings with units (\"3m\"). Z is up, X east, Y north.",
+                "items": {
+                  "type": [
+                    "number",
+                    "string"
+                  ]
+                },
+                "maxItems": 3,
+                "minItems": 2,
+                "type": "array"
+              }
+            },
+            "required": [
+              "point",
+              "normal"
+            ],
+            "type": [
+              "object",
+              "null"
+            ]
+          },
+          "view_range": {
+            "description": "Plan views (Revit View Range), offsets from the level; view_depth ≤ bottom ≤ cut_height ≤ top",
+            "properties": {
+              "bottom": {
+                "description": "Length: number = millimetres, or a string with units such as \"3m\", \"300cm\", \"10'\".",
+                "type": [
+                  "number",
+                  "string"
+                ]
+              },
+              "cut_height": {
+                "description": "Length: number = millimetres, or a string with units such as \"3m\", \"300cm\", \"10'\".",
+                "type": [
+                  "number",
+                  "string"
+                ]
+              },
+              "top": {
+                "description": "Length: number = millimetres, or a string with units such as \"3m\", \"300cm\", \"10'\".",
+                "type": [
+                  "number",
+                  "string"
+                ]
+              },
+              "view_depth": {
+                "description": "Length: number = millimetres, or a string with units such as \"3m\", \"300cm\", \"10'\".",
+                "type": [
+                  "number",
+                  "string"
+                ]
+              }
+            },
+            "required": [
+              "top",
+              "cut_height",
+              "bottom",
+              "view_depth"
+            ],
+            "type": "object"
+          },
+          "view_type": {
+            "enum": [
+              "view_3d",
+              "plan_view",
+              "section_view"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "view_type"
+        ],
+        "type": "object"
+      },
+      "name": "create_view"
+    },
+    {
+      "description": "Change a view. Omit a field to keep it. `section_plane`, `section_box` and `phase` accept null to clear (a section view keeps its plane). `hide` / `unhide` add / remove elements from the view's hidden list (`unhide_all` empties it first); `hidden_tags` replaces the tags hidden in the view. Deleting an element removes it from every view.",
+      "inputSchema": {
+        "properties": {
+          "camera": {
+            "description": "Camera; points in mm",
+            "properties": {
+              "eye": {
+                "description": "Camera position [x, y, z] (z optional): numbers in millimetres or strings with units (\"3m\"). Z is up, X east, Y north.",
+                "items": {
+                  "type": [
+                    "number",
+                    "string"
+                  ]
+                },
+                "maxItems": 3,
+                "minItems": 2,
+                "type": "array"
+              },
+              "fov_y": {
+                "description": "Vertical field of view, degrees (default 45)",
+                "type": [
+                  "number",
+                  "string"
+                ]
+              },
+              "projection": {
+                "enum": [
+                  "perspective",
+                  "parallel"
+                ],
+                "type": "string"
+              },
+              "target": {
+                "description": "Point looked at [x, y, z] (z optional): numbers in millimetres or strings with units (\"3m\"). Z is up, X east, Y north.",
+                "items": {
+                  "type": [
+                    "number",
+                    "string"
+                  ]
+                },
+                "maxItems": 3,
+                "minItems": 2,
+                "type": "array"
+              },
+              "up": {
+                "description": "Up direction [x, y, z] (z optional): numbers in millimetres or strings with units (\"3m\"). Z is up, X east, Y north.",
+                "items": {
+                  "type": [
+                    "number",
+                    "string"
+                  ]
+                },
+                "maxItems": 3,
+                "minItems": 2,
+                "type": "array"
+              }
+            },
+            "required": [
+              "eye",
+              "target",
+              "up"
+            ],
+            "type": "object"
+          },
+          "depth": {
+            "description": "Length: number = millimetres, or a string with units such as \"3m\", \"300cm\", \"10'\".",
+            "type": [
+              "number",
+              "string"
+            ]
+          },
+          "display_style": {
+            "enum": [
+              "shaded",
+              "x_ray",
+              "wireframe",
+              "hidden_line"
+            ],
+            "type": "string"
+          },
+          "hidden_tags": {
+            "description": "Tags whose elements are not shown",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "hide": {
+            "description": "Elements to hide in the view",
+            "items": {
+              "type": "integer"
+            },
+            "type": "array"
+          },
+          "in_design_option": {
+            "description": "Where the change lands: a design option id (the change goes into that option's layer), or \"shared\" for the shared model. Omitted (or null): the option the user is editing in the Ferro app, else the shared model",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "name": {
+            "type": "string"
+          },
+          "phase": {
+            "description": "Phase shown by the view (null = the last phase)",
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "phase_filter": {
+            "description": "Revit phase filter: which statuses are shown and with status graphics (default show_all)",
+            "enum": [
+              "show_all",
+              "show_complete",
+              "show_new",
+              "show_previous_and_demo",
+              "show_previous_and_new",
+              "show_demo_and_new",
+              "no_overrides"
+            ],
+            "type": "string"
+          },
+          "section_box": {
+            "description": "3D views: only what is inside is drawn (stored; not drawn by the app yet)",
+            "properties": {
+              "max": {
+                "description": "Highest corner [x, y, z] (z optional): numbers in millimetres or strings with units (\"3m\"). Z is up, X east, Y north.",
+                "items": {
+                  "type": [
+                    "number",
+                    "string"
+                  ]
+                },
+                "maxItems": 3,
+                "minItems": 2,
+                "type": "array"
+              },
+              "min": {
+                "description": "Lowest corner [x, y, z] (z optional): numbers in millimetres or strings with units (\"3m\"). Z is up, X east, Y north.",
+                "items": {
+                  "type": [
+                    "number",
+                    "string"
+                  ]
+                },
+                "maxItems": 3,
+                "minItems": 2,
+                "type": "array"
+              }
+            },
+            "required": [
+              "min",
+              "max"
+            ],
+            "type": [
+              "object",
+              "null"
+            ]
+          },
+          "section_plane": {
+            "description": "Cutting plane: geometry on the side the normal points to is not drawn",
+            "properties": {
+              "normal": {
+                "description": "Normal of the side cut away [x, y, z] (z optional): numbers in millimetres or strings with units (\"3m\"). Z is up, X east, Y north.",
+                "items": {
+                  "type": [
+                    "number",
+                    "string"
+                  ]
+                },
+                "maxItems": 3,
+                "minItems": 2,
+                "type": "array"
+              },
+              "point": {
+                "description": "A point on the plane [x, y, z] (z optional): numbers in millimetres or strings with units (\"3m\"). Z is up, X east, Y north.",
+                "items": {
+                  "type": [
+                    "number",
+                    "string"
+                  ]
+                },
+                "maxItems": 3,
+                "minItems": 2,
+                "type": "array"
+              }
+            },
+            "required": [
+              "point",
+              "normal"
+            ],
+            "type": [
+              "object",
+              "null"
+            ]
+          },
+          "unhide": {
+            "description": "Elements to show again",
+            "items": {
+              "type": "integer"
+            },
+            "type": "array"
+          },
+          "unhide_all": {
+            "type": "boolean"
+          },
+          "view": {
+            "description": "View id",
+            "type": "integer"
+          },
+          "view_range": {
+            "description": "Plan views (Revit View Range), offsets from the level; view_depth ≤ bottom ≤ cut_height ≤ top",
+            "properties": {
+              "bottom": {
+                "description": "Length: number = millimetres, or a string with units such as \"3m\", \"300cm\", \"10'\".",
+                "type": [
+                  "number",
+                  "string"
+                ]
+              },
+              "cut_height": {
+                "description": "Length: number = millimetres, or a string with units such as \"3m\", \"300cm\", \"10'\".",
+                "type": [
+                  "number",
+                  "string"
+                ]
+              },
+              "top": {
+                "description": "Length: number = millimetres, or a string with units such as \"3m\", \"300cm\", \"10'\".",
+                "type": [
+                  "number",
+                  "string"
+                ]
+              },
+              "view_depth": {
+                "description": "Length: number = millimetres, or a string with units such as \"3m\", \"300cm\", \"10'\".",
+                "type": [
+                  "number",
+                  "string"
+                ]
+              }
+            },
+            "required": [
+              "top",
+              "cut_height",
+              "bottom",
+              "view_depth"
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "view"
+        ],
+        "type": "object"
+      },
+      "name": "set_view"
+    },
+    {
+      "description": "Delete a view (deleting a level also deletes its plan views).",
+      "inputSchema": {
+        "properties": {
+          "in_design_option": {
+            "description": "Where the change lands: a design option id (the change goes into that option's layer), or \"shared\" for the shared model. Omitted (or null): the option the user is editing in the Ferro app, else the shared model",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "view": {
+            "description": "View id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "view"
+        ],
+        "type": "object"
+      },
+      "name": "delete_view"
+    },
+    {
+      "description": "Elements the user has selected in the Ferro app, with their summaries. Use it for requests like \"make the selected wall taller\".",
+      "inputSchema": {
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "name": "get_selection"
+    },
+    {
+      "description": "Select elements in the Ferro app so the user sees what you mean.",
+      "inputSchema": {
+        "properties": {
+          "elements": {
+            "description": "Element ids (empty clears)",
+            "items": {
+              "type": "integer"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "elements"
+        ],
+        "type": "object"
+      },
+      "name": "select_elements"
+    },
+    {
+      "description": "Version number of the open document; it increases with every change. Revit polls it to pull changes live.",
+      "inputSchema": {
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "name": "get_document_version"
+    },
+    {
+      "description": "Ferro → Revit: the operations (in feet) that bring a Revit model up to date. `state` lists the Revit elements already tagged with Ferro uids and their signatures.",
+      "inputSchema": {
+        "properties": {
+          "state": {
+            "description": "{elements: [{ferro_uid, unique_id, signature}]}",
+            "type": "object"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "name": "revit_plan"
+    },
+    {
+      "description": "Revit → Ferro: apply a snapshot of the Revit model (levels, types, walls, floors, doors, windows; lengths in feet). Returns the Ferro uids of created elements.",
+      "inputSchema": {
+        "properties": {
+          "snapshot": {
+            "type": "object"
+          }
+        },
+        "required": [
+          "snapshot"
+        ],
+        "type": "object"
+      },
+      "name": "revit_import"
+    },
+    {
+      "description": "Summarise the model: id, uid, name, category, level, faces, area (m²), volume (m³). Optional category filter. `combination` shows the model as seen with design options (elements added by an option carry design_option).",
+      "inputSchema": {
+        "properties": {
+          "category": {
+            "type": "string"
+          },
+          "combination": {
+            "description": "Optional view (default: the shared model): \"shared\" (the shared model, no option layers), [] (primary combination), or option ids (one per option set; other sets show their primary)",
+            "items": {
+              "type": "integer"
+            },
+            "type": [
+              "array",
+              "string"
+            ]
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "name": "list_elements"
+    },
+    {
+      "description": "Full detail of one element, including each face id with its normal, area and centre (use for push_pull_face).",
+      "inputSchema": {
+        "properties": {
+          "element": {
+            "description": "Element id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "element"
+        ],
+        "type": "object"
+      },
+      "name": "get_element"
+    },
+    {
+      "description": "Undo the last change.",
+      "inputSchema": {
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "name": "undo"
+    },
+    {
+      "description": "Redo the last undone change.",
+      "inputSchema": {
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "name": "redo"
+    },
+    {
+      "description": "Recent history: who changed what, with which commands.",
+      "inputSchema": {
+        "properties": {
+          "limit": {
+            "type": "integer"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "name": "get_journal"
+    },
+    {
+      "description": "Start a new empty project.",
+      "inputSchema": {
+        "properties": {
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "name": "new_document"
+    },
+    {
+      "description": "Open a .fro or .fro.json file.",
+      "inputSchema": {
+        "properties": {
+          "path": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "path"
+        ],
+        "type": "object"
+      },
+      "name": "open_document"
+    },
+    {
+      "description": "Save to .fro (SQLite) or .fro.json. Without path, saves to the opened file.",
+      "inputSchema": {
+        "properties": {
+          "path": {
+            "type": "string"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "name": "save_document"
+    },
+    {
+      "description": "Export the model geometry to Wavefront OBJ (Y-up, metres).",
+      "inputSchema": {
+        "properties": {
+          "path": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "path"
+        ],
+        "type": "object"
+      },
+      "name": "export_obj"
+    },
+    {
+      "description": "Export the model geometry to binary glTF (Y-up, metres).",
+      "inputSchema": {
+        "properties": {
+          "path": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "path"
+        ],
+        "type": "object"
+      },
+      "name": "export_glb"
+    },
+    {
+      "description": "Export to IFC4 (walls, slabs, doors, windows with openings, types with material layers, storeys, base quantities; millimetres).",
+      "inputSchema": {
+        "properties": {
+          "path": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "path"
+        ],
+        "type": "object"
+      },
+      "name": "export_ifc"
+    },
+    {
+      "description": "Run a Python script against the open document in ONE step: all its changes are one transaction group (all or nothing, one undo step; for agents one proposal the user accepts or rejects). Use it instead of many single tool calls. The script runs in the user's python3 with the `ferro` SDK: `doc` (ferro.Document) and `tools` (one function per Ferro tool, same names and arguments) are predefined, e.g. `walls = doc.create_walls([(0, 0), (\"8m\", 0), (\"8m\", \"6m\"), (0, \"6m\")], closed=True, height=\"3m\")`. Set a variable `result` to return JSON data. An uncaught exception or a non-zero exit rolls everything back (ferro.python.failed, traceback in stderr); running past timeout_s kills it and rolls back (ferro.python.timeout). `with doc.transaction(\"name\"):` makes a block all or nothing inside the script. With in_design_option the changes go into that design option, not the shared model. The user, or you, can stop a running script with cancel_python (ferro.python.cancelled, rolled back). Returns {ok, stdout, stderr (64 KB each at most), result, changed: [element ids], failures}.",
+      "inputSchema": {
+        "properties": {
+          "code": {
+            "description": "Python 3 source. `doc`, `tools` and `ferro` are predefined; lengths in mm or strings with units (\"3m\").",
+            "type": "string"
+          },
+          "in_design_option": {
+            "description": "Where the script's changes land: a design option id (every change goes into that option's layer; a call may still name its own in_design_option), or \"shared\" for the shared model. Omitted (or null): the option the user is editing in the Ferro app, else the shared model.",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "timeout_s": {
+            "description": "Time limit in seconds (default 30, at most 300).",
+            "type": "number"
+          }
+        },
+        "required": [
+          "code"
+        ],
+        "type": "object"
+      },
+      "name": "run_python"
+    },
+    {
+      "description": "Stop the Python script running now (started with run_python): its process is killed and everything it did is rolled back; its run_python call answers ferro.python.cancelled with the output so far. Only the client that started the script (or the user, in the Ferro app) may stop it; others get ferro.python.not_allowed. Returns {cancelled: true}, or {cancelled: false} when no script is running.",
+      "inputSchema": {
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "name": "cancel_python"
+    },
+    {
+      "description": "Whether the Ferro app is open and linked. When linked, every tool acts on the model open in the app; changes appear there as a proposal the user accepts or rejects.",
+      "inputSchema": {
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "name": "link_status"
+    }
+  ]
+}

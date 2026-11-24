@@ -39,6 +39,10 @@ pub struct RevitLevel {
     pub ferro_uid: Option<String>,
     pub name: String,
     pub elevation: f64,
+    /// `Element.Pinned` in Revit (ADR 0008); `None` from older add-ins
+    /// (the Ferro pin is then left as it is).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pinned: Option<bool>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -89,6 +93,10 @@ pub struct RevitWall {
     pub top_offset: f64,
     #[serde(default)]
     pub location_line: i32,
+    /// `Element.Pinned` in Revit (ADR 0008); `None` from older add-ins
+    /// (the Ferro pin is then left as it is).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pinned: Option<bool>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -104,6 +112,10 @@ pub struct RevitFloor {
     pub loops: Vec<Vec<[f64; 3]>>,
     #[serde(default)]
     pub offset: f64,
+    /// `Element.Pinned` in Revit (ADR 0008); `None` from older add-ins
+    /// (the Ferro pin is then left as it is).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pinned: Option<bool>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -123,6 +135,10 @@ pub struct RevitOpening {
     /// Above the level.
     #[serde(default)]
     pub sill: f64,
+    /// `Element.Pinned` in Revit (ADR 0008); `None` from older add-ins
+    /// (the Ferro pin is then left as it is).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pinned: Option<bool>,
 }
 
 /// What an import did.
@@ -570,6 +586,76 @@ impl Importer<'_> {
         }
     }
 
+    /// Revit's pins (ADR 0008 round trip), as (Revit unique id, Ferro uid,
+    /// pinned) for the elements whose snapshot says.
+    fn revit_pins(snap: &RevitSnapshot) -> Vec<(&str, Option<&str>, bool)> {
+        let mut out = Vec::new();
+        for l in &snap.levels {
+            out.extend(
+                l.pinned
+                    .map(|p| (l.unique_id.as_str(), l.ferro_uid.as_deref(), p)),
+            );
+        }
+        for w in &snap.walls {
+            out.extend(
+                w.pinned
+                    .map(|p| (w.unique_id.as_str(), w.ferro_uid.as_deref(), p)),
+            );
+        }
+        for f in &snap.floors {
+            out.extend(
+                f.pinned
+                    .map(|p| (f.unique_id.as_str(), f.ferro_uid.as_deref(), p)),
+            );
+        }
+        for o in &snap.openings {
+            out.extend(
+                o.pinned
+                    .map(|p| (o.unique_id.as_str(), o.ferro_uid.as_deref(), p)),
+            );
+        }
+        out
+    }
+
+    /// Before the updates: unpin in Ferro what is unpinned in Revit, so the
+    /// edits made there can land (one `set_pinned`; an agent's import is a
+    /// Proposal, so the rules of ADR 0008 §3 hold).
+    fn unpins(&mut self, snap: &RevitSnapshot) {
+        let by_uid: HashMap<String, (ElementId, bool)> = self
+            .doc()
+            .elements()
+            .map(|e| (e.uid.to_string(), (e.id, e.pinned)))
+            .collect();
+        let ids: Vec<ElementId> = Self::revit_pins(snap)
+            .into_iter()
+            .filter(|(_, _, p)| !p)
+            .filter_map(|(_, f, _)| by_uid.get(f?).copied())
+            .filter(|(_, pinned)| *pinned)
+            .map(|(id, _)| id)
+            .collect();
+        if !ids.is_empty() {
+            self.update("set_pinned", json!({"elements": ids, "pinned": false}));
+        }
+    }
+
+    /// After the updates: Ferro's pins follow Revit's, also on elements
+    /// this import created (a level created here is auto-pinned; Revit's
+    /// state wins).
+    fn pins(&mut self, snap: &RevitSnapshot) {
+        for want in [true, false] {
+            let doc = self.doc();
+            let ids: Vec<ElementId> = Self::revit_pins(snap)
+                .into_iter()
+                .filter(|(_, _, p)| *p == want)
+                .filter_map(|(u, _, _)| self.ids.get(u).copied())
+                .filter(|id| doc.get(*id).is_some_and(|e| e.pinned != want))
+                .collect();
+            if !ids.is_empty() {
+                self.update("set_pinned", json!({"elements": ids, "pinned": want}));
+            }
+        }
+    }
+
     fn deletions(&mut self, snap: &RevitSnapshot) {
         let present: HashSet<&str> = snap
             .levels
@@ -582,7 +668,8 @@ impl Importer<'_> {
             .chain(snap.openings.iter().map(|x| &x.ferro_uid))
             .filter_map(|u| u.as_deref())
             .collect();
-        let doc = self.doc();
+        let mut kept = Vec::new();
+        let doc = self.session.doc();
         // Types and materials are not deleted from Revit's side: a type
         // missing from the snapshot is usually just unused there.
         let gone: Vec<ElementId> = snap
@@ -599,6 +686,16 @@ impl Importer<'_> {
                         | ElementBody::Level(_)
                 )
             })
+            .filter(|e| {
+                // A pinned element stays (ADR 0008): unpin it in Ferro first.
+                if e.pinned {
+                    kept.push(format!(
+                        "{} was deleted in Revit but is pinned in Ferro; kept (unpin it to delete it)",
+                        e.label()
+                    ));
+                }
+                !e.pinned
+            })
             .map(|e| e.id)
             .collect();
         // Openings of deleted walls go with them.
@@ -611,6 +708,7 @@ impl Importer<'_> {
                     .is_none_or(|h| !gone.contains(&h))
             })
             .collect();
+        self.report.warnings.extend(kept);
         if !gone.is_empty()
             && self
                 .run("delete_elements", json!({"elements": gone}))
@@ -631,12 +729,14 @@ pub fn import(session: &mut Session, ctx: &ExecContext, snap: &RevitSnapshot) ->
         ids: HashMap::new(),
         no_level: HashSet::new(),
     };
+    imp.unpins(snap);
     imp.levels(&snap.levels);
     imp.types(&snap.wall_types, false);
     imp.types(&snap.floor_types, true);
     imp.walls(&snap.walls);
     imp.floors(&snap.floors);
     imp.openings(&snap.openings);
+    imp.pins(snap);
     imp.deletions(snap);
     imp.report
 }
@@ -657,6 +757,7 @@ mod tests {
             ferro_uid: None,
             name: n.into(),
             elevation: e,
+            pinned: Some(false),
         };
         let wall = |u: &str, s: [f64; 3], e: [f64; 3]| RevitWall {
             unique_id: u.into(),
@@ -674,6 +775,7 @@ mod tests {
             top_level_unique_id: Some("l2".into()),
             top_offset: 0.0,
             location_line: 0,
+            pinned: None,
         };
         RevitSnapshot {
             known_ferro_uids: vec![],
@@ -723,6 +825,7 @@ mod tests {
                     ],
                 ],
                 offset: 0.0,
+                pinned: None,
             }],
             openings: vec![RevitOpening {
                 unique_id: "d1".into(),
@@ -734,6 +837,7 @@ mod tests {
                 width: 3.0,
                 height: 7.0,
                 sill: 0.0,
+                pinned: None,
             }],
         }
     }
@@ -829,6 +933,78 @@ mod tests {
         assert!((o.position.mm() - 8.0 * 304.8).abs() < 1e-6);
     }
 
+    /// ADR 0008 round trip: Revit's pins win on import (unpin first, so a
+    /// level moved in Revit lands; pin what Revit pinned); an element
+    /// deleted in Revit but pinned in Ferro is kept with a warning.
+    #[test]
+    fn pins_follow_revit_on_import() {
+        let mut s = empty();
+        let mut snap = revit_house();
+        let r = import(&mut s, &ExecContext::user(), &snap);
+        let uid_of: HashMap<String, String> = r.created.into_iter().collect();
+        for l in &mut snap.levels {
+            l.ferro_uid = uid_of.get(&l.unique_id).cloned();
+        }
+        for w in &mut snap.walls {
+            w.ferro_uid = uid_of.get(&w.unique_id).cloned();
+        }
+        for t in snap
+            .wall_types
+            .iter_mut()
+            .chain(snap.floor_types.iter_mut())
+        {
+            t.ferro_uid = uid_of.get(&t.unique_id).cloned();
+        }
+        for f in &mut snap.floors {
+            f.ferro_uid = uid_of.get(&f.unique_id).cloned();
+        }
+        for o in &mut snap.openings {
+            o.ferro_uid = uid_of.get(&o.unique_id).cloned();
+        }
+        snap.known_ferro_uids = uid_of.values().cloned().collect();
+        let id_of = |s: &Session, u: &str| {
+            let uid = uid_of.get(u).cloned().unwrap_or_default();
+            s.doc()
+                .elements()
+                .find(|e| e.uid.to_string() == uid)
+                .map(|e| (e.id, e.pinned))
+                .expect("imported")
+        };
+        assert!(
+            !id_of(&s, "l2").1,
+            "Revit's unpinned level: unpinned in Ferro"
+        );
+        // Pinned in Revit: pinned in Ferro.
+        snap.levels[1].pinned = Some(true);
+        snap.walls[0].pinned = Some(true);
+        import(&mut s, &ExecContext::user(), &snap);
+        assert!(id_of(&s, "l2").1 && id_of(&s, "w1").1);
+        // Unpinned and moved in Revit: lands in Ferro.
+        snap.levels[1].pinned = Some(false);
+        snap.levels[1].elevation = 12.0;
+        let r = import(&mut s, &ExecContext::user(), &snap);
+        assert!(r.warnings.is_empty(), "{:?}", r.warnings);
+        let l2 = id_of(&s, "l2").0;
+        let elev = s
+            .doc()
+            .get(l2)
+            .and_then(|e| e.as_level())
+            .map(|l| l.elevation.mm());
+        assert!((elev.unwrap_or(0.0) - 12.0 * 304.8).abs() < 1e-6);
+        assert!(!id_of(&s, "l2").1);
+        // Deleted in Revit while pinned in Ferro (old add-in, no pin info).
+        let w1 = id_of(&s, "w1").0;
+        snap.walls.remove(0);
+        snap.openings.clear();
+        let r = import(&mut s, &ExecContext::user(), &snap);
+        assert!(s.doc().contains(w1), "kept");
+        assert!(
+            r.warnings.iter().any(|w| w.contains("pinned")),
+            "{:?}",
+            r.warnings
+        );
+    }
+
     #[test]
     fn the_default_level_maps_back_to_no_level() {
         let mut s = empty();
@@ -838,6 +1014,7 @@ mod tests {
                 ferro_uid: Some(crate::plan::DEFAULT_LEVEL_UID.into()),
                 name: "Ferro Level 0".into(),
                 elevation: 0.0,
+                pinned: None,
             }],
             ..revit_house()
         };
@@ -864,7 +1041,7 @@ mod tests {
         // Ferro → Revit plan → (pretend Revit) snapshot → import into an
         // empty Ferro gives the same walls.
         let src = crate::plan::tests_support::house();
-        let ops = plan(src.doc(), &RevitState::default());
+        let ops = plan(src.doc(), &RevitState::default(), None);
         let mut snap = RevitSnapshot::default();
         for op in &ops {
             match op {
@@ -872,12 +1049,14 @@ mod tests {
                     uid,
                     name,
                     elevation,
+                    pinned,
                     ..
                 } => snap.levels.push(RevitLevel {
                     unique_id: uid.clone(),
                     ferro_uid: None,
                     name: name.clone(),
                     elevation: *elevation,
+                    pinned: Some(*pinned),
                 }),
                 RevitOp::WallType {
                     uid, name, layers, ..
@@ -921,6 +1100,7 @@ mod tests {
                     top_level_unique_id: top_level_uid.clone(),
                     top_offset: *top_offset,
                     location_line: *location_line,
+                    pinned: None,
                 }),
                 _ => {}
             }

@@ -1,87 +1,80 @@
-//! Turns a `Document` into GPU vertex lists. Meshes are cached per element and
-//! reused while the element's storage is shared between versions (D-24), so
-//! previews only re-mesh what changed.
+//! Turns the display scene (`ferro-scene`) into GPU vertex lists.
+//!
+//! Meshes come from `ferro_scene::DisplayScene`, which re-meshes only the
+//! elements that changed (D-24). This module keeps one vertex chunk per
+//! element, rebuilt only when its draw record, its selection state or a
+//! presentation style changes; the flat lists are the visible chunks
+//! concatenated. Toggling hidden elements or the section plane never
+//! re-meshes and never rebuilds chunks.
 
 use crate::render::Vertex;
-use ferro_core::algo::{body_mesh, Mesh};
-use ferro_core::model::{Category, Document, ElementId};
+use ferro_core::algo::Mesh;
+use ferro_core::model::{Document, ElementId, PhaseStatus};
 use ferro_core::topo::FaceId;
 use ferro_core::{BoundingBox3, Point3, UnitVec3};
+use ferro_scene::{DisplayScene, DrawRecord, SharedMesh};
 use std::collections::{HashMap, HashSet};
+
+pub use ferro_scene::same_doc;
 
 pub const EDGE: [f32; 4] = [0.08, 0.09, 0.11, 1.0];
 pub const SELECT: [f32; 4] = [0.18, 0.45, 0.95, 1.0];
 /// Section cut lines.
 pub const CUT: [f32; 4] = [0.0, 0.0, 0.0, 1.0];
+/// Demolished / temporary faces (translucent) and their dashed edges (M5-23).
+pub const DEMOLISHED: [f32; 4] = [0.86, 0.32, 0.26, 0.35];
+pub const DEMOLISHED_EDGE: [f32; 4] = [0.70, 0.12, 0.08, 1.0];
+/// Existing elements: faces blended towards this grey, lighter edges.
+pub const EXISTING_GREY: [f32; 4] = [0.72, 0.72, 0.72, 1.0];
+pub const EXISTING_EDGE: [f32; 4] = [0.45, 0.46, 0.48, 1.0];
+/// Voids (Forms that only cut, M5-5.3): faint translucent faces and dashed
+/// edges, so they stay visible and selectable but read as "not built".
+pub const VOID: [f32; 4] = [0.95, 0.62, 0.20, 0.15];
+pub const VOID_EDGE: [f32; 4] = [0.80, 0.45, 0.10, 1.0];
+/// Dash and gap of demolished edges, mm.
+const DASH_MM: f64 = 120.0;
+const GAP_MM: f64 = 80.0;
 
-/// Display colour: the material of the element's type (core layer), else a
-/// category colour.
-fn element_color(doc: &Document, e: &ferro_core::Element) -> [f32; 4] {
-    use ferro_core::model::{keys, ElementBody, ParamValue};
-    if let Some(ParamValue::ElementRef(m)) = e.param(keys::MATERIAL) {
-        if let Some(ElementBody::Material(mat)) = doc.get(*m).map(|x| &x.body) {
-            let [r, g, b] = mat.color;
-            return [r, g, b, 1.0];
-        }
-    }
-    let structure = e
-        .type_id
-        .and_then(|t| doc.get(t))
-        .and_then(|t| match &t.body {
-            ElementBody::WallType(w) => Some(&w.structure),
-            ElementBody::FloorType(f) => Some(&f.structure),
-            _ => None,
-        });
-    let material = structure
-        .and_then(|s| s.core_material())
-        .and_then(|m| doc.get(m))
-        .and_then(|m| match &m.body {
-            ElementBody::Material(m) => Some(m.color),
-            _ => None,
-        });
-    match material {
-        Some([r, g, b]) => [r, g, b, 1.0],
-        None => face_color(e.category),
-    }
+/// What every chunk depends on besides its record: origin bits, X-ray,
+/// wireframe, hidden line.
+type StyleKey = (u64, bool, bool, bool);
+
+/// Vertices of one element, for one record revision and selection state.
+struct Chunk {
+    revision: u64,
+    selected: bool,
+    phase: Option<PhaseStatus>,
+    void: bool,
+    tris: Vec<Vertex>,
+    lines: Vec<Vertex>,
 }
 
-fn face_color(c: Category) -> [f32; 4] {
-    match c {
-        Category::Walls => [0.93, 0.90, 0.84, 1.0],
-        Category::Floors => [0.82, 0.80, 0.76, 1.0],
-        Category::Roofs => [0.72, 0.44, 0.36, 1.0],
-        Category::Columns => [0.80, 0.80, 0.80, 1.0],
-        Category::Furniture => [0.74, 0.63, 0.50, 1.0],
-        Category::Doors => [0.62, 0.45, 0.30, 1.0],
-        Category::Windows => [0.62, 0.78, 0.90, 1.0],
-        _ => [0.90, 0.90, 0.88, 1.0],
-    }
+/// What the flat lists were built for.
+#[derive(PartialEq)]
+struct ListKey {
+    revision: u64,
+    style: StyleKey,
+    selection: Vec<ElementId>,
+    hidden: Vec<ElementId>,
+    phase: Vec<(ElementId, PhaseStatus)>,
+    voids: Vec<ElementId>,
 }
 
-/// What the vertex lists were built for: origin bits, selection, X-ray,
-/// wireframe, hidden line, hidden elements, section plane bits.
-type SceneKey = (
-    u64,
-    Vec<ElementId>,
-    bool,
-    bool,
-    bool,
-    Vec<ElementId>,
-    Vec<u64>,
-);
-
-struct Cached {
-    doc: Document,
-}
+/// What the cut lines were built for: scene revision, origin, hidden, plane.
+type CutKey = (u64, u64, Vec<ElementId>, Vec<u64>);
 
 #[derive(Default)]
 pub struct SceneCache {
-    meshes: HashMap<ElementId, Mesh>,
-    last: Option<Cached>,
+    /// Derived scene: meshes, colours, instances.
+    pub scene: DisplayScene,
+    chunks: HashMap<ElementId, Chunk>,
+    style: Option<StyleKey>,
+    list_key: Option<ListKey>,
+    cut_key: Option<CutKey>,
+    /// Bumped whenever `tris` / `lines` change (the renderer re-uploads).
     pub version: u64,
     pub tris: Vec<Vertex>,
     pub lines: Vec<Vertex>,
-    key: Option<SceneKey>,
     /// Translucent faces (X-ray style).
     pub xray: bool,
     /// Edges only (Wireframe style).
@@ -94,210 +87,284 @@ pub struct SceneCache {
     pub section: Option<(Point3, UnitVec3)>,
     /// Where the section plane cuts faces (drawn over everything else).
     pub cut: Vec<Vertex>,
+    /// Chunks rebuilt by the last `update` (for tests and diagnostics).
+    pub rebuilt: usize,
+    /// Phase status of elements drawn differently in the view's phase
+    /// (existing greyed, demolished / temporary red and dashed). View state.
+    pub phase: HashMap<ElementId, PhaseStatus>,
+    /// Voids, drawn translucent with dashed edges (M5-5.3). View state.
+    pub voids: HashSet<ElementId>,
+}
+
+fn sorted(set: &HashSet<ElementId>) -> Vec<ElementId> {
+    let mut v: Vec<ElementId> = set.iter().copied().collect();
+    v.sort();
+    v
 }
 
 impl SceneCache {
-    /// Rebuild vertex lists if `doc` (or the selection) differs from last time.
+    /// Bring the vertex lists up to date with `doc`, the selection and the
+    /// view flags. Only changed elements are re-meshed (by the scene) and
+    /// only their chunks, plus chunks whose selection changed, are rebuilt.
     pub fn update(&mut self, doc: &Document, origin: Point3, selection: &HashSet<ElementId>) {
-        let mut sel: Vec<ElementId> = selection.iter().copied().collect();
-        sel.sort();
-        let same_doc = self.last.as_ref().is_some_and(|c| same_doc(&c.doc, doc));
-        let key = (
+        self.rebuilt = 0;
+        self.scene.sync(doc);
+        let style: StyleKey = (
             origin.x.to_bits()
                 ^ origin.y.to_bits().rotate_left(21)
                 ^ origin.z.to_bits().rotate_left(42),
-            sel.clone(),
             self.xray,
             self.wireframe,
             self.hidden_line,
-            {
-                let mut h: Vec<ElementId> = self.hidden.iter().copied().collect();
-                h.sort();
-                h
-            },
-            self.section
-                .map(|(p, n)| {
-                    let n = n.as_vec();
-                    vec![p.x, p.y, p.z, n.x, n.y, n.z]
-                        .into_iter()
-                        .map(f64::to_bits)
-                        .collect()
-                })
-                .unwrap_or_default(),
         );
-        if same_doc && self.key.as_ref() == Some(&key) {
+        let hidden = sorted(&self.hidden);
+        self.update_cut(origin, &style, &hidden);
+
+        let key = ListKey {
+            revision: self.scene.revision(),
+            style,
+            selection: sorted(selection),
+            hidden,
+            phase: {
+                let mut v: Vec<(ElementId, PhaseStatus)> =
+                    self.phase.iter().map(|(k, v)| (*k, *v)).collect();
+                v.sort();
+                v
+            },
+            voids: sorted(&self.voids),
+        };
+        if self.list_key.as_ref() == Some(&key) {
             return;
         }
-        // Re-mesh changed elements only.
-        let mut fresh = HashMap::new();
-        for e in doc.elements() {
-            let Some(g) = e.geometry() else { continue };
-            let reuse = self
-                .last
-                .as_ref()
-                .filter(|c| c.doc.same_element(doc, e.id))
-                .and_then(|_| self.meshes.remove(&e.id));
-            let m = match reuse {
-                Some(m) => m,
-                None => body_mesh(g).unwrap_or_default(),
-            };
-            fresh.insert(e.id, m);
+        if self.style != Some(style) {
+            self.chunks.clear();
+            self.style = Some(style);
         }
-        self.meshes = fresh;
-        self.last = Some(Cached { doc: doc.clone() });
-        self.key = Some(key);
-        self.version += 1;
-
+        let scene = &self.scene;
+        self.chunks.retain(|id, _| scene.record(*id).is_some());
         self.tris.clear();
         self.lines.clear();
-        self.cut.clear();
-        let rel = |p: Point3| {
-            let v = p - origin;
-            [v.x as f32, v.y as f32, v.z as f32]
-        };
-        for e in doc.elements() {
-            let Some(g) = e.geometry() else { continue };
-            if self.hidden.contains(&e.id) {
+        let mut translucent = Vec::new();
+        for r in scene.records() {
+            let selected = selection.contains(&r.element);
+            let phase = self.phase.get(&r.element).copied();
+            let void = self.voids.contains(&r.element);
+            let fresh = self.chunks.get(&r.element).is_some_and(|c| {
+                c.revision == r.revision
+                    && c.selected == selected
+                    && c.phase == phase
+                    && c.void == void
+            });
+            if !fresh {
+                if let Some(m) = scene.shared_mesh(r.mesh) {
+                    self.chunks.insert(
+                        r.element,
+                        chunk(
+                            r,
+                            m,
+                            selected,
+                            origin,
+                            (self.xray, self.wireframe, self.hidden_line),
+                            phase,
+                            void,
+                        ),
+                    );
+                    self.rebuilt += 1;
+                }
+            }
+            if self.hidden.contains(&r.element) {
                 continue;
             }
-            let selected = selection.contains(&e.id);
-            let color = if selected {
-                let c = element_color(doc, e);
-                [
-                    c[0] * 0.7 + 0.3 * SELECT[0],
-                    c[1] * 0.7 + 0.3 * SELECT[1],
-                    c[2] * 0.7 + 0.3 * SELECT[2],
-                    1.0,
-                ]
-            } else {
-                element_color(doc, e)
-            };
-            let color = if self.hidden_line {
-                [1.0, 1.0, 1.0, 1.0]
-            } else {
-                color
-            };
-            let color = if self.xray {
-                [color[0], color[1], color[2], 0.3]
-            } else {
-                color
-            };
-            if let Some(m) = self.meshes.get(&e.id).filter(|_| !self.wireframe) {
-                for t in &m.indices {
-                    for &i in t {
-                        let n = m.normals[i as usize];
-                        self.tris.push(Vertex {
-                            pos: rel(m.positions[i as usize]),
-                            normal: [n.x as f32, n.y as f32, n.z as f32],
-                            color,
-                        });
-                    }
-                }
+            // Translucent (demolished) faces go last so opaque faces behind
+            // them are already drawn when they blend.
+            if void
+                || matches!(
+                    phase,
+                    Some(PhaseStatus::Demolished | PhaseStatus::Temporary)
+                )
+            {
+                translucent.push(r.element);
+                continue;
             }
-            if let (Some((p, n)), Some(m)) = (self.section, self.meshes.get(&e.id)) {
-                for (a, b) in section_segments(m, p, n) {
-                    self.cut.push(line_vertex(rel(a), CUT));
-                    self.cut.push(line_vertex(rel(b), CUT));
-                }
-            }
-            let edge = if selected { SELECT } else { EDGE };
-            // Hide edges inside smooth groups (facets of one curved surface).
-            for (a, b) in visible_edges(g) {
-                self.lines.push(line_vertex(rel(a), edge));
-                self.lines.push(line_vertex(rel(b), edge));
+            if let Some(c) = self.chunks.get(&r.element) {
+                self.tris.extend_from_slice(&c.tris);
+                self.lines.extend_from_slice(&c.lines);
             }
         }
+        for id in translucent {
+            if let Some(c) = self.chunks.get(&id) {
+                self.tris.extend_from_slice(&c.tris);
+                self.lines.extend_from_slice(&c.lines);
+            }
+        }
+        self.list_key = Some(key);
+        self.version += 1;
     }
 
-    pub fn mesh(&self, id: ElementId) -> Option<&Mesh> {
-        self.meshes.get(&id)
+    fn update_cut(&mut self, origin: Point3, style: &StyleKey, hidden: &[ElementId]) {
+        let plane: Vec<u64> = self
+            .section
+            .map(|(p, n)| {
+                let n = n.as_vec();
+                [p.x, p.y, p.z, n.x, n.y, n.z]
+                    .into_iter()
+                    .map(f64::to_bits)
+                    .collect()
+            })
+            .unwrap_or_default();
+        let key = (self.scene.revision(), style.0, hidden.to_vec(), plane);
+        if self.cut_key.as_ref() == Some(&key) {
+            return;
+        }
+        self.cut.clear();
+        if let Some((p, n)) = self.section {
+            let rel = |q: Point3| {
+                let v = q - origin;
+                [v.x as f32, v.y as f32, v.z as f32]
+            };
+            for (a, b) in self
+                .scene
+                .section_segments(p, n, |e| self.hidden.contains(&e))
+            {
+                self.cut.push(line_vertex(rel(a), CUT));
+                self.cut.push(line_vertex(rel(b), CUT));
+            }
+        }
+        self.cut_key = Some(key);
+    }
+
+    /// The element's mesh in model coordinates (a copy; instanced meshes
+    /// are stored once in local coordinates).
+    pub fn mesh(&self, id: ElementId) -> Option<Mesh> {
+        self.scene.world_mesh(id)
     }
 }
 
-/// Segments where the plane through `p` with normal `n` crosses the mesh's
-/// triangles (the section cut). Triangles lying in the plane give none.
-pub fn section_segments(m: &Mesh, p: Point3, n: UnitVec3) -> Vec<(Point3, Point3)> {
-    let n = n.as_vec();
-    let side = |q: Point3| {
-        let d = n.dot(q - p);
-        if d.abs() <= ferro_core::math::tol::VERTEX_TOL {
-            0.0
-        } else {
-            d
-        }
+/// Vertices of one element: faces (unless wireframe) and visible edges,
+/// camera-relative to `origin` (D-05).
+fn chunk(
+    r: &DrawRecord,
+    m: &SharedMesh,
+    selected: bool,
+    origin: Point3,
+    (xray, wireframe, hidden_line): (bool, bool, bool),
+    phase: Option<PhaseStatus>,
+    void: bool,
+) -> Chunk {
+    // Local → camera-relative: add the record's offset, subtract the origin.
+    let shift = r.offset - (origin - Point3::ORIGIN);
+    let rel = |p: Point3| {
+        let v = (p - Point3::ORIGIN) + shift;
+        [v.x as f32, v.y as f32, v.z as f32]
     };
-    let mut out = Vec::new();
-    for t in &m.indices {
-        let v = t.map(|i| m.positions[i as usize]);
-        let d = v.map(side);
-        let mut pts: Vec<Point3> = Vec::with_capacity(2);
-        for i in 0..3 {
-            let (a, b, da, db) = (v[i], v[(i + 1) % 3], d[i], d[(i + 1) % 3]);
-            if da == 0.0 {
-                pts.push(a);
-            } else if da * db < 0.0 {
-                pts.push(a + (b - a) * (da / (da - db)));
+    let demolished = matches!(
+        phase,
+        Some(PhaseStatus::Demolished | PhaseStatus::Temporary)
+    );
+    let c = match phase {
+        _ if void => VOID,
+        _ if demolished => DEMOLISHED,
+        Some(PhaseStatus::Existing) => {
+            let g = EXISTING_GREY;
+            let k = 0.25;
+            [
+                r.color[0] * k + g[0] * (1.0 - k),
+                r.color[1] * k + g[1] * (1.0 - k),
+                r.color[2] * k + g[2] * (1.0 - k),
+                r.color[3],
+            ]
+        }
+        _ => r.color,
+    };
+    let color = if selected {
+        [
+            c[0] * 0.7 + 0.3 * SELECT[0],
+            c[1] * 0.7 + 0.3 * SELECT[1],
+            c[2] * 0.7 + 0.3 * SELECT[2],
+            c[3],
+        ]
+    } else {
+        c
+    };
+    let color = if hidden_line {
+        [1.0, 1.0, 1.0, 1.0]
+    } else {
+        color
+    };
+    let color = if xray {
+        [color[0], color[1], color[2], 0.3]
+    } else {
+        color
+    };
+    let mut tris = Vec::new();
+    if !wireframe {
+        let mesh = &m.mesh;
+        tris.reserve(mesh.indices.len() * 3);
+        for t in &mesh.indices {
+            for &i in t {
+                let (Some(p), Some(n)) =
+                    (mesh.positions.get(i as usize), mesh.normals.get(i as usize))
+                else {
+                    continue;
+                };
+                tris.push(Vertex {
+                    pos: rel(*p),
+                    normal: [n.x as f32, n.y as f32, n.z as f32],
+                    color,
+                });
             }
         }
-        pts.dedup_by(|x, y| x.is_almost_equal(*y));
-        if let [a, b] = pts[..] {
-            // An edge lying in the plane belongs to two triangles: the cut
-            // shows it once each, which is harmless when drawn.
-            out.push((a, b));
+    }
+    let edge = match phase {
+        _ if selected => SELECT,
+        _ if void => VOID_EDGE,
+        _ if demolished => DEMOLISHED_EDGE,
+        Some(PhaseStatus::Existing) => EXISTING_EDGE,
+        _ => EDGE,
+    };
+    let mut lines = Vec::with_capacity(m.edges.len() * 2);
+    for [a, b] in &m.edges {
+        if demolished || void {
+            for (p, q) in dashes(*a, *b) {
+                lines.push(line_vertex(rel(p), edge));
+                lines.push(line_vertex(rel(q), edge));
+            }
+        } else {
+            lines.push(line_vertex(rel(*a), edge));
+            lines.push(line_vertex(rel(*b), edge));
         }
     }
-    out
+    Chunk {
+        revision: r.revision,
+        selected,
+        phase,
+        void,
+        tris,
+        lines,
+    }
 }
 
-/// Bit pattern of an unordered segment (exact endpoint match).
-type SegKey = (u64, u64, u64, u64, u64, u64);
-
-/// Edges to draw: all edges except those between two faces of the same smooth group.
-fn visible_edges(body: &ferro_core::topo::Body) -> Vec<(Point3, Point3)> {
-    // Map each edge segment to the smooth groups of the faces using it.
-    let mut groups: HashMap<SegKey, Vec<Option<u32>>> = HashMap::new();
-    let key = |a: Point3, b: Point3| {
-        let (p, q) = if (a.x, a.y, a.z) < (b.x, b.y, b.z) {
-            (a, b)
-        } else {
-            (b, a)
-        };
-        (
-            p.x.to_bits(),
-            p.y.to_bits(),
-            p.z.to_bits(),
-            q.x.to_bits(),
-            q.y.to_bits(),
-            q.z.to_bits(),
-        )
-    };
-    for fid in body.face_ids() {
-        let Ok(face) = body.face(fid) else { continue };
-        let g = face.smooth_group;
-        for l in std::iter::once(&face.outer).chain(&face.holes) {
-            let pts = body.loop_points(*l);
-            for i in 0..pts.len() {
-                groups
-                    .entry(key(pts[i], pts[(i + 1) % pts.len()]))
-                    .or_default()
-                    .push(g);
-            }
-        }
+/// Dashes along the edge `a`–`b` (model mm): about [`DASH_MM`] on and
+/// [`GAP_MM`] off, scaled so the edge starts and ends with a dash; an edge
+/// shorter than one dash and gap stays whole.
+/// At most 200 dashes per edge.
+fn dashes(a: Point3, b: Point3) -> Vec<(Point3, Point3)> {
+    let len = a.distance_to(b);
+    let period = DASH_MM + GAP_MM;
+    if len <= DASH_MM + GAP_MM || !len.is_finite() {
+        return vec![(a, b)];
     }
-    body.edges()
-        .filter(|(_, a, b)| {
-            let gs = groups.get(&key(*a, *b));
-            !matches!(gs.map(|v| v.as_slice()), Some([Some(x), Some(y)]) if x == y)
+    // n dashes and n - 1 gaps, scaled to fit exactly: both ends are dashed.
+    let n = (((len + GAP_MM) / period).round() as usize).clamp(1, 200);
+    let unit = len / (n as f64 * DASH_MM + (n - 1) as f64 * GAP_MM);
+    let (on, step) = (DASH_MM * unit, period * unit);
+    let d = (b - a) * (1.0 / len);
+    (0..n)
+        .map(|i| {
+            let s = step * i as f64;
+            (a + d * s, a + d * (s + on))
         })
-        .map(|(_, a, b)| (a, b))
         .collect()
-}
-
-/// Cheap identity check: same version and every element shares storage.
-pub fn same_doc(a: &Document, b: &Document) -> bool {
-    a.version() == b.version()
-        && a.len() == b.len()
-        && a.elements().all(|e| a.same_element(b, e.id))
 }
 
 /// An edge vertex (drawn over its faces).
@@ -413,56 +480,161 @@ pub fn doc_bounds(doc: &Document) -> Option<BoundingBox3> {
 }
 
 #[cfg(test)]
-mod section_tests {
+mod tests {
     use super::*;
-    use ferro_core::Vec3;
+    use ferro_core::ops::{AnyCommand, ExecContext, SequentialIds};
+    use ferro_core::Session;
+    use serde_json::json;
 
-    /// One triangle with corners (0,0,0), (1000,0,0), (0,1000,0).
-    fn tri() -> Mesh {
-        Mesh {
-            positions: vec![
-                Point3::new(0.0, 0.0, 0.0),
-                Point3::new(1000.0, 0.0, 0.0),
-                Point3::new(0.0, 1000.0, 0.0),
-            ],
-            normals: vec![Vec3::Z; 3],
-            indices: vec![[0, 1, 2]],
-            triangle_faces: Vec::new(),
+    fn boxes(n: usize) -> (Session, Vec<ElementId>) {
+        let mut s = Session::new(Document::new("t"), Box::new(SequentialIds::new(1)));
+        let mut ids = Vec::new();
+        for i in 0..n {
+            let (x, y) = ((i % 50) as f64 * 3000.0, (i / 50) as f64 * 3000.0);
+            let args = json!({"origin":{"x":x,"y":y,"z":0},"width":1000.0 + i as f64,"depth":1000,"height":3000});
+            let out = s
+                .execute(
+                    AnyCommand::from_tool("create_box", &args).unwrap(),
+                    &ExecContext::user(),
+                )
+                .unwrap()
+                .output;
+            ids.push(serde_json::from_value(out["element"].clone()).unwrap());
         }
+        (s, ids)
     }
 
     #[test]
-    fn plane_across_a_triangle_gives_one_segment() {
-        let s = section_segments(&tri(), Point3::new(500.0, 0.0, 0.0), UnitVec3::X);
-        let [(a, b)] = s[..] else { panic!("{s:?}") };
-        let ends = [a, b];
-        assert!(ends
-            .iter()
-            .any(|p| p.is_almost_equal(Point3::new(500.0, 0.0, 0.0))));
-        assert!(ends
-            .iter()
-            .any(|p| p.is_almost_equal(Point3::new(500.0, 500.0, 0.0))));
+    fn view_flags_and_selection_rebuild_only_what_they_touch() {
+        let (s, ids) = boxes(3);
+        let mut c = SceneCache::default();
+        let none = HashSet::new();
+        c.update(s.doc(), Point3::ORIGIN, &none);
+        assert_eq!(c.rebuilt, 3);
+        assert_eq!(c.tris.len(), 3 * 36);
+        assert_eq!(c.lines.len(), 3 * 24);
+        let v = c.version;
+
+        // Nothing changed: no new version.
+        c.update(s.doc(), Point3::ORIGIN, &none);
+        assert_eq!((c.version, c.rebuilt), (v, 0));
+
+        // Selecting one element rebuilds its chunk only.
+        let sel: HashSet<ElementId> = [ids[1]].into_iter().collect();
+        c.update(s.doc(), Point3::ORIGIN, &sel);
+        assert_eq!(c.rebuilt, 1);
+        assert!(c.version > v);
+
+        // Hiding one element drops its vertices without rebuilding anything.
+        c.hidden.insert(ids[0]);
+        c.update(s.doc(), Point3::ORIGIN, &sel);
+        assert_eq!(c.rebuilt, 0);
+        assert_eq!(c.tris.len(), 2 * 36);
+
+        // A section plane makes cut lines and leaves the lists alone.
+        let v = c.version;
+        c.section = Some((Point3::new(0.0, 0.0, 1500.0), UnitVec3::Z));
+        c.update(s.doc(), Point3::ORIGIN, &sel);
+        assert_eq!(c.version, v);
+        assert_eq!(c.cut.len(), 2 * 8 * 2);
+
+        // A style change rebuilds every chunk, but re-meshes nothing.
+        let rev = c.scene.revision();
+        c.wireframe = true;
+        c.update(s.doc(), Point3::ORIGIN, &sel);
+        assert_eq!(c.rebuilt, 3);
+        assert!(c.tris.is_empty());
+        assert_eq!(c.scene.revision(), rev);
     }
 
     #[test]
-    fn plane_missing_or_containing_the_triangle_gives_nothing() {
-        assert!(section_segments(&tri(), Point3::new(2000.0, 0.0, 0.0), UnitVec3::X).is_empty());
-        assert!(section_segments(&tri(), Point3::new(0.0, 0.0, 0.0), UnitVec3::Z).is_empty());
-        assert!(
-            section_segments(&Mesh::default(), Point3::new(0.0, 0.0, 0.0), UnitVec3::X).is_empty()
-        );
+    fn voids_are_faint_dashed_and_drawn_last() {
+        let (s, ids) = boxes(2);
+        let mut c = SceneCache::default();
+        let none = HashSet::new();
+        c.update(s.doc(), Point3::ORIGIN, &none);
+        let plain_lines = c.lines.len();
+        c.voids.insert(ids[0]);
+        c.update(s.doc(), Point3::ORIGIN, &none);
+        assert_eq!(c.rebuilt, 1, "only the void's chunk");
+        assert!(c.lines.len() > plain_lines, "dashed edges");
+        // The void's faces come last, translucent.
+        let last = c.tris.last().unwrap();
+        assert_eq!(last.color, VOID);
+        assert!(c.tris[..36].iter().all(|v| v.color != VOID));
     }
 
     #[test]
-    fn plane_through_a_corner_within_tolerance() {
-        // Through vertex (1000,0,0) only: a single point, no segment.
-        let p = Point3::new(1000.0 + 0.005, 0.0, 0.0);
-        assert!(section_segments(&tri(), p, UnitVec3::X).is_empty());
-        // Through the vertex (0,0,0) and across the opposite edge.
-        let n = Vec3::new(1.0, -1.0, 0.0).normalize().unwrap();
-        let s = section_segments(&tri(), Point3::new(0.0, 0.0, 0.0), n);
-        assert_eq!(s.len(), 1);
-        let (a, b) = s[0];
-        assert!((a.distance_to(b) - 1000.0 / 2f64.sqrt()).abs() < 1e-6);
+    fn phase_looks_grey_existing_and_dash_demolished_last() {
+        let (s, ids) = boxes(2);
+        let mut c = SceneCache::default();
+        let none = HashSet::new();
+        c.update(s.doc(), Point3::ORIGIN, &none);
+        let plain_lines = c.lines.len();
+        c.phase.insert(ids[0], PhaseStatus::Demolished);
+        c.phase.insert(ids[1], PhaseStatus::Existing);
+        c.update(s.doc(), Point3::ORIGIN, &none);
+        assert_eq!(c.rebuilt, 2, "both looks changed");
+        // Demolished faces are translucent and drawn after the opaque ones.
+        assert_eq!(c.tris.len(), 2 * 36);
+        assert!(c.tris[..36].iter().all(|v| v.color[3] > 0.99));
+        assert!(c.tris[36..].iter().all(|v| v.color == DEMOLISHED));
+        // Its edges are dashed: more, shorter segments in the edge colour.
+        assert!(c.lines.len() > plain_lines);
+        assert!(c.lines.iter().any(|v| v.color == DEMOLISHED_EDGE));
+        assert!(c.lines.iter().any(|v| v.color == EXISTING_EDGE));
+        // Same looks again: nothing rebuilt.
+        let v = c.version;
+        c.update(s.doc(), Point3::ORIGIN, &none);
+        assert_eq!((c.version, c.rebuilt), (v, 0));
+    }
+
+    #[test]
+    fn dashes_cover_the_edge_from_end_to_end() {
+        let a = Point3::ORIGIN;
+        let b = Point3::new(1000.0, 0.0, 0.0);
+        let d = dashes(a, b);
+        assert_eq!(d.len(), 5);
+        assert!(d[0].0.distance_to(a) < 1e-9);
+        assert!(d[4].1.distance_to(b) < 1e-9);
+        assert!(d.iter().all(|(p, q)| p.distance_to(*q) < DASH_MM * 1.2));
+        // Short and zero-length edges stay whole.
+        assert_eq!(dashes(a, Point3::new(50.0, 0.0, 0.0)).len(), 1);
+        assert_eq!(dashes(a, a), vec![(a, a)]);
+        // Very long edges are capped.
+        assert_eq!(dashes(a, Point3::new(1e9, 0.0, 0.0)).len(), 200);
+    }
+
+    #[test]
+    fn empty_document_gives_empty_lists() {
+        let mut c = SceneCache {
+            section: Some((Point3::ORIGIN, UnitVec3::Z)),
+            ..Default::default()
+        };
+        c.update(&Document::new("t"), Point3::ORIGIN, &HashSet::new());
+        assert!(c.tris.is_empty() && c.lines.is_empty() && c.cut.is_empty());
+        assert!(c.scene.is_empty());
+    }
+
+    /// Run with `cargo test -p ferro-app --release scene -- --ignored --nocapture`.
+    #[test]
+    #[ignore]
+    fn benchmark_vertex_lists_two_thousand_boxes() {
+        use std::time::Instant;
+        let (s, ids) = boxes(2000);
+        let mut c = SceneCache::default();
+        let none = HashSet::new();
+        let t = Instant::now();
+        c.update(s.doc(), Point3::ORIGIN, &none);
+        let full = t.elapsed();
+        let sel: HashSet<ElementId> = [ids[7]].into_iter().collect();
+        let t = Instant::now();
+        c.update(s.doc(), Point3::ORIGIN, &sel);
+        let select = t.elapsed();
+        c.hidden.insert(ids[9]);
+        let t = Instant::now();
+        c.update(s.doc(), Point3::ORIGIN, &sel);
+        let hide = t.elapsed();
+        println!("ferro-app vertex lists, 2,000 boxes: full {full:?}, selection change {select:?}, hide one {hide:?}");
     }
 }

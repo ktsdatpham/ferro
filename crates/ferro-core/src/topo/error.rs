@@ -17,6 +17,9 @@ pub enum TopoError {
     InwardFacing,
     /// A planar face has vertices off its plane.
     NonPlanarFace(String),
+    /// Two faces cross or touch away from their shared edges and vertices
+    /// (the message names them); decided with exact predicates (D-53).
+    SelfIntersecting(String),
 }
 
 impl TopoError {
@@ -29,6 +32,7 @@ impl TopoError {
             TopoError::NotClosed => "ferro.topo.not_closed",
             TopoError::InwardFacing => "ferro.topo.inward_facing",
             TopoError::NonPlanarFace(_) => "ferro.topo.non_planar_face",
+            TopoError::SelfIntersecting(_) => "ferro.topo.self_intersecting",
         }
     }
 }
@@ -43,6 +47,7 @@ impl fmt::Display for TopoError {
             TopoError::NotClosed => write!(f, "body is not closed"),
             TopoError::InwardFacing => write!(f, "solid faces point inward"),
             TopoError::NonPlanarFace(s) => write!(f, "face {s} is not planar"),
+            TopoError::SelfIntersecting(s) => write!(f, "the body intersects itself ({s})"),
         }
     }
 }

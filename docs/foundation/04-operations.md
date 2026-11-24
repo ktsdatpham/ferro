@@ -105,6 +105,45 @@ Rules:
    are for broken invariants only.
 2. Failure codes are stable and documented; agents rely on them.
 
+Client codes. Clients of Ferro Link (the Python SDK, ADR 0005) raise these
+when the problem is in reaching Ferro, not in a command. They are stable too:
+
+| Code | Meaning |
+|---|---|
+| `ferro.link.not_open` | No link file: the app is not running |
+| `ferro.link.unreachable` | The link file exists but nobody answers on its port |
+| `ferro.link.invalid_token` | The app refused the token |
+| `ferro.link.timeout` | No answer within the timeout |
+| `ferro.link.protocol` | The answer was not one JSON line `{ok, body}` |
+| `ferro.tool.failed` | The tool refused without a failure code of its own |
+
+`get_element` on a missing id fails with `ferro.model.not_found`.
+
+Pin code (ADR 0008, chapter 3 §3.13):
+
+| Code | Meaning |
+|---|---|
+| `ferro.model.pinned` | The transaction would move or delete a pinned element, delete the host of a pinned hosted element, or move / remove a pinned element in an option layer; the first element of the failure is the pinned one. Nothing changed |
+
+Script codes. `run_python` (ADR 0005 part 2, §6.2) reports these as the
+first failure; failures of the script's last failed tool call follow:
+
+| Code | Meaning |
+|---|---|
+| `ferro.python.unavailable` | No Python 3.9+ could be started (not installed, wrong `FERRO_PYTHON`, too old) |
+| `ferro.python.timeout` | The script ran past `timeout_s`; its process tree was killed, nothing changed |
+| `ferro.python.failed` | Uncaught exception or non-zero exit; nothing changed, traceback in `stderr` |
+| `ferro.python.nested` | A script tried to start `run_python` itself |
+| `ferro.python.busy` | Another script is running; changes from other clients wait (read-only tools work) |
+| `ferro.python.not_allowed` | The caller may not cancel this run (`cancel_python`: only the user and the client that started it) |
+| `ferro.python.cancelled` | The script was stopped (`cancel_python`, the app's Stop button or Esc twice); its process tree was killed, nothing changed, output so far in `stdout` / `stderr` |
+
+A script's changes are one `TransactionGroup` (§4.3, `Session` groups):
+commit = one undo step and one journal entry naming the script; failure =
+the whole group rolls back. When a group is already open (an agent's
+Proposal), the script is a `SubTransaction` savepoint in it, and its
+`doc.transaction(name)` blocks are nested savepoints.
+
 ## 4.6 Events
 
 After a successful commit the document emits:
@@ -128,3 +167,54 @@ Nobody polls the document. Revit equivalent: `DocumentChanged` event.
 Selection, camera, active tool and hover state live in the **app**, not in the
 `Document`, and never go through transactions. (Revit: `UIDocument.Selection`
 vs `Document`.)
+
+## 4.9 The geometry kernel (D-78, ADR 0007)
+
+Booleans (and later blends, offsets and curved primitives) go through the
+`Kernel` trait (`ferro_core::algo`). `ferro-core` only defines it; the
+`ferro-kernel` crate implements it on solidcore and is the only crate that
+depends on solidcore.
+
+- **Injection.** A `Session` receives its kernel like its `IdSource`:
+  `Session::new(doc, ids).with_kernel(Arc::new(SolidcoreKernel::new()))`
+  (or `set_kernel`). Each `Transaction` carries the session's kernel, and a
+  command reaches it with `tx.kernel()?`. The app, the MCP server and
+  `ferro-cli` attach `SolidcoreKernel`; core tests and minimal builds have
+  none.
+- **Operations.** `boolean(op, a, b)` with `BooleanOp::{Union, Difference,
+  Intersection}` on closed solids with flat faces (mm). The result
+  (`KernelResult`) is a `Body` in `a`'s id space: a face of `a` that survives
+  keeps its id (the largest piece when it is split), and so do surviving
+  vertices and edges; `faces` maps every result face to its input faces
+  (`FromA` / `FromB`, none for a new face); `lineage` says what happened to
+  `a`'s faces (D-25).
+- **Tolerances (D-06).** Before the call, faces of `b` within `VERTEX_TOL`
+  of a plane of `a` are snapped onto it (a 0.001 mm gap, step or skin is
+  nothing). After it, result points within `VERTEX_TOL` are one vertex
+  (taking `a`'s vertex where there is one), and neighbouring faces in one
+  plane are one face. A union of solids that are apart is one body of
+  several shells.
+- **Determinism.** The same operands give the same result on every call and
+  thread.
+
+Commands using the kernel:
+
+| Command | What |
+|---|---|
+| `subtract_forms {target, cutter, keep_cutter?: false}` | The target Form's body becomes target − cutter in one transaction; the cutter is deleted unless `keep_cutter`. Output: `element`, `cutter_deleted`, `lineage`, `faces` |
+| `unite_forms {target, other, keep_other?: false}` | The target Form's body becomes target ∪ other (several shells when apart); `other` is deleted unless `keep_other`. Output: `element`, `other_deleted`, `lineage`, `faces` |
+| `intersect_forms {target, other, keep_other?: false}` | The target Form's body becomes target ∩ other (`ferro.kernel.empty_result` when they do not overlap); `other` is deleted unless `keep_other`. Output as `unite_forms` |
+| `create_relationship {kind: "cut", elements: [cutter, cut], phase?}` | The non-destructive cut (M5-5.3, Foundation §3.8): regenerated through the kernel; kernel problems are warnings, never errors |
+
+Kernel failure codes:
+
+| Code | Meaning |
+|---|---|
+| `ferro.kernel.unavailable` | The session has no kernel |
+| `ferro.kernel.not_solid` | An operand is not a closed, valid solid |
+| `ferro.kernel.unsupported` | Geometry the seam does not carry yet: curved faces, bodies with inner voids as operands |
+| `ferro.kernel.empty_result` | Nothing is left (an intersection of solids that are apart, a difference that removes everything) |
+| `ferro.kernel.non_manifold_result` | The solids touch only along an edge or at a vertex |
+| `ferro.kernel.invalid_result` | The result fails `Body::validate_solid` |
+| `ferro.kernel.failed` | The kernel refused or failed (its message says why) |
+| `ferro.ops.same_element` | `subtract_forms`, `unite_forms` or `intersect_forms` was given the same Form twice |

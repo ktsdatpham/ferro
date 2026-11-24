@@ -6,42 +6,76 @@
 
 use ferro_core::ops::{Actor, ExecContext};
 use ferro_core::{Document, Session};
+use ferro_kernel::SolidcoreKernel;
 use ferro_tools::link::{self, AgentInfo, LinkRequest};
 use serde_json::{json, Value};
 use std::path::PathBuf;
+use std::sync::Arc;
 use std::time::Duration;
 
 /// All tools offered over MCP.
 pub fn list() -> Vec<Value> {
     let mut v = ferro_tools::list();
     v.extend(ferro_tools::file_tools());
+    v.push(crate::python::tool());
+    v.push(crate::python::cancel_tool());
     v.push(json!({"name": "link_status", "description": "Whether the Ferro app is open and linked. When linked, every tool acts on the model open in the app; changes appear there as a proposal the user accepts or rejects.", "inputSchema": {"type": "object", "properties": {}, "required": []}}));
     v
 }
 
+/// The tool list as pretty JSON, `{"tools": [...]}` exactly as MCP
+/// `tools/list` returns it. Keys are sorted, so the output is deterministic.
+pub fn tools_json() -> String {
+    let v = json!({ "tools": list() });
+    serde_json::to_string_pretty(&v).unwrap_or_else(|_| v.to_string())
+}
+
 /// Server state: one session (the open project) plus its file path.
 pub struct Server {
+    /// The open project, its undo history and journal.
     pub session: Session,
+    /// File the project was opened from or last saved to.
     pub path: Option<PathBuf>,
+    /// Actor recorded in the journal for every call.
     pub agent: Actor,
     /// Forward to a running app when one is linked (off in tests or with
     /// `FERRO_LINK=off`).
     pub use_link: bool,
+    /// Interpreter and SDK for `run_python`.
+    pub python: crate::python::PythonConfig,
+    /// The headless run, for `cancel_python` from another thread (clone it
+    /// before a call that runs a script).
+    pub runs: crate::python::RunControl,
 }
 
 impl Server {
+    /// A server with an empty "Untitled" project. Forwards to a linked app
+    /// unless `FERRO_LINK=off`.
     pub fn new() -> Server {
         Server {
-            session: Session::new(Document::new("Untitled"), Box::new(ferro_io::SystemIds)),
+            session: Session::new(Document::new("Untitled"), Box::new(ferro_io::SystemIds))
+                .with_kernel(Arc::new(SolidcoreKernel::new())),
             path: None,
             agent: Actor::agent("mcp-client", "unknown"),
             use_link: std::env::var("FERRO_LINK")
                 .map(|v| v != "off")
                 .unwrap_or(true),
+            python: crate::python::PythonConfig::from_env(),
+            runs: crate::python::RunControl::new(),
         }
     }
 
-    fn ctx(&self) -> ExecContext {
+    /// A headless server that never forwards to the app (scripts, CI).
+    pub fn headless(agent: Actor) -> Server {
+        Server {
+            agent,
+            use_link: false,
+            ..Server::new()
+        }
+    }
+
+    /// Execution context for the next call: this server's actor, now.
+    pub fn ctx(&self) -> ExecContext {
         ExecContext {
             actor: self.agent.clone(),
             prompt: None,
@@ -52,35 +86,12 @@ impl Server {
         }
     }
 
-    fn agent_info(&self) -> AgentInfo {
-        let version = match &self.agent.kind {
-            ferro_core::ops::ActorKind::Agent { model } => model.clone(),
-            _ => String::new(),
-        };
-        AgentInfo {
-            name: self.agent.name.clone(),
-            version,
-        }
-    }
-
     /// Forward to the linked app. `None` when no app is reachable.
     fn forward(&self, name: &str, args: &Value) -> Option<Result<Value, Value>> {
         if !self.use_link {
             return None;
         }
-        let info = link::read_info()?;
-        let req = LinkRequest {
-            token: info.token.clone(),
-            tool: name.into(),
-            args: args.clone(),
-            agent: Some(self.agent_info()),
-            prompt: None,
-        };
-        match link::send(&info, &req, Duration::from_secs(120)) {
-            Ok(r) if r.ok => Some(Ok(r.body)),
-            Ok(r) => Some(Err(r.body)),
-            Err(_) => None, // stale link file: fall back to the local session
-        }
+        forward_as(&self.agent, name, args)
     }
 
     /// Run a tool. Ok = JSON result, Err = (message, failures JSON).
@@ -102,10 +113,27 @@ impl Server {
             return r;
         }
         let ctx = self.ctx();
+        if name == crate::python::TOOL {
+            // Headless: no Proposals here, agents edit this session directly.
+            return crate::python::run_blocking(
+                &mut self.session,
+                &self.python,
+                args,
+                ctx,
+                false,
+                &self.runs,
+            );
+        }
+        if name == crate::python::CANCEL_TOOL {
+            return self.runs.cancel(&self.agent);
+        }
         if let Some(r) = ferro_tools::call(&mut self.session, &ctx, name, args) {
             return r;
         }
         let path_arg = || args.get("path").and_then(Value::as_str).map(PathBuf::from);
+        let io_err = |e: ferro_io::IoError| Err(io_failure(&e));
+        let write =
+            |p: &PathBuf, bytes: &[u8]| std::fs::write(p, bytes).map_err(ferro_io::IoError::from);
         match name {
             "new_document" => {
                 let name = args
@@ -122,12 +150,10 @@ impl Server {
                 };
                 let doc = if p.to_string_lossy().ends_with(".json") {
                     std::fs::read_to_string(&p)
-                        .map_err(|e| e.to_string())
-                        .and_then(|t| ferro_io::document_from_json(&t).map_err(|e| e.to_string()))
+                        .map_err(ferro_io::IoError::from)
+                        .and_then(|t| ferro_io::document_from_json(&t))
                 } else {
-                    ferro_io::load_fro(&p)
-                        .map(|(d, _)| d)
-                        .map_err(|e| e.to_string())
+                    ferro_io::load_fro(&p).map(|(d, _)| d)
                 };
                 match doc {
                     Ok(d) => {
@@ -135,7 +161,7 @@ impl Server {
                         self.path = Some(p);
                         Ok(ferro_tools::summary(self.session.doc(), None))
                     }
-                    Err(m) => err(m),
+                    Err(e) => io_err(e),
                 }
             }
             "save_document" => {
@@ -144,48 +170,95 @@ impl Server {
                 };
                 let r = if p.to_string_lossy().ends_with(".json") {
                     ferro_io::document_to_json(self.session.doc())
-                        .map_err(|e| e.to_string())
-                        .and_then(|t| std::fs::write(&p, t).map_err(|e| e.to_string()))
+                        .and_then(|t| write(&p, t.as_bytes()))
                 } else {
                     ferro_io::save_fro(&p, self.session.doc(), self.session.journal())
-                        .map_err(|e| e.to_string())
                 };
                 match r {
                     Ok(()) => {
                         self.path = Some(p.clone());
                         Ok(json!({"saved": p}))
                     }
-                    Err(m) => err(m),
+                    Err(e) => io_err(e),
                 }
             }
-            "export_ifc" => {
+            "export_ifc" | "export_obj" | "export_glb" => {
                 let Some(p) = path_arg() else {
                     return err("missing path".into());
                 };
-                ferro_io::export_ifc(self.session.doc())
-                    .map_err(|e| e.to_string())
-                    .and_then(|t| std::fs::write(&p, t).map_err(|e| e.to_string()))
-                    .map(|_| json!({"exported": p}))
-                    .or_else(err)
-            }
-            "export_obj" | "export_glb" => {
-                let Some(p) = path_arg() else {
-                    return err("missing path".into());
+                let doc = self.session.doc();
+                let bytes = match name {
+                    "export_ifc" => {
+                        ferro_io::export_ifc(doc, self.session.kernel()).map(String::into_bytes)
+                    }
+                    "export_obj" => ferro_io::export_obj(doc).map(String::into_bytes),
+                    _ => ferro_io::export_glb(doc),
                 };
-                let r = if name == "export_obj" {
-                    ferro_io::export_obj(self.session.doc())
-                        .map_err(|e| e.to_string())
-                        .and_then(|s| std::fs::write(&p, s).map_err(|e| e.to_string()))
-                } else {
-                    ferro_io::export_glb(self.session.doc())
-                        .map_err(|e| e.to_string())
-                        .and_then(|b| std::fs::write(&p, b).map_err(|e| e.to_string()))
-                };
-                r.map(|_| json!({"exported": p})).or_else(err)
+                match bytes.and_then(|b| write(&p, &b)) {
+                    Ok(()) => Ok(json!({"exported": p})),
+                    Err(e) => io_err(e),
+                }
             }
             other => err(format!("unknown tool: {other}")),
         }
     }
+}
+
+/// The Ferro Link identity of `actor` (agents send their model as version).
+fn agent_info(actor: &Actor) -> AgentInfo {
+    let version = match &actor.kind {
+        ferro_core::ops::ActorKind::Agent { model } => model.clone(),
+        _ => String::new(),
+    };
+    AgentInfo {
+        name: actor.name.clone(),
+        version,
+    }
+}
+
+/// Send one tool call to the linked app as `actor`. `None` when no app is
+/// reachable (no link file, or a stale one). Used by [`Server`] and by
+/// `ferro-mcp`'s stdin thread, which forwards `cancel_python` while the main
+/// thread waits for a script.
+pub fn forward_as(actor: &Actor, name: &str, args: &Value) -> Option<Result<Value, Value>> {
+    let info = link::read_info()?;
+    let req = LinkRequest {
+        token: info.token.clone(),
+        tool: name.into(),
+        args: args.clone(),
+        agent: Some(agent_info(actor)),
+        prompt: None,
+    };
+    let timeout = crate::python::answer_timeout(name, args);
+    match link::send(&info, &req, timeout) {
+        Ok(r) if r.ok => Some(Ok(r.body)),
+        Ok(r) => Some(Err(r.body)),
+        Err(_) => None, // stale link file: fall back to the local session
+    }
+}
+
+/// `cancel_python` from `actor` without the [`Server`] (it may be busy
+/// running the script): to the linked app when `use_link` and one answers,
+/// else to the headless run behind `runs`.
+pub fn cancel_python(
+    runs: &crate::python::RunControl,
+    use_link: bool,
+    actor: &Actor,
+) -> Result<Value, Value> {
+    if use_link {
+        if let Some(r) = forward_as(actor, crate::python::CANCEL_TOOL, &json!({})) {
+            return r;
+        }
+    }
+    runs.cancel(actor)
+}
+
+/// A file error as a tool error: `{"error", "failures": [{code: "ferro.io.*"}]}`.
+pub fn io_failure(e: &ferro_io::IoError) -> Value {
+    json!({
+        "error": e.message,
+        "failures": [{"severity": "error", "code": e.code, "message": e.message, "elements": []}],
+    })
 }
 
 impl Default for Server {

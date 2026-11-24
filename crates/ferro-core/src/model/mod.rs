@@ -7,14 +7,38 @@
 
 pub mod bim;
 mod category;
+pub mod change;
+pub mod cut;
+pub mod design_option;
 mod document;
 mod element;
 pub mod generate;
 mod ids;
+pub mod join;
+pub mod material;
 mod parameter;
+mod parameter_definition;
+pub mod phase;
+pub mod phase_quantities;
+pub mod project_settings;
+mod relationship;
+pub mod structure_quantities;
+pub mod view;
 
 pub use category::Category;
+pub use design_option::{Combination, DesignOption, OptionSet, OptionStatus};
 pub use document::{Document, ProjectInfo, ProjectOrigins, EXTENT_LIMIT_MM};
-pub use element::{Element, ElementBody, Form, Level};
+pub use element::{Element, ElementBody, Form, GeometrySource, Level};
 pub use ids::{ElementId, Uid};
 pub use parameter::{keys, ParamValue};
+pub use parameter_definition::{
+    builtin_definition, builtin_definitions, IfcPropertyMapping, ParameterBinding,
+    ParameterDataType, ParameterDefinition, ParameterGroup,
+};
+pub use phase::{Phase, PhaseStatus};
+pub use phase_quantities::PhaseQuantities;
+pub use relationship::{Relationship, RelationshipError, RelationshipKind};
+pub use view::{
+    DisplayStyle, PhaseFilter, PhaseGraphics, Projection, SectionPlane, View, ViewCamera,
+    ViewRange, ViewType,
+};

@@ -1,5 +1,6 @@
-//! BIM element data (Foundation Spec ch. 3, D-41, D-70): materials, system
-//! family types with compound structures, walls, floors and hosted openings.
+//! BIM element data (Foundation Spec ch. 3, D-41, D-70): system family types
+//! with compound structures, walls, floors and hosted openings. `Material`
+//! lives in `model::material` and is re-exported here.
 //! Geometry is derived by regeneration (`model::generate`) and stored on the
 //! element as a cache; parameters are the source of truth.
 
@@ -9,19 +10,8 @@ use crate::math::{Length, Point2};
 use crate::topo::Body;
 use serde::{Deserialize, Serialize};
 
-/// A material (D-08 / Q-E8). Appearance follows glTF PBR; physical data and
-/// product links come later.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct Material {
-    /// sRGB base colour, 0..1.
-    pub color: [f32; 3],
-    #[serde(default = "default_roughness")]
-    pub roughness: f32,
-}
-
-fn default_roughness() -> f32 {
-    0.8
-}
+/// Re-export: `bim::Material` keeps working (milestone 2 path).
+pub use super::material::Material;
 
 /// Function of a layer in a compound structure (Revit: `MaterialFunctionAssignment`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -125,6 +115,33 @@ pub enum WallTop {
     Level { level: ElementId, offset: Length },
 }
 
+/// Join state of one wall end (Revit: `WallUtils.AllowWallJoinAtEnd` /
+/// `DisallowWallJoinAtEnd`). Stable snake_case names: `auto`, `disallow`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum WallJoin {
+    /// The end joins the walls it meets (L, T), like Revit's "Allow Join".
+    #[default]
+    Auto,
+    /// The end stays square and never joins, even when it touches a wall.
+    Disallow,
+}
+
+impl WallJoin {
+    /// Stable name, as in files and MCP.
+    pub fn name(&self) -> &'static str {
+        match self {
+            WallJoin::Auto => "auto",
+            WallJoin::Disallow => "disallow",
+        }
+    }
+
+    /// `true` for [`WallJoin::Auto`] (the default, omitted from files).
+    pub fn is_auto(&self) -> bool {
+        *self == WallJoin::Auto
+    }
+}
+
 /// A wall instance. Base level = `Element::level_id`; type = `Element::type_id`.
 /// The location curve is horizontal (its z is ignored); the exterior face is
 /// on the **left** of the curve direction.
@@ -136,6 +153,13 @@ pub struct Wall {
     pub top: WallTop,
     #[serde(default)]
     pub location_line: LocationLine,
+    /// Join state at the start of the curve (Foundation §3.8, M5-5.2);
+    /// omitted from files when `auto`.
+    #[serde(default, skip_serializing_if = "WallJoin::is_auto")]
+    pub join_start: WallJoin,
+    /// Join state at the end of the curve; omitted from files when `auto`.
+    #[serde(default, skip_serializing_if = "WallJoin::is_auto")]
+    pub join_end: WallJoin,
     /// Derived geometry (regenerated).
     #[serde(default)]
     pub geometry: Body,

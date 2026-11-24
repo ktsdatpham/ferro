@@ -4,12 +4,17 @@
 //! lengths accept numbers (mm) or strings ("3m", "300cm", "10'"), angles are
 //! in degrees, points are [x, y, z] in mm.
 
+use ferro_core::model::structure_quantities::StructureQuantities;
 use ferro_core::model::{keys, Category, ElementBody};
 use ferro_core::ops::{AnyCommand, ExecContext, Failure};
 use ferro_core::{Angle, Document, ElementId, Length, Session};
 use serde_json::{json, Map, Value};
 
+mod design_option;
 pub mod link;
+mod parameter;
+
+pub use parameter::param_value;
 
 const LENGTH_FIELDS: [&str; 12] = [
     "radius",
@@ -53,6 +58,98 @@ fn wall_props(mut extra: Value) -> Value {
     }
     extra
 }
+/// Material asset properties (`create_material`, `set_material`) added to
+/// `base`. With `partial`, no asset field is required (merge patch).
+fn material_props(mut base: Value, partial: bool) -> Value {
+    let num = |d: &str| json!({"type": ["number", "null"], "description": d});
+    let unit = json!({"type":"string","enum":["m3","kg","m2"],"description":"Per cubic metre, kilogram or square metre of material"});
+    let image = json!({"type":["object","null"],"description":"Image laid on faces at real-world size (placeholder, not rendered yet)","properties":{"path":{"type":"string"},"width_mm":{"type":"number"},"height_mm":{"type":"number"},"rotation_rad":{"type":"number"}},"required":["path","width_mm","height_mm"]});
+    let req = |r: &[&str]| -> Value {
+        if partial {
+            json!([])
+        } else {
+            json!(r)
+        }
+    };
+    let assets = json!({
+        "appearance": {"type":"object","description":"OpenPBR surface parameters beyond colour (= base_color) and roughness (= specular_roughness)","properties":{
+            "base_metalness": num("0..1, OpenPBR base_metalness"),
+            "specular_ior": num("Index of refraction, default 1.5"),
+            "transmission_weight": num("0..1, glass ≈ 1"),
+            "emission_color": {"type":["array","null"],"items":{"type":"number"},"minItems":3,"maxItems":3,"description":"sRGB 0..1"},
+            "emission_luminance": num("cd/m² (nits)"),
+            "geometry_opacity": num("0..1, 1 = opaque"),
+            "coat_weight": num("0..1, varnish / lacquer"),
+            "base_color_image": image.clone(),
+            "normal_image": image}},
+        "physical": {"type":"object","description":"Mechanical data, SI units","properties":{
+            "density_kg_m3": num("kg/m³"),
+            "youngs_modulus_pa": num("Young's modulus, Pa (concrete ≈ 3.1e10)"),
+            "poisson_ratio": num("-1..0.5"),
+            "compressive_strength_pa": num("Pa"),
+            "tensile_strength_pa": num("Pa"),
+            "thermal_expansion_per_k": num("1/K")}},
+        "thermal": {"type":"object","description":"Thermal data, SI units; conductivity gives wall / floor U-values","properties":{
+            "conductivity_w_mk": num("λ, W/(m·K), > 0"),
+            "specific_heat_j_kgk": num("J/(kg·K)"),
+            "density_kg_m3": num("kg/m³ (used when physical has none)"),
+            "emissivity": num("0..1"),
+            "solar_absorptance": num("0..1"),
+            "vapour_resistance_factor": num("μ, ≥ 1")}},
+        "environmental": {"type":"object","description":"Embodied carbon (GWP-total, EN 15804 stages) in kg CO2e per declared unit","properties":{
+            "declared_unit": unit.clone(),
+            "gwp_a1_a3": num("Product stage A1-A3"),
+            "gwp_a4": num("A4 transport"),
+            "gwp_a5": num("A5 installation"),
+            "gwp_b": num("B1-B7 use"),
+            "gwp_c": num("C1-C4 end of life"),
+            "gwp_d": num("D beyond system boundary"),
+            "epd_source": {"type":["string","null"],"description":"EPD number / database"}},
+            "required": req(&["declared_unit"])},
+        "cost": {"type":"object","description":"Unit price","properties":{
+            "unit_price": {"type":"number"},
+            "currency": {"type":"string","description":"ISO 4217, e.g. VND, USD"},
+            "unit": unit},
+            "required": req(&["unit_price", "currency", "unit"])},
+    });
+    if let (Some(b), Some(a)) = (base.as_object_mut(), assets.as_object()) {
+        for (k, v) in a {
+            b.insert(k.clone(), v.clone());
+        }
+    }
+    base
+}
+
+/// Comma-separated quantity spec ids, for tool descriptions.
+fn spec_ids() -> String {
+    ferro_core::QuantitySpec::ALL
+        .iter()
+        .map(|s| s.id())
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
+/// View properties shared by `create_view` and `set_view`, added to `base`.
+fn view_props(mut base: Value) -> Value {
+    let plane = json!({"type":["object","null"],"description":"Cutting plane: geometry on the side the normal points to is not drawn","properties":{"point": point("A point on the plane"), "normal": point("Normal of the side cut away")},"required":["point","normal"]});
+    let common = json!({
+        "camera": {"type":"object","description":"Camera; points in mm","properties":{"eye": point("Camera position"), "target": point("Point looked at"), "up": point("Up direction"), "projection": {"type":"string","enum":["perspective","parallel"]}, "fov_y": {"type":["number","string"],"description":"Vertical field of view, degrees (default 45)"}},"required":["eye","target","up"]},
+        "section_plane": plane,
+        "section_box": {"type":["object","null"],"description":"3D views: only what is inside is drawn (stored; not drawn by the app yet)","properties":{"min": point("Lowest corner"), "max": point("Highest corner")},"required":["min","max"]},
+        "view_range": {"type":"object","description":"Plan views (Revit View Range), offsets from the level; view_depth ≤ bottom ≤ cut_height ≤ top","properties":{"top": length(), "cut_height": length(), "bottom": length(), "view_depth": length()},"required":["top","cut_height","bottom","view_depth"]},
+        "depth": length(),
+        "display_style": {"type":"string","enum":["shaded","x_ray","wireframe","hidden_line"]},
+        "phase": {"type":["integer","null"],"description":"Phase shown by the view (null = the last phase)"},
+        "phase_filter": {"type":"string","enum":["show_all","show_complete","show_new","show_previous_and_demo","show_previous_and_new","show_demo_and_new","no_overrides"],"description":"Revit phase filter: which statuses are shown and with status graphics (default show_all)"},
+    });
+    if let (Some(b), Some(c)) = (base.as_object_mut(), common.as_object()) {
+        for (k, v) in c {
+            b.insert(k.clone(), v.clone());
+        }
+    }
+    base
+}
+
 fn tool(name: &str, description: &str, props: Value, required: &[&str]) -> Value {
     json!({"name": name, "description": description, "inputSchema": {"type": "object", "properties": props, "required": required}})
 }
@@ -83,14 +180,35 @@ pub fn list() -> Vec<Value> {
             json!({"elements": ids("Element ids")}), &["elements"]),
         tool("set_name", "Rename an element (null clears).",
             json!({"element": id("Element id"), "name": {"type":["string","null"]}}), &["element", "name"]),
-        tool("set_parameter", "Set a typed parameter. Key format namespace.group.name (e.g. ferro.common.comments, acme.fengshui.score). Value: {\"type\": \"length\"|\"angle\"|\"area\"|\"volume\"|\"number\"|\"integer\"|\"bool\"|\"text\"|\"tags\"|\"element_ref\", \"value\": ...}. Lengths in mm, angles in radians here. Computed keys (ferro.form.area, ferro.form.volume) are read-only.",
-            json!({"element": id("Element id"), "key": {"type":"string"}, "value": {"type":"object"}}), &["element", "key", "value"]),
-        tool("set_category", "Classify a Form as a BIM category so it exports to Revit / IFC correctly.",
-            json!({"element": id("Form element id"), "category": {"type":"string","enum": Category::ALL.iter().filter(|c| c.classifiable_form()).map(|c| c.to_string()).collect::<Vec<_>>()}}), &["element", "category"]),
-        tool("set_project_name", "Rename the project.", json!({"name":{"type":"string"}}), &["name"]),
+        tool("set_parameter", &format!("Set a typed parameter. Key format namespace.group.name (e.g. ferro.common.comments, acme.energy.conductivity). Value forms: (1) a quantity with a unit as text: \"0.8 W/mK\", \"1200 kg/m3\", \"35 MPa\", \"0.25 W/m2K\", \"20 °C\", \"120 kgCO2e\", \"3m\" (if the key has a quantity definition, a bare number in text uses its default unit); (2) {{\"spec\": \"density\", \"value\": 1200, \"unit\": \"kg/m3\"}} (no unit = SI storage unit; length mm, angle rad); (3) {{\"type\": \"text\"|\"integer\"|\"bool\"|\"tags\"|\"element_ref\"|\"number\", \"value\": ...}}; also plain numbers, booleans and string arrays (tags). Specs: {}. Fails if the key's definition has another type. Computed keys (ferro.form.*, ferro.dimensions.*) are read-only.", spec_ids()),
+            json!({"element": id("Element id"), "key": {"type":"string"}, "value": {"type":["object","string","number","boolean","array"]}}), &["element", "key", "value"]),
+        tool("set_parameter_definition", "Define a project parameter key (like a Revit shared parameter): data type, group, instance / type binding, description and optional IFC property set mapping. Values set later must fit the type. Built-in ferro.* keys cannot be defined. Returns {key, uid}; pass `uid` (a Revit shared parameter GUID) to match an existing Revit parameter.",
+            json!({"key": {"type":"string"},
+                   "data_type": {"type":["string","object"], "description": format!("\"text\"|\"integer\"|\"bool\"|\"tags\"|\"element_ref\" or {{\"quantity\": \"<spec>\"}}, e.g. {{\"quantity\": \"u_value\"}}. Specs: {}", spec_ids())},
+                   "group": {"type":"string","enum":["constraints","dimensions","identity_data","materials","analysis","structural","data"]},
+                   "binding": {"type":"string","enum":["instance","type"]},
+                   "description": {"type":"string"},
+                   "uid": {"type":"string","description":"Optional UUID (8-4-4-4-12)"},
+                   "ifc": {"type":"object","properties":{"property_set":{"type":"string"},"property":{"type":"string"}},"required":["property_set","property"]}}),
+            &["key", "data_type"]),
+        tool("set_category", "Classify directly edited geometry (a Form, or a frozen wall / floor) as a BIM category: a free-form wall keeps its shape and becomes a Wall with type, materials and parameters, exported to Revit / IFC as a wall. A type that no longer fits is removed.",
+            json!({"element": id("Element with direct geometry"), "category": {"type":"string","enum": Category::ALL.iter().filter(|c| c.classifiable_form()).map(|c| c.to_string()).collect::<Vec<_>>()}}), &["element", "category"]),
+        tool("set_geometry_source", "Switch where an element's geometry comes from. 'direct': freeze a parametric wall / floor so it can be edited freely like a SketchUp group (keeps category, type, parameters; hosted doors / windows freeze with it). 'parametric': turn a directly edited wall (rectangular box) or floor (flat slab with vertical sides) back into a parametric one, using a type of the same thickness; fails with ferro.model.not_recognised or ferro.model.no_matching_type. Returns {element, changed}.",
+            json!({"element": id("Element id"), "source": {"type":"string","enum":["direct","parametric"]}}), &["element", "source"]),
+        tool("set_project_units", "Choose how a quantity is shown and typed in this project, e.g. {spec: length, unit: m, decimals: 2}. unit null = back to the default (mm for length). Values are always stored in mm / SI; this changes display only.",
+            json!({"spec": {"type":"string","enum": ferro_core::QuantitySpec::ALL.iter().map(|s| s.id()).collect::<Vec<_>>()}, "unit": {"type":["string","null"],"description":"A unit of that quantity, e.g. mm, m, ft, W/(m·K)"}, "decimals": {"type":["integer","null"],"minimum":0,"maximum":9}}), &["spec"]),
+        tool("set_site_location", "Set where the project is (sun, energy, weather): latitude / longitude in degrees (north / east positive), elevation of the internal origin above sea level (length), UTC offset in minutes (Vietnam 420), place name, weather file (EPW). Omitted fields keep their value; clear: true removes the location.",
+            json!({"latitude": {"type":"number","description":"Degrees, -90..90"}, "longitude": {"type":"number","description":"Degrees, -180..180"}, "elevation": length(), "utc_offset_minutes": {"type":"integer"}, "place": {"type":"string"}, "weather_file": {"type":"string"}, "clear": {"type":"boolean"}}), &[]),
+        tool("set_project_currency", "Set the currency for costs (ISO 4217, e.g. VND, USD); null clears it.",
+            json!({"currency": {"type":["string","null"]}}), &[]),
+        tool("set_project_name", "Rename the project and / or switch auto-pinning: with auto_pin_datums true new levels are created pinned (default false, as Revit). Omitted fields keep their value.", json!({"name":{"type":"string"}, "auto_pin_datums": {"type":"boolean","description":"New levels (datums) are created pinned"}}), &[]),
+        tool("set_pinned", "Pin or unpin elements (Revit Pin / Unpin). As in Revit, a pinned element cannot be moved (move, rotate, dragging it or its ends, a level's elevation, a door's position) or deleted, nor can the wall hosting a pinned door be deleted (ferro.model.pinned); everything else stays editable: parameters, type, name, phase, shape and profile, copying. Unpin first to move it. Returns {elements, changed}.",
+            json!({"elements": ids("Element ids"), "pinned": {"type":"boolean","description":"true = pin, false = unpin"}}), &["elements", "pinned"]),
         // BIM elements (milestone 2).
-        tool("create_material", "Create a material with a base colour. Returns {element}.",
-            json!({"name": {"type":"string"}, "color": {"type":"string","description":"#rrggbb"}, "roughness": {"type":"number","minimum":0,"maximum":1}}), &["name", "color"]),
+        tool("create_material", "Create a material with a base colour and optional assets (all optional, SI units named in each field): appearance (OpenPBR), physical, thermal, environmental (GWP from an EPD), cost. Wall / floor types using it then report U-value, mass, carbon and cost per m² (get_element on the type). Returns {element}.",
+            material_props(json!({"name": {"type":"string"}, "color": {"type":"string","description":"#rrggbb"}, "roughness": {"type":"number","minimum":0,"maximum":1,"description":"OpenPBR specular_roughness, default 0.8"}}), false), &["name", "color"]),
+        tool("set_material", "Edit a material; omitted fields keep their value. Each asset is a partial update: given fields are set, fields set to null are cleared, others kept (e.g. {\"material\": 3, \"thermal\": {\"conductivity_w_mk\": 0.8}}). `clear` removes whole assets. Unknown field names fail.",
+            material_props(json!({"material": id("Material id"), "color": {"type":"string","description":"#rrggbb"}, "roughness": {"type":"number","minimum":0,"maximum":1}, "clear": {"type":"array","items":{"type":"string","enum":["appearance","physical","thermal","environmental","cost"]},"description":"Assets to remove before applying the updates"}}), true), &["material"]),
         tool("create_wall_type", "Create a wall type: either one layer of `thickness` (+ optional material id) or `layers` listed from the exterior face to the interior face, each {function: structure|substrate|insulation|finish|membrane, thickness, material?}.",
             json!({"name": {"type":"string"}, "thickness": length(), "material": id("Optional material id"), "layers": layers()}), &["name"]),
         tool("create_floor_type", "Create a floor type (layers from top to bottom), like create_wall_type.",
@@ -111,8 +229,8 @@ pub fn list() -> Vec<Value> {
             json!({"wall": id("Host wall id"), "kind": {"type":"string","enum":["door","window"]}, "position": length(), "width": length(), "height": length(), "sill": length(), "name": {"type":"string"}}), &["wall", "kind", "position"]),
         tool("set_opening", "Change a door or window: position along the wall, width, height, sill. Omitted fields keep their value.",
             json!({"opening": id("Door or window id"), "position": length(), "width": length(), "height": length(), "sill": length()}), &["opening"]),
-        tool("set_wall", "Change a wall: start + end (+ mid for a curved wall), base_offset, height (fixed top) or top_level (+ top_offset), location_line. Omitted fields keep their value.",
-            json!({"wall": id("Wall id"), "start": point("Start"), "end": point("End"), "mid": point("Point on the arc (curved walls)"), "base_offset": length(), "height": length(), "top_level": id("Level the top attaches to"), "top_offset": length(), "location_line": {"type":"string","enum":["wall_centerline","core_centerline","finish_exterior","finish_interior"]}}), &["wall"]),
+        tool("set_wall", "Change a wall: start + end (+ mid for a curved wall), base_offset, height (fixed top) or top_level (+ top_offset), location_line, join_start / join_end. Walls whose ends meet join automatically (L mitre, T); join_start / join_end = \"disallow\" keeps that end square and unjoined (Revit Disallow Join), \"auto\" allows it again. Omitted fields keep their value.",
+            json!({"wall": id("Wall id"), "start": point("Start"), "end": point("End"), "mid": point("Point on the arc (curved walls)"), "base_offset": length(), "height": length(), "top_level": id("Level the top attaches to"), "top_offset": length(), "location_line": {"type":"string","enum":["wall_centerline","core_centerline","finish_exterior","finish_interior"]}, "join_start": {"type":"string","enum":["auto","disallow"],"description":"Join state at the start"}, "join_end": {"type":"string","enum":["auto","disallow"],"description":"Join state at the end"}}), &["wall"]),
         tool("set_floor", "Change a floor's outline (points [x, y]), holes or offset. Omitted fields keep their value.",
             json!({"floor": id("Floor id"), "points": {"type":"array","items": point("Vertex"), "minItems": 3}, "holes": {"type":"array","items":{"type":"array","items": point("Vertex")}}, "offset": length()}), &["floor"]),
         // SketchUp-style Form editing.
@@ -130,6 +248,46 @@ pub fn list() -> Vec<Value> {
             json!({"element": id("Form id"), "edges": ids("Edge ids")}), &["element", "edges"]),
         tool("erase_faces", "Erase faces of a Form (it becomes open); erasing all faces deletes it.",
             json!({"element": id("Form id"), "faces": ids("Face ids")}), &["element", "faces"]),
+        tool("subtract_forms", "Cut one Form out of another (solid boolean difference): the target becomes target minus cutter, e.g. a box pushed into a wall makes a niche or an opening. Both must be closed solids with flat faces. The cutter is deleted unless keep_cutter is true. Faces of the target that survive keep their ids; returns lineage (kept / created / deleted faces) and faces (each result face with the input faces it came from: from_a = target, from_b = cutter). Fails with ferro.kernel.empty_result when nothing is left, ferro.kernel.unavailable when no geometry kernel is attached.",
+            json!({"target": id("Form to cut"), "cutter": id("Form to cut away"), "keep_cutter": {"type":"boolean","description":"Keep the cutter Form (default false: it is deleted)"}}), &["target", "cutter"]),
+        tool("unite_forms", "Unite two Forms (solid boolean union): the target becomes target plus other, in one body (several shells when they do not touch). Both must be closed solids with flat faces. The other Form is deleted unless keep_other is true. Faces of the target that survive keep their ids; returns lineage and faces (from_a = target, from_b = other). Fails with ferro.kernel.non_manifold_result when they touch only along an edge, ferro.kernel.unavailable when no geometry kernel is attached.",
+            json!({"target": id("Form to grow"), "other": id("Form to add"), "keep_other": {"type":"boolean","description":"Keep the other Form (default false: it is deleted)"}}), &["target", "other"]),
+        tool("intersect_forms", "Intersect two Forms (solid boolean intersection): the target becomes what lies in both. Both must be closed solids with flat faces. The other Form is deleted unless keep_other is true. Returns lineage and faces as unite_forms. Fails with ferro.kernel.empty_result when they do not overlap.",
+            json!({"target": id("Form to trim"), "other": id("Form to intersect with"), "keep_other": {"type":"boolean","description":"Keep the other Form (default false: it is deleted)"}}), &["target", "other"]),
+        // Phases (ADR 0006).
+        tool("create_phase", "Create a construction phase (Revit Phase), appended at the end or inserted before `before`. Phases are ordered; elements are created / demolished in phases. Dates are YYYY-MM-DD. Returns {element, phases}.",
+            json!({"name": {"type":"string"}, "before": id("Optional phase to insert before"), "start_date": {"type":"string","description":"YYYY-MM-DD"}, "end_date": {"type":"string","description":"YYYY-MM-DD"}}), &["name"]),
+        tool("set_phase", "Rename a phase, move it to `position` (0 = first) or change its dates (\"\" clears a date). Fails with ferro.model.invalid_phase_order if some element would be demolished before it is created.",
+            json!({"phase": id("Phase id"), "name": {"type":"string"}, "position": {"type":"integer","minimum":0}, "start_date": {"type":"string"}, "end_date": {"type":"string"}}), &["phase"]),
+        tool("delete_phase", "Delete a phase. A phase used by elements needs `merge_into`: the phase just before or after it, which its elements then use (Revit: combine with previous / next).",
+            json!({"phase": id("Phase id"), "merge_into": id("Neighbouring phase that takes over its elements")}), &["phase"]),
+        tool("set_element_phase", "Set the phase elements are created in and / or demolished in (Revit Phase Created / Phase Demolished). Omit a field to keep it, null clears it. Demolished must be the same phase as created or later. Elements without a created phase count as existing in every phase.",
+            json!({"elements": ids("Element ids (walls, floors, doors, windows, Forms)"), "created": {"type":["integer","null"],"description":"Phase id"}, "demolished": {"type":["integer","null"],"description":"Phase id"}}), &["elements"]),
+        tool("set_renovation_status", "Simple renovation mode (ArchiCAD-like): mark elements existing, to be demolished, or new. Uses the first and last phase; creates \"Existing\" and \"New Construction\" if the project has fewer than two phases.",
+            json!({"elements": ids("Element ids"), "status": {"type":"string","enum":["existing","demolish","new"]}}), &["elements", "status"]),
+        tool("get_phase_quantities", "Quantities in the view of a phase, per category split by status (existing / new / demolished / temporary): count, volume (m³) and area (m²; floors plan area, walls gross length × height). The basis for demolition and new-build costs. A cut relationship made in a phase (an opening in an existing wall) counts the removed part as demolished volume in that phase; before it the element is uncut. `phase` defaults to the last phase.",
+            json!({"phase": id("Phase id (default: last phase)")}), &[]),
+        // Relationships (ADR 0004 §5).
+        tool("create_relationship", "Link elements with a relationship row (stored as data, saved, undoable). Order of `elements` by kind: join [first, second] (Revit Join Geometry between walls, floors and Forms: first wins where they overlap, second shows its body minus first's, regenerated through the kernel; between two walls whose ends meet it makes a butt corner where first runs through), cut [cutter, cut] (non-destructive void: the cut element, a wall, floor or Form, shows its body minus the cutter's, regenerated when either changes; a Form used only as a cutter becomes a hidden void), host [host, hosted], attach [attached, target], bounds [space, boundary], connect [a, b], aggregate [whole, part, ...]. Only elements with geometry. `phase`: the phase it is made in. Returns {relationship: uid}. Fails with ferro.model.invalid_relationship, missing_element or duplicate_relationship.",
+            json!({"kind": {"type":"string","enum":["join","cut","host","attach","bounds","connect","aggregate"]}, "elements": ids("Element ids, ordered as the kind says"), "phase": id("Optional phase id")}), &["kind", "elements"]),
+        tool("delete_relationship", "Remove a relationship row by uid; the elements stay. Deleting an element removes its rows automatically.",
+            json!({"relationship": {"type":"string","description":"Relationship uid (from create_relationship or list_relationships)"}}), &["relationship"]),
+        tool("set_relationship", "Change a relationship row in place (its uid stays): `elements` replaces the linked elements, or `reverse: true` swaps a two-element row; for a join that is Revit's Switch Join Order (the other element wins). Returns {relationship, elements}. Fails with ferro.model.invalid_uid, missing_relationship, invalid_relationship, missing_element or duplicate_relationship.",
+            json!({"relationship": {"type":"string","description":"Relationship uid"}, "elements": ids("New element ids, ordered as the kind says"), "reverse": {"type":"boolean","description":"Swap the two elements (Switch Join Order)"}}), &["relationship"]),
+        // Design options (ADR 0006) and change lists (M5-26).
+    ]
+    .into_iter()
+    .chain(design_option::tools())
+    .chain(vec![
+        tool("list_relationships", "Relationship rows, all or those linking `element`: [{relationship, kind, elements, phase}].",
+            json!({"element": id("Optional element id")}), &[]),
+        // Views (D-33, M5-22).
+        tool("create_view", "Create a view (Revit View): `view_3d` (camera, optional section plane / section box), `plan_view` (needs `level`; cut at view_range.cut_height above it, default 1200 mm) or `section_view` (needs `section_plane`; shows `depth` beyond it, default 10 m). View names are unique. A view keeps camera, display style, hidden elements / tags and its phase; the Ferro app shows the active view. Returns {element}.",
+            view_props(json!({"name": {"type":"string"}, "view_type": {"type":"string","enum":["view_3d","plan_view","section_view"]}, "level": id("Level of a plan view")})), &["name", "view_type"]),
+        tool("set_view", "Change a view. Omit a field to keep it. `section_plane`, `section_box` and `phase` accept null to clear (a section view keeps its plane). `hide` / `unhide` add / remove elements from the view's hidden list (`unhide_all` empties it first); `hidden_tags` replaces the tags hidden in the view. Deleting an element removes it from every view.",
+            view_props(json!({"view": id("View id"), "name": {"type":"string"}, "hide": ids("Elements to hide in the view"), "unhide": ids("Elements to show again"), "unhide_all": {"type":"boolean"}, "hidden_tags": {"type":"array","items":{"type":"string"},"description":"Tags whose elements are not shown"}})), &["view"]),
+        tool("delete_view", "Delete a view (deleting a level also deletes its plan views).",
+            json!({"view": id("View id")}), &["view"]),
         // App-only (needs the Ferro app open, through Ferro Link).
         tool("get_selection", "Elements the user has selected in the Ferro app, with their summaries. Use it for requests like \"make the selected wall taller\".", json!({}), &[]),
         tool("select_elements", "Select elements in the Ferro app so the user sees what you mean.", json!({"elements": ids("Element ids (empty clears)")}), &["elements"]),
@@ -140,15 +298,104 @@ pub fn list() -> Vec<Value> {
         tool("revit_import", "Revit → Ferro: apply a snapshot of the Revit model (levels, types, walls, floors, doors, windows; lengths in feet). Returns the Ferro uids of created elements.",
             json!({"snapshot": {"type":"object"}}), &["snapshot"]),
         // Read-only and session tools.
-        tool("list_elements", "Summarise the model: id, uid, name, category, level, faces, area (m²), volume (m³). Optional category filter.",
-            json!({"category": {"type":"string"}}), &[]),
+        tool("list_elements", "Summarise the model: id, uid, name, category, level, faces, area (m²), volume (m³). Optional category filter. `combination` shows the model as seen with design options (elements added by an option carry design_option).",
+            json!({"category": {"type":"string"}, "combination": design_option::combination_schema("Optional view (default: the shared model)")}), &[]),
         tool("get_element", "Full detail of one element, including each face id with its normal, area and centre (use for push_pull_face).",
             json!({"element": id("Element id")}), &["element"]),
         tool("undo", "Undo the last change.", json!({}), &[]),
         tool("redo", "Redo the last undone change.", json!({}), &[]),
         tool("get_journal", "Recent history: who changed what, with which commands.", json!({"limit":{"type":"integer"}}), &[]),
-    ]
+    ])
+    .map(with_option_argument)
+    .collect()
 }
+
+/// Every command tool takes an optional `in_design_option`: run it inside
+/// that design option (the change goes into the option's layer, the shared
+/// model is untouched).
+fn with_option_argument(mut t: Value) -> Value {
+    let is_command = t["name"]
+        .as_str()
+        .is_some_and(|n| AnyCommand::NAMES.contains(&n) && !DESIGN_OPTION_COMMANDS.contains(&n));
+    if is_command {
+        if let Some(p) = t["inputSchema"]["properties"].as_object_mut() {
+            p.insert(
+                "in_design_option".into(),
+                json!({"type": ["integer", "string"], "description": IN_DESIGN_OPTION_DOC}),
+            );
+        }
+    }
+    t
+}
+
+/// Schema text of the `in_design_option` argument (ADR 0006 implementation
+/// note: one target rule for agent commands and scripts).
+pub const IN_DESIGN_OPTION_DOC: &str = "Where the change lands: a design option id (the change goes into that option's layer), or \"shared\" for the shared model. Omitted (or null): the option the user is editing in the Ferro app, else the shared model";
+
+/// Value of `in_design_option` naming the shared model explicitly.
+pub const SHARED: &str = "shared";
+
+/// Whether the command tool `name` takes `in_design_option` (every command
+/// except those on option sets themselves).
+pub fn runs_in_design_option(name: &str) -> bool {
+    AnyCommand::NAMES.contains(&name) && !DESIGN_OPTION_COMMANDS.contains(&name)
+}
+
+/// Read an `in_design_option` argument. `Ok(None)`: not given (absent or
+/// `null`), so the host's default applies; `Ok(Some(None))`: `"shared"`,
+/// the shared model; `Ok(Some(Some(id)))`: that design option. Fails on
+/// anything else (a message for the caller).
+pub fn design_option_argument(v: Option<&Value>) -> Result<Option<Option<ElementId>>, String> {
+    match v {
+        None | Some(Value::Null) => Ok(None),
+        Some(Value::String(s)) if s == SHARED => Ok(Some(None)),
+        Some(v) => match v.as_u64() {
+            Some(n) => Ok(Some(Some(ElementId(n)))),
+            None => Err(format!(
+                "in_design_option must be a design option id or \"{SHARED}\", not {v}"
+            )),
+        },
+    }
+}
+
+/// Apply the default target of a command tool call (ADR 0006: while the
+/// user edits a design option, agent commands and scripts go into it):
+/// when `name` runs in design options and `args` names no target, the
+/// returned arguments name `default` (`None` leaves them unchanged, so the
+/// command lands in the shared model). An explicit id or `"shared"` is kept.
+/// Also returns where the call will land (`None` = the shared model), or
+/// an error message when `in_design_option` is malformed.
+pub fn with_default_design_option(
+    name: &str,
+    args: &Value,
+    default: Option<ElementId>,
+) -> Result<(Value, Option<ElementId>), String> {
+    if !runs_in_design_option(name) {
+        return Ok((args.clone(), None));
+    }
+    match design_option_argument(args.get("in_design_option"))? {
+        Some(target) => Ok((args.clone(), target)),
+        None => {
+            let mut args = args.clone();
+            if let (Some(o), Some(m)) = (default, args.as_object_mut()) {
+                m.insert("in_design_option".into(), json!(o.0));
+            }
+            Ok((args, default))
+        }
+    }
+}
+
+/// Commands on option sets themselves, which cannot run inside an option.
+const DESIGN_OPTION_COMMANDS: [&str; 8] = [
+    "create_option_set",
+    "set_option_set",
+    "delete_option_set",
+    "create_design_option",
+    "set_design_option",
+    "delete_design_option",
+    "accept_design_option",
+    "apply_changes",
+];
 
 /// Convert agent-friendly arguments to kernel units.
 pub fn normalize(args: &Value) -> Result<Value, String> {
@@ -198,15 +445,62 @@ pub fn normalize(args: &Value) -> Result<Value, String> {
         }
         obj.insert("layers".into(), Value::Array(conv));
     }
-    if let Some(v) = obj.get("angle").cloned() {
-        let deg = match &v {
-            Value::Number(n) => n.as_f64().ok_or("angle must be a number")?,
-            Value::String(s) => Angle::parse(s).ok_or("cannot read angle")?.deg(),
-            _ => return Err("angle must be degrees".into()),
+    // Views (M5-22): points, lengths and the field of view inside the
+    // nested camera / cut objects.
+    for (key, lengths, points) in [
+        ("camera", &[][..], &["eye", "target", "up"][..]),
+        ("section_plane", &[][..], &["point", "normal"][..]),
+        ("section_box", &[][..], &["min", "max"][..]),
+        (
+            "view_range",
+            &["top", "cut_height", "bottom", "view_depth"][..],
+            &[][..],
+        ),
+    ] {
+        let Some(Value::Object(mut inner)) = obj.get(key).cloned() else {
+            continue;
         };
-        obj.insert("angle".into(), json!(Angle::from_deg(deg).rad()));
+        for f in lengths {
+            if let Some(v) = inner.get(*f).cloned() {
+                inner.insert((*f).into(), json!(parse_length(&v, f)?));
+            }
+        }
+        for f in points {
+            if let Some(v) = inner.get(*f).cloned() {
+                inner.insert((*f).into(), parse_point(&v, f)?);
+            }
+        }
+        if let Some(v) = inner.get("fov_y").cloned() {
+            inner.insert("fov_y".into(), json!(degrees(&v, "fov_y")?));
+        }
+        obj.insert(key.into(), Value::Object(inner));
+    }
+    // Angles are degrees at this edge, radians inside (D-02).
+    for f in ["angle", "latitude", "longitude"] {
+        if let Some(v) = obj.get(f).cloned() {
+            let deg = match &v {
+                Value::Number(n) => n.as_f64().ok_or(format!("{f} must be a number"))?,
+                Value::String(s) => Angle::parse(s)
+                    .ok_or(format!("cannot read {f} {s:?}"))?
+                    .deg(),
+                _ => return Err(format!("{f} must be degrees")),
+            };
+            obj.insert(f.into(), json!(Angle::from_deg(deg).rad()));
+        }
     }
     Ok(Value::Object(obj))
+}
+
+/// Degrees (number or text with a unit) → radians.
+fn degrees(v: &Value, f: &str) -> Result<f64, String> {
+    let deg = match v {
+        Value::Number(n) => n.as_f64().ok_or(format!("{f} must be a number"))?,
+        Value::String(s) => Angle::parse(s)
+            .ok_or(format!("cannot read {f} {s:?}"))?
+            .deg(),
+        _ => return Err(format!("{f} must be degrees")),
+    };
+    Ok(Angle::from_deg(deg).rad())
 }
 
 fn parse_length(v: &Value, field: &str) -> Result<f64, String> {
@@ -260,7 +554,18 @@ pub fn summary_of(doc: &Document, category: Option<&str>, only: Option<&[Element
             m.insert("uid".into(), json!(e.uid.to_string()));
             m.insert("name".into(), json!(e.name));
             m.insert("category".into(), json!(e.category));
+            m.insert("body".into(), json!(e.body.kind()));
             m.insert("level".into(), json!(e.level_id));
+            if e.pinned {
+                m.insert("pinned".into(), json!(true));
+            }
+            if e.design_option.is_some() {
+                m.insert("design_option".into(), json!(e.design_option));
+            }
+            if e.phase_created.is_some() || e.phase_demolished.is_some() {
+                m.insert("phase_created".into(), json!(e.phase_created));
+                m.insert("phase_demolished".into(), json!(e.phase_demolished));
+            }
             match &e.body {
                 ElementBody::Level(l) => {
                     m.insert("elevation_mm".into(), json!(l.elevation.mm()));
@@ -281,14 +586,25 @@ pub fn summary_of(doc: &Document, category: Option<&str>, only: Option<&[Element
                 ElementBody::Material(mat) => {
                     let [r, g, b] = mat.color.map(|c| (c * 255.0).round() as u8);
                     m.insert("color".into(), json!(format!("#{r:02x}{g:02x}{b:02x}")));
+                    m.insert("roughness".into(), json!(mat.roughness));
+                    // Assets as stored (SI units named in each field).
+                    if let Ok(Value::Object(all)) = serde_json::to_value(mat) {
+                        for (k, v) in all {
+                            if k != "color" && k != "roughness" {
+                                m.insert(k, v);
+                            }
+                        }
+                    }
                 }
                 ElementBody::WallType(t) => {
                     m.insert("thickness_mm".into(), json!(t.structure.thickness()));
                     m.insert("layers".into(), json!(t.structure.layers));
+                    type_quantities(doc, e.id, &mut m);
                 }
                 ElementBody::FloorType(t) => {
                     m.insert("thickness_mm".into(), json!(t.structure.thickness()));
                     m.insert("layers".into(), json!(t.structure.layers));
+                    type_quantities(doc, e.id, &mut m);
                 }
                 ElementBody::Wall(w) => {
                     m.insert("type".into(), json!(e.type_id));
@@ -304,6 +620,35 @@ pub fn summary_of(doc: &Document, category: Option<&str>, only: Option<&[Element
                     m.insert("offset_mm".into(), json!(f.offset.mm()));
                     bim_dims(e, &mut m);
                 }
+                ElementBody::OptionSet(s) => {
+                    m.insert("order".into(), json!(s.order));
+                    m.insert("primary".into(), json!(doc.primary_option(e.id)));
+                }
+                ElementBody::DesignOption(o) => {
+                    let c = ferro_core::model::design_option::layer_counts(doc, &o.changes);
+                    m.insert("set".into(), json!(e.host_id));
+                    m.insert("is_primary".into(), json!(o.is_primary));
+                    m.insert("status".into(), json!(o.status.as_str()));
+                    m.insert("changes".into(), json!(o.changes.len()));
+                    m.insert("added".into(), json!(c.added));
+                    m.insert("removed".into(), json!(c.removed));
+                    m.insert("overridden".into(), json!(c.overridden));
+                }
+                ElementBody::Phase(p) => {
+                    m.insert("order".into(), json!(doc.phase_index(e.id)));
+                    m.insert("start_date".into(), json!(p.start_date));
+                    m.insert("end_date".into(), json!(p.end_date));
+                }
+                ElementBody::View(v) => {
+                    m.insert("view_type".into(), json!(v.view_type));
+                    let c = &v.camera;
+                    m.insert("camera".into(), json!({"eye": [c.eye.x, c.eye.y, c.eye.z], "target": [c.target.x, c.target.y, c.target.z], "up": c.up, "projection": c.projection, "fov_y_deg": round(c.fov_y.deg())}));
+                    m.insert("display_style".into(), json!(v.display_style));
+                    m.insert("hidden_elements".into(), json!(v.hidden_elements));
+                    m.insert("hidden_tags".into(), json!(v.hidden_tags));
+                    m.insert("phase".into(), json!(v.phase));
+                    m.insert("phase_filter".into(), json!(v.phase_filter));
+                }
                 ElementBody::Opening(o) => {
                     m.insert("host".into(), json!(e.host_id));
                     m.insert("kind".into(), json!(o.kind));
@@ -317,6 +662,29 @@ pub fn summary_of(doc: &Document, category: Option<&str>, only: Option<&[Element
         })
         .collect();
     json!({"project": doc.project().name, "elements": items})
+}
+
+/// Computed, read-only quantities of a wall / floor type from its layer
+/// materials: U-value (W/m²K, ISO 6946 surface resistances), mass (kg/m²),
+/// GWP A1–A3 (kg CO2e/m²), cost per m², and the layers that lack data.
+/// A value is null when some layer lacks the data for it.
+fn type_quantities(doc: &Document, id: ElementId, m: &mut Map<String, Value>) {
+    if let Some(q) = StructureQuantities::from_type(doc, id) {
+        let r = |x: Option<f64>, k: f64| x.map(|v| (v * k).round() / k);
+        m.insert(
+            "quantities".into(),
+            json!({
+                "u_value_w_m2k": r(q.u_value_w_m2k, 1e4),
+                "thermal_resistance_m2k_w": r(q.thermal_resistance_m2k_w, 1e4),
+                "heat_flow": q.heat_flow,
+                "mass_kg_m2": r(q.mass_kg_m2, 1e3),
+                "gwp_a1_a3_kgco2e_m2": r(q.gwp_a1_a3_kgco2e_m2, 1e3),
+                "cost_per_m2": r(q.cost_per_m2, 1e2),
+                "currency": q.currency,
+                "missing": q.gaps,
+            }),
+        );
+    }
 }
 
 /// Computed dimensions of walls and floors in metres.
@@ -347,7 +715,11 @@ pub fn detail(doc: &Document, id: ElementId) -> Result<Value, String> {
     let e = doc
         .get(id)
         .ok_or_else(|| format!("element {id} not found"))?;
-    let mut v = summary_one(e);
+    // Start from the summary row: type data, material assets, quantities.
+    let mut v = summary_of(doc, None, Some(&[id]))["elements"]
+        .get(0)
+        .cloned()
+        .unwrap_or_else(|| summary_one(e));
     if let Some(g) = e.geometry() {
         let faces: Vec<Value> = g
             .face_ids()
@@ -364,11 +736,81 @@ pub fn detail(doc: &Document, id: ElementId) -> Result<Value, String> {
         }
     }
     v["parameters"] = json!(e.params);
+    // Quantities in display units, e.g. "0.8 W/(m·K)" (key order, deterministic).
+    let shown: Map<String, Value> = e
+        .params
+        .iter()
+        .filter(|(_, p)| p.spec().is_some())
+        .map(|(k, p)| (k.clone(), json!(p.display())))
+        .collect();
+    if !shown.is_empty() {
+        v["parameters_display"] = Value::Object(shown);
+    }
     Ok(v)
 }
 
+/// `list_relationships`: rows (all, or those linking `element`), in uid
+/// order.
+fn relationships(doc: &Document, args: &Value) -> Value {
+    let only = args.get("element").and_then(Value::as_u64).map(ElementId);
+    let rows: Vec<Value> = doc
+        .relationships()
+        .filter(|r| only.is_none_or(|e| r.involves(e)))
+        .map(|r| {
+            json!({"relationship": r.uid.to_string(), "kind": r.kind.name(), "elements": r.elements, "phase": r.phase})
+        })
+        .collect();
+    json!({ "relationships": rows })
+}
+
+/// `get_phase_quantities`: [`PhaseQuantities`] in m³ / m², keyed by category
+/// then status. `phase` defaults to the last phase.
+///
+/// [`PhaseQuantities`]: ferro_core::model::PhaseQuantities
+pub fn phase_quantities(doc: &Document, args: &Value) -> Result<Value, String> {
+    phase_quantities_with(doc, args, None)
+}
+
+/// [`phase_quantities`] with the session's kernel: phased cuts count the
+/// body in the phase and the removed part as demolished volume (ADR 0006
+/// §5, `PhaseQuantities::from_document_with_kernel`).
+pub fn phase_quantities_with(
+    doc: &Document,
+    args: &Value,
+    kernel: Option<&dyn ferro_core::algo::Kernel>,
+) -> Result<Value, String> {
+    let phase = match args.get("phase").and_then(Value::as_u64) {
+        Some(p) => ElementId(p),
+        None => doc
+            .phases()
+            .last()
+            .map(|p| p.id)
+            .ok_or("the project has no phases yet")?,
+    };
+    let q = ferro_core::model::PhaseQuantities::from_document_with_kernel(doc, phase, kernel)
+        .ok_or_else(|| format!("{phase} is not a phase"))?;
+    let totals = |t: &ferro_core::model::phase_quantities::StatusTotals| json!({"count": t.count, "volume_m3": (t.volume_mm3 / 1e9 * 1000.0).round() / 1000.0, "area_m2": (t.area_mm2 / 1e6 * 1000.0).round() / 1000.0});
+    let mut cats = Map::new();
+    for (c, by) in &q.categories {
+        let mut m = Map::new();
+        for (st, t) in by {
+            m.insert(st.as_str().into(), totals(t));
+        }
+        cats.insert(c.to_string(), Value::Object(m));
+    }
+    let mut total = Map::new();
+    for st in ferro_core::model::PhaseStatus::ALL
+        .iter()
+        .filter(|s| s.is_shown())
+    {
+        total.insert(st.as_str().into(), totals(&q.total(*st)));
+    }
+    let name = doc.get(phase).map(|e| e.label());
+    Ok(json!({"phase": phase, "phase_name": name, "categories": cats, "total": total}))
+}
+
 fn summary_one(e: &ferro_core::Element) -> Value {
-    json!({"id": e.id, "uid": e.uid.to_string(), "name": e.name, "category": e.category, "level": e.level_id})
+    json!({"id": e.id, "uid": e.uid.to_string(), "name": e.name, "category": e.category, "body": e.body.kind(), "level": e.level_id})
 }
 
 fn round(x: f64) -> f64 {
@@ -386,15 +828,54 @@ pub fn call(
 ) -> Option<Result<Value, Value>> {
     let err = |m: String| Err(json!({"error": m}));
     if AnyCommand::NAMES.contains(&name) {
-        let norm = match normalize(args) {
+        let mut args = args.clone();
+        let given = args
+            .as_object_mut()
+            .and_then(|o| o.remove("in_design_option"));
+        // Not given or "shared": the shared model (hosts apply their own
+        // default before calling, see `with_default_design_option`).
+        let in_option = match design_option_argument(given.as_ref()) {
+            Ok(None | Some(None)) => None,
+            Ok(Some(Some(_))) if DESIGN_OPTION_COMMANDS.contains(&name) => {
+                return Some(err(format!("{name} cannot run inside a design option")))
+            }
+            Ok(Some(Some(o))) => Some(o),
+            Err(m) => return Some(err(m)),
+        };
+        let mut norm = match normalize(&args) {
             Ok(v) => v,
             Err(m) => return Some(err(m)),
         };
+        // `position` of a phase / option set is an index, not a length.
+        if matches!(name, "set_phase" | "set_option_set") {
+            if let Some(p) = args.get("position") {
+                norm["position"] = p.clone();
+            }
+        }
+        if name == "set_parameter" {
+            let key = norm
+                .get("key")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_string();
+            if let Some(v) = norm.get("value").cloned() {
+                match param_value(session.doc(), &key, &v) {
+                    Ok(v) => norm["value"] = v,
+                    Err(m) => return Some(err(m)),
+                }
+            }
+        }
         let cmd = match AnyCommand::from_tool(name, &norm) {
             Ok(c) => c,
             Err(m) => return Some(err(m)),
         };
-        return Some(match session.execute(cmd, ctx) {
+        let result = match in_option {
+            Some(o) => {
+                session.execute_in_option(o, &ferro_core::model::Combination::primary(), cmd, ctx)
+            }
+            None => session.execute(cmd, ctx),
+        };
+        return Some(match result {
             Ok(o) => Ok(
                 json!({"result": o.output, "changed": o.changed, "warnings": failures_json(&o.warnings)}),
             ),
@@ -404,14 +885,33 @@ pub fn call(
         });
     }
     Some(match name {
-        "list_elements" => Ok(summary(
-            session.doc(),
-            args.get("category").and_then(Value::as_str),
-        )),
+        "list_elements" => {
+            let combo = match design_option::combination_arg(args.get("combination"), true) {
+                Ok(c) => c,
+                Err(m) => return Some(err(m)),
+            };
+            let category = args.get("category").and_then(Value::as_str);
+            match combo {
+                None => Ok(summary(session.doc(), category)),
+                Some(_) => design_option::seen(session, &combo)
+                    .map(|d| summary(&d, category)),
+            }
+        }
+        "list_design_options" => Ok(design_option::list_design_options(session)),
+        "diff_documents" => design_option::diff_documents(session, args),
         "get_element" => match args.get("element").and_then(Value::as_u64) {
-            Some(id) => detail(session.doc(), ElementId(id)).or_else(err),
+            Some(id) => detail(session.doc(), ElementId(id)).map_err(|m| {
+                json!({"error": m, "failures": [{"severity": "error", "code": "ferro.model.not_found", "message": m, "elements": [id]}]})
+            }),
             None => err("missing element".into()),
         },
+        "get_phase_quantities" => phase_quantities_with(
+            session.doc(),
+            args,
+            session.kernel().map(|k| k.as_ref()),
+        )
+        .or_else(err),
+        "list_relationships" => Ok(relationships(session.doc(), args)),
         "undo" => match session.undo() {
             Some(c) => Ok(json!({"changed": c})),
             None => err("nothing to undo".into()),
@@ -432,7 +932,7 @@ pub fn call(
                 _ => Default::default(),
             };
             Ok(
-                json!({"version": session.doc().version(), "ops": ferro_revit::plan(session.doc(), &state)}),
+                json!({"version": session.doc().version(), "ops": ferro_revit::plan(session.doc(), &state, session.kernel())}),
             )
         }
         "revit_import" => {
@@ -495,4 +995,506 @@ pub fn file_tools() -> Vec<Value> {
             &["path"],
         ),
     ]
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ferro_core::ops::SequentialIds;
+    use ferro_core::QuantitySpec;
+
+    fn session() -> Session {
+        Session::new(Document::new("T"), Box::new(SequentialIds::new(1)))
+    }
+
+    fn ok(s: &mut Session, name: &str, args: Value) -> Value {
+        call(s, &ExecContext::user(), name, &args)
+            .expect("handled")
+            .unwrap_or_else(|e| panic!("{name}: {e}"))
+    }
+
+    #[test]
+    fn summaries_name_the_body_kind_and_missing_elements_have_a_code() {
+        let mut s = session();
+        ok(
+            &mut s,
+            "create_level",
+            json!({"name": "L1", "elevation": 0}),
+        );
+        ok(
+            &mut s,
+            "create_walls",
+            json!({"points": [[0, 0], ["4m", 0]]}),
+        );
+        ok(
+            &mut s,
+            "create_box",
+            json!({"origin": [0, "9m", 0], "width": "1m", "depth": "1m", "height": "1m"}),
+        );
+        let all = ok(&mut s, "list_elements", json!({}));
+        let kinds: std::collections::BTreeSet<&str> = all["elements"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|e| e["body"].as_str().expect("every row has a body kind"))
+            .collect();
+        for k in ["level", "wall", "wall_type", "form"] {
+            assert!(kinds.contains(k), "{k} in {kinds:?}");
+        }
+        for e in all["elements"].as_array().unwrap() {
+            let d = ok(&mut s, "get_element", json!({"element": e["id"]}));
+            assert_eq!(d["body"], e["body"]);
+        }
+        let r = call(
+            &mut s,
+            &ExecContext::user(),
+            "get_element",
+            &json!({"element": 999}),
+        )
+        .expect("handled")
+        .unwrap_err();
+        assert_eq!(r["failures"][0]["code"], "ferro.model.not_found");
+    }
+
+    /// ADR 0008 through the tool surface: pins show in summaries, block
+    /// moves, agents unpin like anyone, auto-pin is opt-in.
+    #[test]
+    fn pin_tools_through_mcp() {
+        let mut s = session();
+        let l = ok(
+            &mut s,
+            "create_level",
+            json!({"name": "L1", "elevation": 0}),
+        )["result"]["element"]
+            .clone();
+        let row = ok(&mut s, "get_element", json!({"element": l}));
+        assert!(row.get("pinned").is_none(), "not auto-pinned: {row}");
+        let agent = ExecContext {
+            actor: ferro_core::ops::Actor::agent("bot", "m"),
+            prompt: None,
+            timestamp_ms: 0,
+        };
+        let set = |p: bool| json!({"elements": [l], "pinned": p});
+        call(&mut s, &agent, "set_pinned", &set(true))
+            .expect("handled")
+            .expect("an agent may pin");
+        let row = ok(&mut s, "get_element", json!({"element": l}));
+        assert_eq!(row["pinned"], true);
+        let r = call(
+            &mut s,
+            &ExecContext::user(),
+            "set_level_elevation",
+            &json!({"level": l, "elevation": "1m"}),
+        )
+        .expect("handled")
+        .unwrap_err();
+        assert_eq!(r["failures"][0]["code"], "ferro.model.pinned");
+        ok(&mut s, "set_name", json!({"element": l, "name": "Ground"}));
+        call(&mut s, &agent, "set_pinned", &set(false))
+            .expect("handled")
+            .expect("an agent may unpin");
+        ok(
+            &mut s,
+            "set_level_elevation",
+            json!({"level": l, "elevation": "1m"}),
+        );
+        ok(&mut s, "set_project_name", json!({"auto_pin_datums": true}));
+        let l2 = ok(
+            &mut s,
+            "create_level",
+            json!({"name": "L2", "elevation": "3m"}),
+        )["result"]["element"]
+            .clone();
+        let row = ok(&mut s, "get_element", json!({"element": l2}));
+        assert_eq!(row["pinned"], true);
+        let t = list();
+        let t = t
+            .iter()
+            .find(|t| t["name"] == "set_pinned")
+            .expect("schema");
+        assert_eq!(t["inputSchema"]["required"], json!(["elements", "pinned"]));
+    }
+
+    #[test]
+    fn relationship_tools_round_trip_through_mcp() {
+        let tools = list();
+        let t = tools
+            .iter()
+            .find(|t| t["name"] == "create_relationship")
+            .expect("schema");
+        assert_eq!(
+            t["inputSchema"]["properties"]["kind"]["enum"],
+            json!([
+                "join",
+                "cut",
+                "host",
+                "attach",
+                "bounds",
+                "connect",
+                "aggregate"
+            ])
+        );
+        let mut s = session();
+        let mut b = || {
+            ok(
+                &mut s,
+                "create_box",
+                json!({"origin": [0, 0, 0], "width": "1m", "depth": "1m", "height": "1m"}),
+            )["result"]["element"]
+                .as_u64()
+                .unwrap()
+        };
+        let (x, y, z) = (b(), b(), b());
+        let u = ok(
+            &mut s,
+            "create_relationship",
+            json!({"kind": "join", "elements": [x, y]}),
+        )["result"]["relationship"]
+            .as_str()
+            .unwrap()
+            .to_string();
+        ok(
+            &mut s,
+            "create_relationship",
+            json!({"kind": "connect", "elements": [y, z]}),
+        );
+        let all = ok(&mut s, "list_relationships", json!({}));
+        assert_eq!(all["relationships"].as_array().unwrap().len(), 2);
+        let of_x = ok(&mut s, "list_relationships", json!({"element": x}));
+        assert_eq!(
+            of_x["relationships"],
+            json!([{"relationship": u, "kind": "join", "elements": [x, y], "phase": null}])
+        );
+        // Switch join order keeps the uid.
+        let sw = ok(
+            &mut s,
+            "set_relationship",
+            json!({"relationship": u, "reverse": true}),
+        );
+        assert_eq!(sw["result"]["elements"], json!([y, x]));
+        ok(&mut s, "delete_relationship", json!({"relationship": u}));
+        let of_x = ok(&mut s, "list_relationships", json!({"element": x}));
+        assert_eq!(of_x["relationships"], json!([]));
+        // A bad kind is an argument error, not a crash.
+        let r = call(
+            &mut s,
+            &ExecContext::user(),
+            "create_relationship",
+            &json!({"kind": "glue", "elements": [x, y]}),
+        )
+        .expect("handled");
+        assert!(r.is_err());
+    }
+
+    #[test]
+    fn phase_tools_have_schemas_and_quantities_in_metres() {
+        let tools = list();
+        for name in [
+            "create_phase",
+            "set_phase",
+            "delete_phase",
+            "set_element_phase",
+            "set_renovation_status",
+            "get_phase_quantities",
+        ] {
+            let t = tools.iter().find(|t| t["name"] == name).expect(name);
+            assert_eq!(t["inputSchema"]["type"], "object", "{name}");
+        }
+        let t = tools
+            .iter()
+            .find(|t| t["name"] == "set_renovation_status")
+            .unwrap();
+        assert_eq!(
+            t["inputSchema"]["properties"]["status"]["enum"],
+            json!(["existing", "demolish", "new"])
+        );
+        let mut s = session();
+        let r = call(
+            &mut s,
+            &ExecContext::user(),
+            "get_phase_quantities",
+            &json!({}),
+        )
+        .expect("handled")
+        .unwrap_err();
+        assert!(r["error"].as_str().unwrap().contains("no phases"), "{r}");
+        let b = ok(
+            &mut s,
+            "create_box",
+            json!({"origin": [0, 0, 0], "width": "1m", "depth": "2m", "height": "1m"}),
+        )["result"]["element"]
+            .as_u64()
+            .unwrap();
+        ok(
+            &mut s,
+            "set_renovation_status",
+            json!({"elements": [b], "status": "demolish"}),
+        );
+        let q = ok(&mut s, "get_phase_quantities", json!({}));
+        assert_eq!(q["phase_name"], "New Construction");
+        assert_eq!(q["categories"]["forms"]["demolished"]["volume_m3"], 2.0);
+        assert_eq!(q["total"]["demolished"]["count"], 1);
+        let d = detail(s.doc(), ElementId(b)).unwrap();
+        assert!(d["phase_demolished"].is_u64(), "{d}");
+    }
+
+    #[test]
+    fn view_tools_take_user_units_and_report_views() {
+        let tools = list();
+        for name in ["create_view", "set_view", "delete_view"] {
+            let t = tools.iter().find(|t| t["name"] == name).expect(name);
+            assert_eq!(t["inputSchema"]["type"], "object", "{name}");
+        }
+        let mut s = session();
+        let l = ok(
+            &mut s,
+            "create_level",
+            json!({"name": "L1", "elevation": "3m"}),
+        )["result"]["element"]
+            .as_u64()
+            .unwrap();
+        let p = ok(
+            &mut s,
+            "create_view",
+            json!({"name": "Plan", "view_type": "plan_view", "level": l,
+                   "view_range": {"top": "2.5m", "cut_height": "1.1m", "bottom": 0, "view_depth": 0}}),
+        )["result"]["element"]
+            .as_u64()
+            .unwrap();
+        let v = ok(
+            &mut s,
+            "create_view",
+            json!({"name": "3D", "view_type": "view_3d",
+                   "camera": {"eye": ["10m", 0, "2m"], "target": [0, 0, 0], "up": [0, 0, 1], "fov_y": 60},
+                   "section_plane": {"point": [0, 0, "1.2m"], "normal": [0, 0, 1]}}),
+        )["result"]["element"]
+            .as_u64()
+            .unwrap();
+        let b = ok(
+            &mut s,
+            "create_box",
+            json!({"origin": [0, 0, 0], "width": "1m", "depth": "1m", "height": "1m"}),
+        )["result"]["element"]
+            .as_u64()
+            .unwrap();
+        ok(&mut s, "set_view", json!({"view": v, "hide": [b]}));
+        let doc = s.doc();
+        let view = doc.get(ElementId(v)).unwrap().as_view().unwrap();
+        assert!((view.camera.eye.x - 10_000.0).abs() < 1e-9);
+        assert!(
+            (view.camera.fov_y.deg() - 60.0).abs() < 1e-9,
+            "degrees at the edge"
+        );
+        let cut = doc.view_cut_plane(doc.get(ElementId(p)).unwrap()).unwrap();
+        assert!((cut.point.z - 4100.0).abs() < 1e-9, "3 m + 1.1 m");
+        let d = detail(doc, ElementId(v)).unwrap();
+        assert_eq!(d["hidden_elements"], json!([b]), "{d}");
+        assert_eq!(d["camera"]["fov_y_deg"], 60.0);
+        assert_eq!(d["view_type"]["type"], "view_3d");
+        ok(&mut s, "delete_view", json!({"view": v}));
+        assert!(s.doc().get(ElementId(v)).is_none());
+    }
+
+    #[test]
+    fn set_parameter_takes_quantities_with_units_and_definitions() {
+        let mut s = session();
+        let b = ok(
+            &mut s,
+            "create_box",
+            json!({"origin": [0, 0, 0], "width": "1m", "depth": "1m", "height": "1m"}),
+        )["result"]["element"]
+            .as_u64()
+            .unwrap();
+        ok(
+            &mut s,
+            "set_parameter",
+            json!({"element": b, "key": "acme.energy.k", "value": "0.8 W/mK"}),
+        );
+        ok(
+            &mut s,
+            "set_parameter_definition",
+            json!({"key": "acme.energy.u", "data_type": {"quantity": "u_value"}}),
+        );
+        // Bare number in text = default unit of the defined spec.
+        ok(
+            &mut s,
+            "set_parameter",
+            json!({"element": b, "key": "acme.energy.u", "value": "0.25"}),
+        );
+        let e = s.doc().get(ElementId(b)).unwrap();
+        assert_eq!(
+            e.param("acme.energy.u").and_then(|p| p.as_quantity()),
+            Some((QuantitySpec::UValue, 0.25))
+        );
+        // A unit of another spec is refused at the edge.
+        let r = call(
+            &mut s,
+            &ExecContext::user(),
+            "set_parameter",
+            &json!({"element": b, "key": "acme.energy.u", "value": "1200 kg/m3"}),
+        )
+        .expect("handled")
+        .unwrap_err();
+        assert!(r["error"].as_str().unwrap().contains("W/(m²·K)"), "{r}");
+        let d = detail(s.doc(), ElementId(b)).unwrap();
+        assert_eq!(
+            d["parameters_display"]["acme.energy.k"],
+            json!("0.8 W/(m·K)")
+        );
+        assert_eq!(
+            d["parameters_display"]["acme.energy.u"],
+            json!("0.25 W/(m²·K)")
+        );
+    }
+
+    #[test]
+    fn agents_edit_inside_design_options_and_diff_combinations() {
+        let tools = list();
+        let wall = tools.iter().find(|t| t["name"] == "create_box").unwrap();
+        assert!(wall["inputSchema"]["properties"]["in_design_option"].is_object());
+        let acc = tools
+            .iter()
+            .find(|t| t["name"] == "accept_design_option")
+            .unwrap();
+        assert!(acc["inputSchema"]["properties"]["in_design_option"].is_null());
+        let mut s = session();
+        let o = ok(&mut s, "create_option_set", json!({"name": "Roof"}));
+        let set = o["result"]["element"].as_u64().unwrap();
+        let b = ok(&mut s, "create_design_option", json!({"set": set}))["result"]["element"]
+            .as_u64()
+            .unwrap();
+        ok(
+            &mut s,
+            "create_box",
+            json!({"origin": [0, 0, 0], "width": "2m", "depth": "2m", "height": "2m", "in_design_option": b}),
+        );
+        assert_eq!(
+            s.doc().len(),
+            3,
+            "shared model has the set and two options only"
+        );
+        let l = ok(&mut s, "list_design_options", json!({}));
+        assert_eq!(l["sets"][0]["options"][1]["added"], 1, "{l}");
+        assert_eq!(l["failures"], json!([]));
+        let seen = ok(&mut s, "list_elements", json!({"combination": [b]}));
+        let forms: Vec<&Value> = seen["elements"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|e| e["category"] == "forms")
+            .collect();
+        assert_eq!(forms.len(), 1);
+        assert_eq!(forms[0]["design_option"], b);
+        let d = ok(&mut s, "diff_documents", json!({"to": [b]}));
+        assert_eq!(d["count"], 1, "{d}");
+        let none = ok(&mut s, "diff_documents", json!({}));
+        assert_eq!(none["count"], 0, "primary option is empty");
+        // Position is an index, not a length.
+        ok(&mut s, "set_option_set", json!({"set": set, "position": 0}));
+        let e = call(
+            &mut s,
+            &ExecContext::user(),
+            "accept_design_option",
+            &json!({"option": b, "in_design_option": b}),
+        )
+        .unwrap()
+        .unwrap_err();
+        assert!(e["error"].as_str().unwrap().contains("cannot run inside"));
+        // Applying the diff to the shared model reproduces the option.
+        ok(&mut s, "apply_changes", json!({"changes": d["changes"]}));
+        assert_eq!(s.doc().len(), 4);
+    }
+
+    #[test]
+    fn the_default_design_option_applies_only_when_no_target_is_named() {
+        let o = Some(ElementId(7));
+        let box_args = json!({"origin": [0, 0, 0], "width": 1, "depth": 1, "height": 1});
+        // Not named: the default (the option the user edits) is filled in.
+        let (a, t) = with_default_design_option("create_box", &box_args, o).unwrap();
+        assert_eq!(a["in_design_option"], 7);
+        assert_eq!(t, o);
+        let mut null = box_args.clone();
+        null["in_design_option"] = Value::Null;
+        assert_eq!(
+            with_default_design_option("create_box", &null, o)
+                .unwrap()
+                .1,
+            o
+        );
+        // No default: the shared model, arguments unchanged.
+        let (a, t) = with_default_design_option("create_box", &box_args, None).unwrap();
+        assert_eq!(a, box_args);
+        assert_eq!(t, None);
+        // Named: kept, "shared" included.
+        let mut shared = box_args.clone();
+        shared["in_design_option"] = json!(SHARED);
+        let (a, t) = with_default_design_option("create_box", &shared, o).unwrap();
+        assert_eq!(a["in_design_option"], SHARED);
+        assert_eq!(t, None);
+        let mut other = box_args.clone();
+        other["in_design_option"] = json!(9);
+        assert_eq!(
+            with_default_design_option("create_box", &other, o)
+                .unwrap()
+                .1,
+            Some(ElementId(9))
+        );
+        // Option commands and read-only tools never get a target.
+        let (a, t) =
+            with_default_design_option("create_design_option", &json!({"set": 1}), o).unwrap();
+        assert!(a.get("in_design_option").is_none());
+        assert_eq!(t, None);
+        assert_eq!(
+            with_default_design_option("list_elements", &json!({}), o)
+                .unwrap()
+                .1,
+            None
+        );
+        // Malformed.
+        let mut bad = box_args.clone();
+        bad["in_design_option"] = json!("main");
+        assert!(with_default_design_option("create_box", &bad, o).is_err());
+        assert!(design_option_argument(Some(&json!(-1))).is_err());
+        assert_eq!(design_option_argument(None), Ok(None));
+    }
+
+    #[test]
+    fn shared_names_the_shared_model_in_a_command() {
+        let mut s = session();
+        let set = ok(&mut s, "create_option_set", json!({"name": "Roof"}))["result"]["element"]
+            .as_u64()
+            .unwrap();
+        let b = ok(&mut s, "create_design_option", json!({"set": set}))["result"]["element"]
+            .as_u64()
+            .unwrap();
+        let options_only = s.doc().len();
+        ok(
+            &mut s,
+            "create_box",
+            json!({"origin": [0, 0, 0], "width": "2m", "depth": "2m", "height": "2m", "in_design_option": "shared"}),
+        );
+        assert_eq!(
+            s.doc().len(),
+            options_only + 1,
+            "the box is in the shared model"
+        );
+        // The host default (the option the user edits) when nothing is named.
+        let bx = json!({"origin": [0, 0, 0], "width": 1, "depth": 1, "height": 1});
+        let (args, target) =
+            with_default_design_option("create_box", &bx, Some(ElementId(b))).unwrap();
+        assert_eq!(target, Some(ElementId(b)));
+        ok(&mut s, "create_box", args);
+        assert_eq!(s.doc().len(), options_only + 1, "shared model unchanged");
+        let l = ok(&mut s, "list_design_options", json!({}));
+        assert_eq!(l["sets"][0]["options"][1]["added"], 1, "{l}");
+        let e = call(
+            &mut s,
+            &ExecContext::user(),
+            "create_box",
+            &json!({"origin": [0, 0, 0], "width": 1, "depth": 1, "height": 1, "in_design_option": "x"}),
+        )
+        .unwrap()
+        .unwrap_err();
+        assert!(e["error"].as_str().unwrap().contains("\"shared\""), "{e}");
+    }
 }

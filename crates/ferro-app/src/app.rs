@@ -3,12 +3,15 @@
 
 use crate::ai::{self, AiSettings, ChatEvent, Provider};
 use crate::camera::{FrameCamera, OrbitCamera};
+use crate::keymap::{KeyResolver, KeyScheme, Keymap, KeymapFile, Target};
 use crate::link::{self, LinkServer};
+use crate::material_editor::{DraftAction, MaterialDraft};
 use crate::render::{FrameData, Renderer, Vertex};
 use crate::scene::{self, line_vertex, SceneCache};
 use crate::tools::{
     pick_sub, SectionPlane, SelectOp, SubPick, ToolCtx, ToolEvent, ToolKind, ToolState,
 };
+use crate::units;
 use eframe::egui::{self, Color32, Key, PointerButton, Pos2, Rect, RichText, Sense, Vec2};
 use eframe::wgpu;
 use ferro_core::model::{keys, Category, ElementBody};
@@ -26,6 +29,14 @@ use std::sync::mpsc::Receiver;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
+mod design_options;
+mod joins;
+mod phases;
+mod pins;
+mod plugins;
+mod python;
+mod views;
+
 /// How much an AI agent may do on its own (D-26 autonomy slider).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Autonomy {
@@ -39,6 +50,8 @@ enum Autonomy {
 struct Proposal {
     agent: String,
     steps: usize,
+    /// Where its changes land (`None` = the shared model), shown on the bar.
+    targets: Vec<Option<ElementId>>,
 }
 
 #[derive(Debug, Clone)]
@@ -120,6 +133,9 @@ pub struct FerroApp {
     scene: SceneCache,
     snap_scene: Option<(Document, Vec<ElementId>, SnapScene)>,
     selection: HashSet<ElementId>,
+    /// View > Show voids: draw voids that have cut (hidden by default, as
+    /// Revit; a void still shows when it or what it cuts is selected).
+    show_voids: bool,
     vcb: String,
     status: Option<Status>,
     active_level: Option<ElementId>,
@@ -137,18 +153,22 @@ pub struct FerroApp {
     material: Option<ElementId>,
     new_material_color: [f32; 3],
     new_material_name: String,
+    /// Material open in the Materials panel editor.
+    material_draft: Option<MaterialDraft>,
+    /// The open Project settings window (M5-24.2), if any.
+    project_settings: Option<crate::settings_window::ProjectSettingsDraft>,
     clipboard: Vec<ElementId>,
     /// Last Move-copy, for arrays typed afterwards (`5x`, `/5`).
     last_copy: Option<CopyElements>,
     /// Screen position where a selection window drag started.
     select_drag: Option<Pos2>,
-    /// Elements hidden by the user (view state, not saved).
+    /// Elements hidden in the active view (copy of the view's list).
     hidden: HashSet<ElementId>,
-    /// Tags whose elements are not shown (view state).
+    /// Tags whose elements are not shown (copy of the active view's).
     hidden_tags: HashSet<String>,
     /// Tag name typed in the Tags panel.
     new_tag: String,
-    /// Section plane cutting the view (view state, not saved).
+    /// Section plane cutting the view (copy of the active view's cut).
     section: Option<SectionPlane>,
     /// Hidden line style: white faces, black edges.
     hidden_line: bool,
@@ -160,12 +180,35 @@ pub struct FerroApp {
     axis_lock: Option<ferro_snap::Axis>,
     /// Axis locked while Shift is held over an axis inference.
     shift_lock: Option<(SnapKind, ferro_core::Vec3)>,
+    /// Keyboard shortcuts (preset + `~/.ferro/keymap.json`).
+    keymap: Keymap,
+    keys: KeyResolver,
+    /// Command palette query, when open (Ctrl+K).
+    palette: Option<String>,
+    /// Problem report being reviewed by the user (Help > Report a problem,
+    /// or a crash report from the last session).
+    report: Option<ReportDraft>,
     /// Direction of the last edge hovered: reference for parallel /
     /// perpendicular inference (SketchUp: hover an edge to teach it).
     ref_dir: Option<ferro_core::UnitVec3>,
     autonomy: Autonomy,
     proposal: Option<Proposal>,
+    /// The `run_python` script running now, if any (ADR 0005 §5).
+    python: Option<python::ScriptRun>,
+    /// User actions held while a script runs, and the priority dialog.
+    script_wait: python::ScriptWait,
+    /// Interpreter and SDK for `run_python` (`FERRO_PYTHON`, `FERRO_PYTHON_SDK`).
+    python_config: ferro_mcp::python::PythonConfig,
+    /// Loaded plugins and their windows (ADR 0009).
+    plugins: plugins::PluginState,
     chat: Chat,
+    /// View phase and phase display (M5-23; copy of the active view's).
+    phasing: phases::PhaseState,
+    /// The active view (M5-22, `views`).
+    views: views::ViewState,
+    /// Design-option combination shown and option edited (M5-23.9; view
+    /// state, not saved).
+    options: design_options::DesignOptionsState,
 }
 
 fn now_ms() -> u64 {
@@ -182,7 +225,8 @@ impl FerroApp {
         cc.egui_ctx.set_global_style(style);
         let doc = Document::new("Untitled");
         let mut app = FerroApp {
-            session: Session::new(doc.clone(), Box::new(ferro_io::SystemIds)),
+            session: Session::new(doc.clone(), Box::new(ferro_io::SystemIds))
+                .with_kernel(std::sync::Arc::new(ferro_kernel::SolidcoreKernel::new())),
             path: None,
             store: None,
             saved: doc,
@@ -193,12 +237,13 @@ impl FerroApp {
             scene: SceneCache::default(),
             snap_scene: None,
             selection: HashSet::new(),
+            show_voids: false,
             vcb: String::new(),
             status: None,
             active_level: None,
             workspace: Workspace::Sketch,
             new_level_name: "L2".into(),
-            new_level_elev: 3.3,
+            new_level_elev: 3300.0,
             level_edits: HashMap::new(),
             name_edit: None,
             comment_edit: None,
@@ -209,6 +254,8 @@ impl FerroApp {
             material: None,
             new_material_color: [0.80, 0.55, 0.40],
             new_material_name: "Material 1".into(),
+            material_draft: None,
+            project_settings: None,
             clipboard: Vec::new(),
             last_copy: None,
             select_drag: None,
@@ -221,9 +268,20 @@ impl FerroApp {
             sub_sel: Vec::new(),
             axis_lock: None,
             shift_lock: None,
+            keymap: Keymap::scheme(KeyScheme::Ferro),
+            keys: KeyResolver::default(),
+            palette: None,
+            report: crate::report::pending_crashes().pop().and_then(|p| {
+                let text = std::fs::read_to_string(&p).ok()?;
+                Some(ReportDraft::new(text, Some(p)))
+            }),
             ref_dir: None,
             autonomy: Autonomy::Propose,
             proposal: None,
+            python: None,
+            script_wait: Default::default(),
+            python_config: ferro_mcp::python::PythonConfig::from_env(),
+            plugins: Default::default(),
             chat: Chat {
                 open: false,
                 input: String::new(),
@@ -235,18 +293,27 @@ impl FerroApp {
                 show_settings: false,
                 settings_note: String::new(),
             },
+            phasing: Default::default(),
+            views: Default::default(),
+            options: Default::default(),
         };
         if let Some(p) = open {
             app.open_path(p);
         }
+        app.load_keymap();
+        app.reload_plugins();
         app
     }
 
     // ------------------------------------------------------------ helpers
 
     fn say(&mut self, text: impl Into<String>, error: bool) {
+        let text = text.into();
+        if error {
+            crate::report::record(format!("error shown: {}", first_code(&text)));
+        }
         self.status = Some(Status {
-            text: text.into(),
+            text,
             error,
             at: Instant::now(),
         });
@@ -264,6 +331,10 @@ impl FerroApp {
     }
 
     fn run(&mut self, cmd: AnyCommand) -> bool {
+        if self.python.is_some() {
+            self.hold_for_script(python::UserAction::Run(cmd));
+            return false;
+        }
         // Editing while a proposal is open accepts it first.
         if self.proposal.is_some() {
             self.accept_proposal();
@@ -273,8 +344,50 @@ impl FerroApp {
             AnyCommand::CopyElements(c) => Some(c.clone()),
             _ => None,
         };
+        // A cut made while phasing is used is made in the view phase
+        // (ADR 0006 §5): the removed part is demolished in that phase.
+        let cmd = match cmd {
+            AnyCommand::CreateRelationship(mut c)
+                if c.kind == ferro_core::model::RelationshipKind::Cut && c.phase.is_none() =>
+            {
+                c.phase = self.phase_for_new_elements();
+                AnyCommand::CreateRelationship(c)
+            }
+            other => other,
+        };
         let name = cmd.name();
-        match self.session.execute(cmd, &self.ctx()) {
+        // While phasing is used, created elements get the view phase in the
+        // same undo step (Revit behaviour, see `phases`).
+        let grouped = name.starts_with("create_")
+            && self.editing_option().is_none()
+            && !self.session.in_group()
+            && self.phase_for_new_elements().is_some()
+            && self.session.begin_group(name, self.ctx());
+        let result = self.execute_here(cmd);
+        if grouped {
+            match &result {
+                Ok(o) => {
+                    let added: Vec<ElementId> = o.changed.added.clone();
+                    self.assign_view_phase(&added);
+                    self.session.end_group();
+                    self.refresh_view();
+                }
+                Err(_) => {
+                    self.session.cancel_group();
+                }
+            }
+        }
+        crate::report::record(match &result {
+            Ok(_) => format!("{name} ok"),
+            Err(f) => format!(
+                "{name} failed {}",
+                f.iter()
+                    .map(|x| x.code.as_str())
+                    .collect::<Vec<_>>()
+                    .join(",")
+            ),
+        });
+        match result {
             Ok(o) => {
                 if let Some(w) = o.warnings.first() {
                     self.say(format!("{name}: {}", w.message), false);
@@ -313,11 +426,16 @@ impl FerroApp {
 
     fn undo(&mut self) {
         self.tool.cancel();
+        if self.hold_for_script(python::UserAction::Undo) {
+            return;
+        }
         if self.proposal.is_some() {
             self.reject_proposal();
             return;
         }
-        match self.session.undo() {
+        let undone = self.session.undo();
+        self.refresh_view();
+        match undone {
             Some(c) => {
                 self.say(c.transaction_name, false);
                 self.autosave();
@@ -328,10 +446,15 @@ impl FerroApp {
 
     fn redo(&mut self) {
         self.tool.cancel();
+        if self.hold_for_script(python::UserAction::Redo) {
+            return;
+        }
         if self.proposal.is_some() {
             return;
         }
-        match self.session.redo() {
+        let redone = self.session.redo();
+        self.refresh_view();
+        match redone {
             Some(c) => {
                 self.say(c.transaction_name, false);
                 self.autosave();
@@ -359,10 +482,10 @@ impl FerroApp {
             .hidden
             .iter()
             .copied()
-            .filter(|id| self.session.doc().get(*id).is_some())
+            .filter(|id| self.doc().get(*id).is_some())
             .collect();
         if !self.hidden_tags.is_empty() {
-            for e in self.session.doc().elements() {
+            for e in self.doc().elements() {
                 if Self::tags_of(e)
                     .iter()
                     .any(|t| self.hidden_tags.contains(t))
@@ -375,8 +498,7 @@ impl FerroApp {
     }
 
     fn set_section(&mut self, p: Option<SectionPlane>) {
-        self.section = p;
-        if p.is_some() {
+        if self.set_view_section(p) && p.is_some() {
             self.say("Section plane set. View > Clear section removes it.", false);
         }
     }
@@ -391,7 +513,8 @@ impl FerroApp {
     }
 
     fn hide_selection(&mut self) {
-        self.hidden.extend(self.selection.drain());
+        let ids: Vec<ElementId> = self.selection.drain().collect();
+        self.hide_in_view(ids);
     }
 
     fn tags_ui(&mut self, ui: &mut egui::Ui) {
@@ -411,11 +534,7 @@ impl FerroApp {
             ui.horizontal(|ui| {
                 let mut shown = !self.hidden_tags.contains(t);
                 if ui.checkbox(&mut shown, t).changed() {
-                    if shown {
-                        self.hidden_tags.remove(t);
-                    } else {
-                        self.hidden_tags.insert(t.clone());
-                    }
+                    self.set_tag_hidden(t, !shown);
                 }
                 if ui
                     .small_button("Select")
@@ -456,7 +575,7 @@ impl FerroApp {
                 .button(format!("Unhide all ({})", self.hidden.len()))
                 .clicked()
         {
-            self.hidden.clear();
+            self.unhide_all_in_view();
         }
     }
 
@@ -467,7 +586,7 @@ impl FerroApp {
         let cmds: Vec<AnyCommand> = ids
             .into_iter()
             .filter_map(|id| {
-                let e = self.session.doc().get(id)?;
+                let e = self.doc().get(id)?;
                 let mut tags = Self::tags_of(e).to_vec();
                 let has = tags.iter().any(|t| t == tag);
                 if add == has {
@@ -524,7 +643,7 @@ impl FerroApp {
             } else if !faces.is_empty() {
                 self.run(ferro_core::ops::form_commands::EraseFaces { element: e, faces }.into());
             }
-            if !self.session.doc().contains(e) {
+            if !self.doc().contains(e) {
                 self.editing = None;
             }
             return;
@@ -548,7 +667,7 @@ impl FerroApp {
     }
 
     fn new_document(&mut self) {
-        if !self.confirm_discard() {
+        if self.hold_for_script(python::UserAction::NewDocument) || !self.confirm_discard() {
             return;
         }
         let doc = Document::new("Untitled");
@@ -559,6 +678,7 @@ impl FerroApp {
         self.selection.clear();
         self.active_level = None;
         self.camera = OrbitCamera::default();
+        self.reset_views();
         self.tool.cancel();
     }
 
@@ -576,6 +696,10 @@ impl FerroApp {
     }
 
     fn open_path(&mut self, p: PathBuf) {
+        if self.python.is_some() {
+            self.hold_for_script(python::UserAction::Open(p));
+            return;
+        }
         let is_json = p.to_string_lossy().ends_with(".json");
         let loaded = if is_json {
             std::fs::read_to_string(&p)
@@ -598,8 +722,9 @@ impl FerroApp {
                 self.path = if is_json { None } else { Some(p.clone()) };
                 self.selection.clear();
                 self.active_level = None;
-                self.camera
-                    .zoom_extents(scene::doc_bounds(self.session.doc()));
+                self.camera.zoom_extents(scene::doc_bounds(self.doc()));
+                // A file with views opens in its first view.
+                self.reset_views();
                 self.suggest_level_name();
                 self.say(format!("Opened {}", p.display()), false);
             }
@@ -608,6 +733,10 @@ impl FerroApp {
     }
 
     fn save(&mut self) {
+        // Never save a half-finished script group.
+        if self.hold_for_script(python::UserAction::Save) {
+            return;
+        }
         match self.path.clone() {
             Some(p) => match ferro_io::save_fro(&p, self.session.doc(), self.session.journal()) {
                 Ok(()) => {
@@ -622,7 +751,10 @@ impl FerroApp {
     }
 
     fn save_as(&mut self) {
-        let name = format!("{}.fro", self.session.doc().project().name);
+        if self.hold_for_script(python::UserAction::SaveAs) {
+            return;
+        }
+        let name = format!("{}.fro", self.doc().project().name);
         if let Some(mut p) = rfd::FileDialog::new()
             .add_filter("Ferro project", &["fro"])
             .set_file_name(name)
@@ -642,7 +774,7 @@ impl FerroApp {
         } else {
             ("obj", "Wavefront OBJ")
         };
-        let name = format!("{}.{ext}", self.session.doc().project().name);
+        let name = format!("{}.{ext}", self.doc().project().name);
         let Some(p) = rfd::FileDialog::new()
             .add_filter(label, &[ext])
             .set_file_name(name)
@@ -651,11 +783,11 @@ impl FerroApp {
             return;
         };
         let r = if glb {
-            ferro_io::export_glb(self.session.doc())
+            ferro_io::export_glb(self.doc())
                 .map_err(|e| e.to_string())
                 .and_then(|b| std::fs::write(&p, b).map_err(|e| e.to_string()))
         } else {
-            ferro_io::export_obj(self.session.doc())
+            ferro_io::export_obj(self.doc())
                 .map_err(|e| e.to_string())
                 .and_then(|s| std::fs::write(&p, s).map_err(|e| e.to_string()))
         };
@@ -666,7 +798,7 @@ impl FerroApp {
     }
 
     fn export_ifc(&mut self) {
-        let name = format!("{}.ifc", self.session.doc().project().name);
+        let name = format!("{}.ifc", self.doc().project().name);
         let Some(p) = rfd::FileDialog::new()
             .add_filter("IFC4", &["ifc"])
             .set_file_name(name)
@@ -674,7 +806,7 @@ impl FerroApp {
         else {
             return;
         };
-        let r = ferro_io::export_ifc(self.session.doc())
+        let r = ferro_io::export_ifc(self.doc(), self.session.kernel())
             .map_err(|e| e.to_string())
             .and_then(|t| std::fs::write(&p, t).map_err(|e| e.to_string()));
         match r {
@@ -684,13 +816,13 @@ impl FerroApp {
     }
 
     fn suggest_level_name(&mut self) {
-        let levels = self.session.doc().levels();
+        let levels = design_options::view_doc(&self.session, &self.options).levels();
         self.new_level_name = format!("L{}", levels.len() + 2);
         self.new_level_elev = levels
             .last()
             .and_then(|e| e.as_level())
-            .map(|l| l.elevation.m() + 3.3)
-            .unwrap_or(3.3);
+            .map(|l| l.elevation.mm() + 3300.0)
+            .unwrap_or(3300.0);
     }
 
     /// Paste: the copied elements follow the cursor from their corner; click
@@ -700,14 +832,14 @@ impl FerroApp {
             .clipboard
             .iter()
             .copied()
-            .filter(|e| self.session.doc().contains(*e))
+            .filter(|e| self.doc().contains(*e))
             .collect();
         if elems.is_empty() {
             return;
         }
         let bb = elems
             .iter()
-            .filter_map(|e| self.session.doc().get(*e).and_then(|x| x.bounding_box()))
+            .filter_map(|e| self.doc().get(*e).and_then(|x| x.bounding_box()))
             .reduce(|a, b| a.union(b));
         let Some(bb) = bb else { return };
         self.tool.start_paste(elems, bb.min);
@@ -738,8 +870,16 @@ impl FerroApp {
                     self.material = Some(*id);
                     self.set_tool(ToolKind::Paint);
                 }
+                if ui
+                    .small_button("Edit")
+                    .on_hover_text("Edit material")
+                    .clicked()
+                {
+                    self.open_material_editor(*id);
+                }
             });
         }
+        self.material_editor_ui(ui);
         ui.horizontal(|ui| {
             ui.color_edit_button_rgb(&mut self.new_material_color);
             ui.add(egui::TextEdit::singleline(&mut self.new_material_name).desired_width(110.0));
@@ -751,7 +891,7 @@ impl FerroApp {
                         ferro_core::ops::bim_commands::CreateMaterial {
                             name,
                             color: format!("#{r:02x}{g:02x}{b:02x}"),
-                            roughness: None,
+                            ..Default::default()
                         }
                         .into(),
                     )
@@ -765,9 +905,73 @@ impl FerroApp {
         });
     }
 
+    fn open_material_editor(&mut self, id: ElementId) {
+        let doc = self.doc();
+        self.material_draft = doc.get(id).and_then(|e| match &e.body {
+            ElementBody::Material(m) => Some(MaterialDraft::from_material(id, e.label(), m)),
+            _ => None,
+        });
+    }
+
+    fn material_editor_ui(&mut self, ui: &mut egui::Ui) {
+        let Some(mut draft) = self.material_draft.take() else {
+            return;
+        };
+        if !self.doc().contains(draft.material) {
+            return; // deleted (or undone) meanwhile
+        }
+        ui.separator();
+        match draft.ui(ui) {
+            DraftAction::Close => return,
+            DraftAction::Apply => match draft.to_command() {
+                Ok(cmd) => {
+                    let id = draft.material;
+                    let current = self.doc().get(id).map(|e| e.label());
+                    let name = draft.name.trim().to_string();
+                    if !name.is_empty() && current.as_deref() != Some(name.as_str()) {
+                        self.run(
+                            SetName {
+                                element: id,
+                                name: Some(name),
+                            }
+                            .into(),
+                        );
+                    }
+                    if self.run(cmd.into()) {
+                        // Show the stored (validated) values.
+                        self.open_material_editor(id);
+                        return;
+                    }
+                }
+                Err(msg) => self.say(msg, true),
+            },
+            DraftAction::None => {}
+        }
+        self.material_draft = Some(draft);
+    }
+
+    /// The Project settings window: its edits run as commands (undoable).
+    fn project_settings_window(&mut self, ctx: &egui::Context) {
+        let Some(mut draft) = self.project_settings.take() else {
+            return;
+        };
+        let mut open = true;
+        let mut cmds = Vec::new();
+        egui::Window::new("Project settings")
+            .open(&mut open)
+            .resizable(false)
+            .show(ctx, |ui| cmds = draft.ui(ui, self.doc()));
+        for c in cmds {
+            self.run(c);
+        }
+        if open {
+            self.project_settings = Some(draft);
+        }
+    }
+
     fn level_info(&self) -> Option<(ElementId, f64)> {
         let id = self.active_level?;
-        let e = self.session.doc().get(id)?;
+        let e = self.doc().get(id)?;
         Some((id, e.as_level()?.elevation.mm()))
     }
 
@@ -777,6 +981,11 @@ impl FerroApp {
         let typing = ctx.egui_wants_keyboard_input();
         let (cmd, shift) = ctx.input(|i| (i.modifiers.command, i.modifiers.shift));
         let pressed = |k: Key| ctx.input(|i| i.key_pressed(k));
+        // Esc twice within a second stops a running script (even in a text
+        // box: the user always can).
+        if pressed(Key::Escape) && !self.script_wait.asking() {
+            self.escape_while_script();
+        }
         if cmd && pressed(Key::Z) {
             if shift {
                 self.redo()
@@ -799,6 +1008,9 @@ impl FerroApp {
         }
         if cmd && pressed(Key::N) {
             self.new_document();
+        }
+        if cmd && pressed(Key::K) {
+            self.palette = Some(String::new());
         }
         // egui turns Ctrl+C / Ctrl+V into Copy / Paste events.
         let copy_ev = ctx.input(|i| i.events.iter().any(|e| matches!(e, egui::Event::Copy)));
@@ -902,46 +1114,231 @@ impl FerroApp {
                 self.delete_selection();
             }
         }
-        if pressed(Key::Delete) {
-            self.delete_selection();
+        // Shortcuts from the keymap: single keys and two-letter codes.
+        let (now, presses): (f64, Vec<(Key, bool)>) = ctx.input(|i| {
+            (
+                i.time,
+                i.events
+                    .iter()
+                    .filter_map(|e| match e {
+                        egui::Event::Key {
+                            key,
+                            pressed: true,
+                            repeat: false,
+                            modifiers,
+                            ..
+                        } if !modifiers.command && !modifiers.alt => Some((*key, modifiers.shift)),
+                        _ => None,
+                    })
+                    .collect(),
+            )
+        });
+        for (key, shift) in presses {
+            let name = key.name();
+            let target = match key {
+                Key::Space => self.keys.named(&self.keymap, "SPACE"),
+                Key::Delete => self.keys.named(&self.keymap, "DELETE"),
+                _ if name.len() == 1 && name.chars().all(|c| c.is_ascii_alphabetic()) => {
+                    if shift {
+                        self.keys.named(&self.keymap, &format!("SHIFT+{name}"))
+                    } else {
+                        let c = name.chars().next().unwrap_or(' ');
+                        self.keys.letter(&self.keymap, c, now)
+                    }
+                }
+                _ => None,
+            };
+            if let Some(t) = target {
+                // Tools switch only when none is in the middle of a pick.
+                if t.tool().is_none() || !self.tool.is_active() {
+                    self.run_target(t);
+                }
+            }
         }
-        if !self.tool.is_active() {
-            for (k, t) in [
-                (Key::Space, ToolKind::Select),
-                (Key::L, ToolKind::Line),
-                (Key::R, ToolKind::Rectangle),
-                (Key::C, ToolKind::Circle),
-                (Key::A, ToolKind::Arc),
-                (Key::T, ToolKind::Tape),
-                (Key::J, ToolKind::Section),
-                (Key::G, ToolKind::Polygon),
-                (Key::P, ToolKind::PushPull),
-                (Key::F, ToolKind::Offset),
-                (Key::M, ToolKind::Move),
-                (Key::Q, ToolKind::Rotate),
-                (Key::S, ToolKind::Scale),
-                (Key::E, ToolKind::Eraser),
-                (Key::B, ToolKind::Paint),
-                (Key::W, ToolKind::Wall),
-                (Key::U, ToolKind::Floor),
-                (Key::D, ToolKind::Door),
-                (Key::N, ToolKind::Window),
-            ] {
-                if pressed(k) {
-                    self.set_tool(t);
+    }
+
+    /// Do what a shortcut or the command palette asks.
+    fn run_target(&mut self, t: Target) {
+        match (t.tool(), t) {
+            (Some(k), _) => self.set_tool(k),
+            (None, Target::Hide) => self.hide_selection(),
+            (None, Target::UnhideAll) => self.unhide_all_in_view(),
+            (None, Target::ZoomExtents) => self.camera.zoom_extents(scene::doc_bounds(self.doc())),
+            (None, Target::Pin) => self.pin_selection(true),
+            (None, Target::Unpin) => self.pin_selection(false),
+            (None, Target::Plugin(slot)) => self.run_plugin_slot(slot),
+            (None, _) => self.delete_selection(),
+        }
+    }
+
+    fn load_keymap(&mut self) {
+        let Some(path) = ferro_tools::link::ferro_dir().map(|d| d.join("keymap.json")) else {
+            return;
+        };
+        let Ok(text) = std::fs::read_to_string(&path) else {
+            return;
+        };
+        match serde_json::from_str::<KeymapFile>(&text) {
+            Ok(f) => {
+                let (k, bad) = Keymap::from_file(&f);
+                self.keymap = k;
+                if !bad.is_empty() {
+                    self.say(
+                        format!("keymap.json: ignored keys {}", bad.join(", ")),
+                        true,
+                    );
                 }
             }
-            if pressed(Key::H) {
-                if ctx.input(|i| i.modifiers.shift) {
-                    self.hidden.clear();
-                } else {
-                    self.hide_selection();
+            Err(e) => self.say(format!("keymap.json: {e}"), true),
+        }
+        self.apply_plugin_keys();
+    }
+
+    fn set_scheme(&mut self, p: KeyScheme) {
+        self.keymap = Keymap::scheme(p);
+        self.apply_plugin_keys();
+        if let Some(dir) = ferro_tools::link::ferro_dir() {
+            let f = KeymapFile {
+                scheme: p,
+                bindings: Default::default(),
+            };
+            if let Ok(text) = serde_json::to_string_pretty(&f) {
+                let _ = std::fs::create_dir_all(&dir);
+                let _ = std::fs::write(dir.join("keymap.json"), text);
+            }
+        }
+    }
+
+    /// Review and send a problem report. Nothing leaves the computer unless
+    /// the user presses "Open GitHub issue" (and then submits it there).
+    fn report_ui(&mut self, ctx: &egui::Context) {
+        let Some(mut d) = self.report.take() else {
+            return;
+        };
+        let mut keep = true;
+        let crash = d.crash_file.is_some();
+        egui::Window::new(if crash {
+            "Ferro closed unexpectedly last time"
+        } else {
+            "Report a problem"
+        })
+        .collapsible(false)
+        .default_width(560.0)
+        .show(ctx, |ui| {
+            ui.label("Describe what you were doing. The report below holds the app version, your system and the recent commands — no model data. Read it before sending.");
+            ui.add(
+                egui::TextEdit::multiline(&mut d.what)
+                    .hint_text("What happened? What did you expect?")
+                    .desired_rows(3)
+                    .desired_width(f32::INFINITY),
+            );
+            egui::ScrollArea::vertical().max_height(260.0).show(ui, |ui| {
+                ui.add(
+                    egui::TextEdit::multiline(&mut d.body)
+                        .font(egui::TextStyle::Monospace)
+                        .desired_width(f32::INFINITY),
+                );
+            });
+            ui.horizontal(|ui| {
+                let full = format!("{}
+
+{}", d.what.trim(), d.body);
+                if ui.button("Open GitHub issue").clicked() {
+                    let saved = crate::report::save(&full, "report");
+                    let title = if crash { "Crash report" } else { "Problem report" };
+                    match crate::report::open_url(&crate::report::issue_url(title, &full)) {
+                        Ok(()) => self.say(
+                            match saved {
+                                Some(p) => format!("Report saved to {}", p.display()),
+                                None => "Opened the issue page".into(),
+                            },
+                            false,
+                        ),
+                        Err(e) => self.say(format!("Could not open the browser: {e}"), true),
+                    }
+                    keep = false;
                 }
-            }
-            if pressed(Key::Z) {
-                self.camera
-                    .zoom_extents(scene::doc_bounds(self.session.doc()));
-            }
+                if ui.button("Copy").clicked() {
+                    ui.ctx().copy_text(full.clone());
+                }
+                if ui.button("Save file").clicked() {
+                    if let Some(p) = crate::report::save(&full, "report") {
+                        self.say(format!("Report saved to {}", p.display()), false);
+                    }
+                }
+                if ui.button(if crash { "Don't send" } else { "Cancel" }).clicked() {
+                    keep = false;
+                }
+            });
+        });
+        if keep {
+            self.report = Some(d);
+        } else if let Some(p) = &d.crash_file {
+            crate::report::dismiss(p);
+        }
+    }
+
+    /// Ctrl+K: type a tool name or shortcut, Enter runs the first match.
+    fn palette_ui(&mut self, ctx: &egui::Context) {
+        let Some(mut q) = self.palette.take() else {
+            return;
+        };
+        let mut open = true;
+        let mut run = None;
+        egui::Window::new("Command palette")
+            .collapsible(false)
+            .resizable(false)
+            .anchor(egui::Align2::CENTER_TOP, Vec2::new(0.0, 80.0))
+            .show(ctx, |ui| {
+                let r = ui.add(
+                    egui::TextEdit::singleline(&mut q)
+                        .hint_text("tool name or shortcut, e.g. wall or WA")
+                        .desired_width(320.0),
+                );
+                r.request_focus();
+                let needle = q.trim().to_lowercase();
+                // Built-in targets, then plugin commands (ADR 0009).
+                let label = |t: &Target| match t {
+                    Target::Plugin(i) => self
+                        .plugins
+                        .slot(*i)
+                        .map(|s| s.label.clone())
+                        .unwrap_or_default(),
+                    t => t.label().to_string(),
+                };
+                let hits: Vec<Target> = Target::ALL
+                    .into_iter()
+                    .chain(self.plugins.targets().map(|(t, _)| t))
+                    .filter(|t| {
+                        needle.is_empty()
+                            || label(t).to_lowercase().contains(&needle)
+                            || self
+                                .keymap
+                                .keys_for(*t)
+                                .iter()
+                                .any(|k| k.to_lowercase() == needle)
+                    })
+                    .collect();
+                for t in &hits {
+                    let label = format!("{:<16} {}", label(t), self.keymap.label_for(*t));
+                    if ui
+                        .selectable_label(false, RichText::new(label).monospace())
+                        .clicked()
+                    {
+                        run = Some(*t);
+                    }
+                }
+                if ui.input(|i| i.key_pressed(Key::Enter)) {
+                    run = hits.first().copied();
+                }
+                if ui.input(|i| i.key_pressed(Key::Escape)) {
+                    open = false;
+                }
+            });
+        match run {
+            Some(t) => self.run_target(t),
+            None if open => self.palette = Some(q),
+            None => {}
         }
     }
 
@@ -972,6 +1369,10 @@ impl FerroApp {
                 }
                 if ui.button("Export IFC4…").clicked() {
                     self.export_ifc();
+                }
+                ui.separator();
+                if ui.button("Project settings…").clicked() {
+                    self.project_settings.get_or_insert_with(Default::default);
                 }
                 ui.separator();
                 if ui.button("Quit").clicked() {
@@ -1022,8 +1423,21 @@ impl FerroApp {
                     )
                     .clicked()
                 {
-                    self.hidden.clear();
+                    self.unhide_all_in_view();
                 }
+                ui.separator();
+                if ui.button("Command palette…   Ctrl+K").clicked() {
+                    self.palette = Some(String::new());
+                    ui.close();
+                }
+                ui.menu_button("Keyboard shortcuts", |ui| {
+                    for p in KeyScheme::ALL {
+                        if ui.radio(self.keymap.scheme == p, p.label()).clicked() {
+                            self.set_scheme(p);
+                        }
+                    }
+                    ui.label(RichText::new("Custom keys: ~/.ferro/keymap.json").weak());
+                });
                 if ui.button("Select all").clicked() {
                     self.selection = self
                         .session
@@ -1035,8 +1449,7 @@ impl FerroApp {
             });
             ui.menu_button("View", |ui| {
                 if ui.button("Zoom extents   Z").clicked() {
-                    self.camera
-                        .zoom_extents(scene::doc_bounds(self.session.doc()));
+                    self.camera.zoom_extents(scene::doc_bounds(self.doc()));
                 }
                 if ui.button("Iso").clicked() {
                     self.camera.set_view(-60.0, 30.0);
@@ -1058,9 +1471,14 @@ impl FerroApp {
                 }
                 ui.separator();
                 ui.checkbox(&mut self.camera.parallel, "Parallel projection");
-                ui.checkbox(&mut self.scene.xray, "X-ray");
-                ui.checkbox(&mut self.scene.wireframe, "Wireframe");
-                ui.checkbox(&mut self.hidden_line, "Hidden line");
+                ui.checkbox(&mut self.show_voids, "Show voids");
+                // Display style of the active view (one undo step each).
+                let style = self.display_style();
+                for s in ferro_core::model::DisplayStyle::ALL {
+                    if ui.radio(style == s, s.label()).clicked() {
+                        self.set_display_style(s);
+                    }
+                }
                 ui.separator();
                 if ui.button("Plan section (1.2 m above level)").clicked() {
                     self.plan_section();
@@ -1070,15 +1488,16 @@ impl FerroApp {
                     .add_enabled(self.section.is_some(), egui::Button::new("Flip section"))
                     .clicked()
                 {
-                    if let Some(p) = &mut self.section {
+                    if let Some(mut p) = self.section {
                         p.normal = -p.normal;
+                        self.set_section(Some(p));
                     }
                 }
                 if ui
                     .add_enabled(self.section.is_some(), egui::Button::new("Clear section"))
                     .clicked()
                 {
-                    self.section = None;
+                    self.set_section(None);
                 }
             });
             ui.menu_button("AI", |ui| {
@@ -1100,7 +1519,12 @@ impl FerroApp {
                 );
                 ui.radio_value(&mut self.autonomy, Autonomy::Apply, "Apply directly");
             });
+            self.plugins_menu(ui);
             ui.menu_button("Help", |ui| {
+                if ui.button("Report a problem…").clicked() {
+                    self.report = Some(ReportDraft::new(String::new(), None));
+                    ui.close();
+                }
                 if ui.button("About Ferro").clicked() {
                     self.show_about = true;
                 }
@@ -1119,19 +1543,26 @@ impl FerroApp {
 
     fn toolbar(&mut self, ui: &mut egui::Ui) {
         ui.add_space(4.0);
+        let mut solid_header = false;
         for k in ToolKind::ALL {
             if k == ToolKind::Wall {
                 ui.separator();
                 ui.label(RichText::new("BIM").strong());
             }
+            if k.is_solid() && !solid_header {
+                solid_header = true;
+                ui.separator();
+                ui.label(RichText::new("Solid").strong());
+            }
             let selected = self.tool.kind == k;
+            let key = self.keymap.label_for(Target::from_tool(k));
             let b = egui::Button::new(RichText::new(k.label()).size(15.0))
-                .right_text(RichText::new(k.icon()).weak().size(11.0))
+                .right_text(RichText::new(&key).weak().size(11.0))
                 .selected(selected)
                 .min_size(Vec2::new(124.0, 30.0));
             if ui
                 .add(b)
-                .on_hover_text(format!("{} ({})", k.label(), k.shortcut()))
+                .on_hover_text(format!("{} ({key})", k.label()))
                 .clicked()
             {
                 self.set_tool(k);
@@ -1143,19 +1574,32 @@ impl FerroApp {
                     .on_disabled_hover_text("Arrives in milestone 3");
             }
         }
+        self.renovation_toolbar(ui);
+        self.plugins_toolbar(ui);
     }
 
     fn side_panel(&mut self, ui: &mut egui::Ui) {
         egui::ScrollArea::vertical().show(ui, |ui| {
             ui.heading("Project");
-            let mut name = self.session.doc().project().name.clone();
-            if ui.text_edit_singleline(&mut name).lost_focus()
-                && name != self.session.doc().project().name
+            let mut name = self.doc().project().name.clone();
+            if ui.text_edit_singleline(&mut name).lost_focus() && name != self.doc().project().name
             {
-                self.run(SetProjectName { name }.into());
+                self.run(
+                    SetProjectName {
+                        name: Some(name),
+                        auto_pin_datums: None,
+                    }
+                    .into(),
+                );
             }
             ui.separator();
             self.levels_ui(ui);
+            ui.separator();
+            self.views_ui(ui);
+            ui.separator();
+            self.phases_ui(ui);
+            ui.separator();
+            self.design_options_ui(ui);
             ui.separator();
             self.properties_ui(ui);
             ui.separator();
@@ -1181,14 +1625,13 @@ impl FerroApp {
                 (
                     e.id,
                     e.label(),
-                    e.as_level().map(|l| l.elevation.m()).unwrap_or(0.0),
+                    e.as_level().map(|l| l.elevation.mm()).unwrap_or(0.0),
                 )
             })
             .collect();
-        if ui
-            .radio(self.active_level.is_none(), "Ground (0.000 m)")
-            .clicked()
-        {
+        let u = self.doc().project().settings.units.clone();
+        let ground = format!("Ground ({})", units::length(&u, 0.0));
+        if ui.radio(self.active_level.is_none(), ground).clicked() {
             self.active_level = None;
         }
         let mut commit = None;
@@ -1201,12 +1644,7 @@ impl FerroApp {
                     self.active_level = Some(*id);
                 }
                 let v = self.level_edits.entry(*id).or_insert(*elev);
-                let r = ui.add(
-                    egui::DragValue::new(v)
-                        .speed(0.05)
-                        .suffix(" m")
-                        .fixed_decimals(3),
-                );
+                let r = units::length_drag(ui, &u, v);
                 if (r.drag_stopped() || r.lost_focus()) && (*v - elev).abs() > 1e-9 {
                     commit = Some((*id, *v));
                 }
@@ -1215,26 +1653,22 @@ impl FerroApp {
                 }
             });
         }
-        if let Some((level, m)) = commit {
+        if let Some((level, mm)) = commit {
             self.run(
                 SetLevelElevation {
                     level,
-                    elevation: Length::from_m(m),
+                    elevation: Length::from_mm(mm),
                 }
                 .into(),
             );
         }
         ui.horizontal(|ui| {
             ui.add(egui::TextEdit::singleline(&mut self.new_level_name).desired_width(60.0));
-            ui.add(
-                egui::DragValue::new(&mut self.new_level_elev)
-                    .speed(0.05)
-                    .suffix(" m"),
-            );
+            units::length_drag(ui, &u, &mut self.new_level_elev);
             if ui.button("+ Level").clicked() {
                 let cmd = CreateLevel {
                     name: self.new_level_name.clone(),
-                    elevation: Length::from_m(self.new_level_elev),
+                    elevation: Length::from_mm(self.new_level_elev),
                     is_building_storey: true,
                 };
                 if self.run(cmd.into()) {
@@ -1247,6 +1681,7 @@ impl FerroApp {
 
     fn properties_ui(&mut self, ui: &mut egui::Ui) {
         ui.heading("Properties");
+        let u = self.doc().project().settings.units.clone();
         if self.selection.is_empty() {
             ui.label("Nothing selected.");
             return;
@@ -1259,7 +1694,7 @@ impl FerroApp {
             return;
         }
         let id = *self.selection.iter().next().expect("one");
-        let Some(e) = self.session.doc().get(id).cloned() else {
+        let Some(e) = self.doc().get(id).cloned() else {
             self.selection.clear();
             return;
         };
@@ -1319,34 +1754,50 @@ impl FerroApp {
                 }
                 ui.end_row();
 
-                if let Some(l) = e.level_id.and_then(|l| self.session.doc().get(l)) {
+                if let Some(src) = e.geometry_source() {
+                    use ferro_core::model::GeometrySource;
+                    ui.label("Geometry");
+                    ui.horizontal(|ui| {
+                        let (label, other, button, tip) = match src {
+                            GeometrySource::Parametric => (
+                                "Parametric",
+                                GeometrySource::Direct,
+                                "Edit freely",
+                                "Freeze the shape so it can be edited like a SketchUp group; category, type and data stay",
+                            ),
+                            GeometrySource::Direct => (
+                                "Direct",
+                                GeometrySource::Parametric,
+                                "Make parametric",
+                                "Turn a plain wall or slab shape back into a parametric wall / floor",
+                            ),
+                        };
+                        ui.label(label);
+                        if ui.small_button(button).on_hover_text(tip).clicked() {
+                            self.run(
+                                ferro_core::ops::geometry_source::SetGeometrySource {
+                                    element: id,
+                                    source: other,
+                                }
+                                .into(),
+                            );
+                        }
+                    });
+                    ui.end_row();
+                }
+
+                if let Some(l) = e.level_id.and_then(|l| self.doc().get(l)) {
                     ui.label("Level");
                     ui.label(l.label());
                     ui.end_row();
                 }
-                match &e.body {
-                    ElementBody::Form(f) => {
-                        ui.label("Faces");
-                        ui.label(format!(
-                            "{}{}",
-                            f.body.face_count(),
-                            if f.body.is_closed() { "  (solid)" } else { "" }
-                        ));
-                        ui.end_row();
-                        if let Some(bb) = f.body.bounding_box() {
-                            let s = bb.size();
-                            ui.label("Size");
-                            ui.label(format!("{:.0} × {:.0} × {:.0} mm", s.x, s.y, s.z));
-                            ui.end_row();
-                        }
-                    }
-                    ElementBody::Level(l) => {
-                        ui.label("Elevation");
-                        ui.label(format!("{:.3} m", l.elevation.m()));
-                        ui.end_row();
-                    }
-                    ElementBody::Wall(_) | ElementBody::Floor(_) => {
-                        let is_wall = e.as_wall().is_some();
+                // Type: parametric walls / floors, and direct ones of that category.
+                let type_of = match (&e.body, e.category) {
+                    (ElementBody::Wall(_), _) | (ElementBody::Form(_), Category::Walls) => Some(true),
+                    (ElementBody::Floor(_), _) | (ElementBody::Form(_), Category::Floors) => Some(false),
+                    _ => None,
+                };
+                if let Some(is_wall) = type_of {
                         let types: Vec<(ElementId, String)> = self
                             .session
                             .doc()
@@ -1363,7 +1814,7 @@ impl FerroApp {
                         let mut chosen = e.type_id;
                         ui.label("Type");
                         let current = chosen
-                            .and_then(|t| self.session.doc().get(t))
+                            .and_then(|t| self.doc().get(t))
                             .map(|t| t.label())
                             .unwrap_or_default();
                         egui::ComboBox::from_id_salt("type")
@@ -1383,6 +1834,29 @@ impl FerroApp {
                                 .into(),
                             );
                         }
+                }
+                match &e.body {
+                    ElementBody::Form(f) => {
+                        ui.label("Faces");
+                        ui.label(format!(
+                            "{}{}",
+                            f.body.face_count(),
+                            if f.body.is_closed() { "  (solid)" } else { "" }
+                        ));
+                        ui.end_row();
+                        if let Some(bb) = f.body.bounding_box() {
+                            let s = bb.size();
+                            ui.label("Size");
+                            ui.label(units::lengths(&u, &[s.x, s.y, s.z]));
+                            ui.end_row();
+                        }
+                    }
+                    ElementBody::Level(l) => {
+                        ui.label("Elevation");
+                        ui.label(units::length(&u, l.elevation.mm()));
+                        ui.end_row();
+                    }
+                    ElementBody::Wall(_) | ElementBody::Floor(_) => {
                         for (k, label) in [
                             (keys::LENGTH, "Length"),
                             (keys::HEIGHT, "Height"),
@@ -1390,49 +1864,50 @@ impl FerroApp {
                         ] {
                             if let Some(ParamValue::Length(l)) = e.param(k) {
                                 ui.label(label);
-                                ui.label(format!("{:.0} mm", l.mm()));
+                                ui.label(units::length(&u, l.mm()));
                                 ui.end_row();
                             }
                         }
                         if let Some(ParamValue::Area(a)) = e.param(keys::AREA) {
                             ui.label("Area");
-                            ui.label(format!("{:.2} m²", a / 1e6));
+                            ui.label(units::area(&u, *a));
                             ui.end_row();
                         }
                         if let Some(ParamValue::Volume(v)) = e.param(keys::VOLUME) {
                             ui.label("Volume");
-                            ui.label(format!("{:.3} m³", v / 1e9));
+                            ui.label(units::volume(&u, *v));
                             ui.end_row();
                         }
                     }
                     ElementBody::Opening(o) => {
-                        if let Some(h) = e.host_id.and_then(|h| self.session.doc().get(h)) {
+                        if let Some(h) = e.host_id.and_then(|h| self.doc().get(h)) {
                             ui.label("Host");
                             ui.label(h.label());
                             ui.end_row();
                         }
                         ui.label("Size");
-                        ui.label(format!("{:.0} × {:.0} mm", o.width.mm(), o.height.mm()));
+                        ui.label(units::lengths(&u, &[o.width.mm(), o.height.mm()]));
                         ui.end_row();
                         ui.label("Sill");
-                        ui.label(format!("{:.0} mm", o.sill.mm()));
+                        ui.label(units::length(&u, o.sill.mm()));
                         ui.end_row();
                     }
                     ElementBody::WallType(ferro_core::model::bim::WallType { structure })
                     | ElementBody::FloorType(ferro_core::model::bim::FloorType { structure }) => {
                         ui.label("Thickness");
-                        ui.label(format!("{:.0} mm", structure.thickness()));
+                        ui.label(units::length(&u, structure.thickness()));
                         ui.end_row();
                         for l in &structure.layers {
                             ui.label(format!("{:?}", l.function));
                             let mat = l
                                 .material
-                                .and_then(|m| self.session.doc().get(m))
+                                .and_then(|m| self.doc().get(m))
                                 .map(|m| m.label())
                                 .unwrap_or_else(|| "—".into());
-                            ui.label(format!("{:.0} mm  {mat}", l.thickness.mm()));
+                            ui.label(format!("{}  {mat}", units::length(&u, l.thickness.mm())));
                             ui.end_row();
                         }
+                        self.type_quantities_ui(ui, id);
                     }
                     ElementBody::Material(m) => {
                         ui.label("Colour");
@@ -1440,17 +1915,51 @@ impl FerroApp {
                         ui.colored_label(Color32::from_rgb(r, g, b), "■■■");
                         ui.end_row();
                     }
+                    ElementBody::View(v) => self.view_rows(ui, v),
+                    ElementBody::Phase(p) => {
+                        for (label, d) in [("Start", &p.start_date), ("End", &p.end_date)] {
+                            ui.label(label);
+                            ui.label(d.as_deref().unwrap_or("—"));
+                            ui.end_row();
+                        }
+                    }
+                    ElementBody::OptionSet(_) => {}
+                    ElementBody::DesignOption(o) => {
+                        ui.label("Status");
+                        ui.label(o.status.as_str());
+                        ui.end_row();
+                        ui.label("Changes");
+                        ui.label(o.changes.len().to_string());
+                        ui.end_row();
+                    }
                 }
                 if let Some(ParamValue::Area(a)) = e.param(keys::FORM_AREA) {
                     ui.label("Surface area");
-                    ui.label(format!("{:.2} m²", a / 1e6));
+                    ui.label(units::area(&u, *a));
                     ui.end_row();
                 }
                 if let Some(ParamValue::Volume(v)) = e.param(keys::FORM_VOLUME) {
                     ui.label("Volume");
-                    ui.label(format!("{:.3} m³", v / 1e9));
+                    ui.label(units::volume(&u, *v));
                     ui.end_row();
                 }
+                // Quantity parameters in display units (ADR 0004 §2), e.g.
+                // "0.8 W/(m·K)"; built-in ones are shown above.
+                for (k, p) in e
+                    .params
+                    .iter()
+                    .filter(|(k, p)| !k.starts_with("ferro.") && p.spec().is_some())
+                {
+                    ui.label(k.as_str());
+                    ui.label(match p.as_quantity() {
+                        Some((spec, v)) => units::quantity(&u, spec, v),
+                        None => p.display(),
+                    });
+                    ui.end_row();
+                }
+
+                self.element_phase_rows(ui, &e);
+                self.pinned_row(ui, &e);
 
                 ui.label("Comments");
                 let current = match e.param(keys::COMMENTS) {
@@ -1479,8 +1988,76 @@ impl FerroApp {
             });
     }
 
+    /// Read-only quantities of a wall / floor type from its layer materials
+    /// (U-value, mass, GWP, cost per m²); "—" with the layers that lack data.
+    fn type_quantities_ui(&self, ui: &mut egui::Ui, id: ElementId) {
+        use ferro_core::model::structure_quantities::{StructureQuantities, StructureQuantity};
+        let Some(q) = StructureQuantities::from_type(self.doc(), id) else {
+            return;
+        };
+        let lacking = |what: StructureQuantity| -> String {
+            let layers: Vec<String> = q
+                .gaps
+                .iter()
+                .filter(|g| g.quantity == what)
+                .map(|g| format!("layer {}", g.layer + 1))
+                .collect();
+            format!("— (no data: {})", layers.join(", "))
+        };
+        let rows = [
+            (
+                "U-value",
+                StructureQuantity::UValue,
+                q.u_value_w_m2k.map(|v| {
+                    units::quantity(
+                        &self.doc().project().settings.units,
+                        ferro_core::math::QuantitySpec::UValue,
+                        v,
+                    )
+                }),
+            ),
+            (
+                "Mass",
+                StructureQuantity::Mass,
+                q.mass_kg_m2.map(|v| format!("{v:.1} kg/m²")),
+            ),
+            (
+                "GWP A1–A3",
+                StructureQuantity::Gwp,
+                q.gwp_a1_a3_kgco2e_m2.map(|v| format!("{v:.1} kg CO₂e/m²")),
+            ),
+            (
+                "Cost",
+                StructureQuantity::Cost,
+                q.cost_per_m2.map(|v| {
+                    units::cost_per_m2(
+                        v,
+                        q.currency.as_deref(),
+                        self.doc().project().settings.currency.as_deref(),
+                    )
+                }),
+            ),
+        ];
+        let mismatch = units::currency_mismatch(
+            q.currency.as_deref(),
+            self.doc().project().settings.currency.as_deref(),
+        );
+        for (label, what, value) in rows {
+            ui.label(label);
+            match value {
+                Some(v) if mismatch && what == StructureQuantity::Cost => ui
+                    .colored_label(Color32::from_rgb(200, 120, 0), v)
+                    .on_hover_text("The materials are priced in another currency than the project's; costs are not converted."),
+                Some(v) => ui.label(v),
+                None => ui.label(RichText::new(lacking(what)).weak()),
+            };
+            ui.end_row();
+        }
+    }
+
     fn status_bar(&mut self, ui: &mut egui::Ui) {
         ui.horizontal(|ui| {
+            self.script_status(ui);
             let hint = match self
                 .status
                 .as_ref()
@@ -1501,6 +2078,7 @@ impl FerroApp {
                     self.apply_vcb();
                 }
                 ui.label(self.tool.value_label());
+                self.option_status(ui);
                 if let Some(s) = self.last_snap {
                     ui.label(RichText::new(s.kind.label()).weak());
                 }
@@ -1510,6 +2088,10 @@ impl FerroApp {
 
     fn apply_vcb(&mut self) {
         let text = std::mem::take(&mut self.vcb);
+        if self.python.is_some() {
+            self.hold_for_script(python::UserAction::Value(text));
+            return;
+        }
         // After a Move-copy: "5x" repeats it 5 times, "/5" divides it in 5.
         let t = text.trim();
         if let Some(copy) = self.last_copy.clone().filter(|_| !self.tool.is_active()) {
@@ -1545,7 +2127,7 @@ impl FerroApp {
         let level = self.level_info();
         let ev = {
             let ctx = ToolCtx {
-                doc: self.session.doc(),
+                doc: design_options::view_doc(&self.session, &self.options),
                 snap,
                 ray,
                 selection: &self.selection,
@@ -1629,21 +2211,31 @@ impl FerroApp {
 
         // Snapping against the committed document (excluding moved elements).
         let mut moving: Vec<ElementId> = self.tool.moving().to_vec();
-        let hidden = self.hidden_elements();
+        let mut hidden = self.hidden_elements();
+        let phased = self.phase_display();
+        hidden.extend(phased.hidden.iter().copied());
+        self.scene.phase = phased.looks;
+        self.scene.voids = phases::voids(self.doc());
+        hidden.extend(phases::hidden_voids(
+            self.doc(),
+            &self.scene.voids,
+            &self.selection,
+            self.show_voids,
+        ));
         moving.extend(hidden.iter().copied());
         moving.sort();
         moving.dedup();
         self.selection.retain(|id| !hidden.contains(id));
         self.scene.hidden = hidden;
         let rebuild = match &self.snap_scene {
-            Some((d, m, _)) => !scene::same_doc(d, self.session.doc()) || *m != moving,
+            Some((d, m, _)) => !scene::same_doc(d, self.doc()) || *m != moving,
             None => true,
         };
         if rebuild {
             self.snap_scene = Some((
-                self.session.doc().clone(),
+                self.doc().clone(),
                 moving.clone(),
-                SnapScene::from_document(self.session.doc(), &moving),
+                SnapScene::from_document(self.doc(), &moving),
             ));
         }
         let hover = resp.hover_pos().or_else(|| {
@@ -1750,7 +2342,7 @@ impl FerroApp {
                 sel_rect = Some((r, window));
                 if resp.drag_stopped_by(PointerButton::Primary) {
                     let mut picked = Vec::new();
-                    for e in self.session.doc().elements() {
+                    for e in self.doc().elements() {
                         if self.scene.hidden.contains(&e.id) {
                             continue;
                         }
@@ -1803,7 +2395,7 @@ impl FerroApp {
         let (mut sub_set, mut sub_toggle) = (None, None);
         let (preview_cmd, hover_face, rubber, section_live) = {
             let tctx = ToolCtx {
-                doc: self.session.doc(),
+                doc: design_options::view_doc(&self.session, &self.options),
                 snap: snap_res,
                 ray,
                 selection: &self.selection,
@@ -1832,7 +2424,7 @@ impl FerroApp {
                 self.editing,
                 resp.clicked_by(PointerButton::Primary),
             ) {
-                match snap_res.and_then(|s| pick_sub(self.session.doc(), e, &s)) {
+                match snap_res.and_then(|s| pick_sub(self.doc(), e, &s)) {
                     Some(p) if shift => sub_toggle = Some(p),
                     Some(p) => sub_set = Some(p),
                     None => exit_edit = true,
@@ -1900,11 +2492,19 @@ impl FerroApp {
             ToolEvent::None => {}
         }
 
-        // Document to display: the committed one, or the tool preview.
-        let mut display = self.session.doc().clone();
+        // Document to display: the committed one (as seen in the view
+        // phase when phased cuts differ, M5-23.6, with demolished parts,
+        // M5-23.10), or the tool preview.
+        let mut display = match self.phase_cut_display() {
+            Some(shown) => {
+                phases::mark_parts(&shown.parts, &mut self.scene.hidden, &mut self.scene.phase);
+                shown.doc
+            }
+            None => self.doc().clone(),
+        };
         let mut preview_err = None;
         if let Some(cmd) = preview_cmd {
-            match self.session.preview(&cmd) {
+            match self.preview_here(&cmd) {
                 Ok((d, _)) => display = d,
                 Err(f) => preview_err = Some(failure_text(&f)),
             }
@@ -1935,7 +2535,7 @@ impl FerroApp {
         ));
         if let Some((e, f)) = hover_face {
             if let Some(m) = self.scene.mesh(e) {
-                for t in scene::face_triangles(m, f) {
+                for t in scene::face_triangles(&m, f) {
                     let n = (t[1] - t[0])
                         .cross(t[2] - t[0])
                         .normalize()
@@ -1959,7 +2559,7 @@ impl FerroApp {
                     match p {
                         SubPick::Face(f) => {
                             if let Some(m) = self.scene.mesh(e) {
-                                for t in scene::face_triangles(m, *f) {
+                                for t in scene::face_triangles(&m, *f) {
                                     let n = (t[1] - t[0])
                                         .cross(t[2] - t[0])
                                         .normalize()
@@ -2130,7 +2730,7 @@ impl FerroApp {
         if let Some(p) = hover {
             let m = {
                 let tctx = ToolCtx {
-                    doc: self.session.doc(),
+                    doc: self.doc(),
                     snap: snap_res,
                     ray,
                     selection: &self.selection,
@@ -2158,6 +2758,12 @@ impl FerroApp {
                 );
             }
         }
+        self.pinned_markers(&painter, rect, &fc);
+        self.wall_end_handles(&painter, &fc);
+        resp.context_menu(|ui| {
+            self.pin_menu(ui);
+            self.join_menu(ui);
+        });
         if let Some(e) = preview_err {
             painter.text(
                 rect.left_bottom() + Vec2::new(10.0, -10.0),
@@ -2182,7 +2788,7 @@ impl FerroApp {
                 egui::FontId::proportional(13.0),
                 Color32::from_rgb(40, 90, 220),
             );
-            if let Some(g) = self.session.doc().get(e).and_then(|x| x.geometry()) {
+            if let Some(g) = self.doc().get(e).and_then(|x| x.geometry()) {
                 for p in &self.sub_sel {
                     if let SubPick::Vertex(v) = p {
                         if let Some(q) = g.point(*v).and_then(|q| fc.project(q)) {
@@ -2201,9 +2807,9 @@ impl FerroApp {
             rect.right_top() + Vec2::new(-10.0, 10.0),
             egui::Align2::RIGHT_TOP,
             format!(
-                "{}  ·  {:.1} m view",
+                "{}  ·  {} view",
                 self.workspace.label(),
-                self.camera.distance / 1000.0
+                units::length(&self.doc().project().settings.units, self.camera.distance)
             ),
             egui::FontId::proportional(12.0),
             Color32::from_gray(90),
@@ -2217,6 +2823,9 @@ impl FerroApp {
     // ------------------------------------------------------------ agents
 
     fn accept_proposal(&mut self) {
+        if self.hold_for_script(python::UserAction::AcceptProposal) {
+            return;
+        }
         if let Some(p) = self.proposal.take() {
             self.session.end_group();
             self.say(
@@ -2228,24 +2837,55 @@ impl FerroApp {
     }
 
     fn reject_proposal(&mut self) {
+        if self.hold_for_script(python::UserAction::RejectProposal) {
+            return;
+        }
         if let Some(p) = self.proposal.take() {
             self.session.cancel_group();
-            self.selection.retain(|id| self.session.doc().contains(*id));
+            self.selection
+                .retain(|id| design_options::view_doc(&self.session, &self.options).contains(*id));
             self.say(format!("Rejected the proposal from {}", p.agent), false);
         }
     }
 
     /// Answer queued Ferro Link calls (MCP agents and the chat panel).
     fn process_agent_calls(&mut self) {
-        let name = self.session.doc().project().name.clone();
+        let name = self.doc().project().name.clone();
         self.link.set_project(&name);
         for p in self.link.drain() {
-            let resp = self.agent_call(p.req);
+            let tool = p.req.tool.clone();
+            let resp = if self.is_script_token(&p.req.token)
+                && tool == ferro_mcp::python::GET_USER_INPUT
+            {
+                // `ferro.ask`: answered when the user closes the dialog.
+                self.ask_from_script(p.req, p.reply);
+                continue;
+            } else if self.is_script_token(&p.req.token) {
+                self.script_call(p.req)
+            } else if tool == ferro_mcp::python::CANCEL_TOOL {
+                self.cancel_from_link(&p.req)
+            } else if let Some(busy) = self.refuse_while_script(&tool) {
+                busy
+            } else if tool == ferro_mcp::python::TOOL {
+                // Answered when the script ends (`poll_python`).
+                self.start_python(p.req, p.reply);
+                continue;
+            } else {
+                self.agent_call(p.req)
+            };
+            // Tool name and outcome code only (no arguments: model data).
+            let code = resp.body["failures"][0]["code"].as_str().unwrap_or("");
+            crate::report::record(if resp.ok {
+                format!("agent {tool} ok")
+            } else {
+                format!("agent {tool} failed {code}")
+            });
             let _ = p.reply.send(resp);
         }
     }
 
-    fn agent_call(&mut self, req: LinkRequest) -> LinkResponse {
+    /// Who sent a Ferro Link request, and the context its changes carry.
+    fn agent_ctx(req: &LinkRequest) -> (AgentInfo, ExecContext) {
         let info = req.agent.clone().unwrap_or(AgentInfo {
             name: "agent".into(),
             version: String::new(),
@@ -2255,6 +2895,11 @@ impl FerroApp {
             prompt: req.prompt.clone(),
             timestamp_ms: now_ms(),
         };
+        (info, ctx)
+    }
+
+    fn agent_call(&mut self, req: LinkRequest) -> LinkResponse {
+        let (info, ctx) = Self::agent_ctx(&req);
         let answer = |r: Result<Value, Value>| match r {
             Ok(body) => LinkResponse { ok: true, body },
             Err(body) => LinkResponse { ok: false, body },
@@ -2263,7 +2908,7 @@ impl FerroApp {
         match tool {
             "link_status" => {
                 return answer(Ok(
-                    json!({"linked": true, "project": self.session.doc().project().name, "autonomy": if self.autonomy == Autonomy::Propose { "propose" } else { "apply" }}),
+                    json!({"linked": true, "project": self.doc().project().name, "autonomy": if self.autonomy == Autonomy::Propose { "propose" } else { "apply" }}),
                 ))
             }
             "save_document" => {
@@ -2288,11 +2933,7 @@ impl FerroApp {
             "get_selection" => {
                 let mut sel: Vec<ElementId> = self.selection.iter().copied().collect();
                 sel.sort();
-                return answer(Ok(ferro_tools::summary_of(
-                    self.session.doc(),
-                    None,
-                    Some(&sel),
-                )));
+                return answer(Ok(ferro_tools::summary_of(self.doc(), None, Some(&sel))));
             }
             "select_elements" => {
                 let ids: Vec<ElementId> = req
@@ -2302,7 +2943,7 @@ impl FerroApp {
                     .unwrap_or_default();
                 self.selection = ids
                     .into_iter()
-                    .filter(|id| self.session.doc().contains(*id))
+                    .filter(|id| self.doc().contains(*id))
                     .collect();
                 return answer(Ok(json!({"selected": self.selection.len()})));
             }
@@ -2321,9 +2962,23 @@ impl FerroApp {
             self.proposal = Some(Proposal {
                 agent: info.name.clone(),
                 steps: 0,
+                targets: Vec::new(),
             });
         }
-        let r = ferro_tools::call(&mut self.session, &ctx, tool, &req.args)
+        // One rule with scripts (ADR 0006): while the user edits a design
+        // option, an agent command lands in it unless it names a target.
+        let (args, target) =
+            match ferro_tools::with_default_design_option(tool, &req.args, self.editing_option()) {
+                Ok(a) => a,
+                Err(m) => {
+                    if self.proposal.as_ref().is_some_and(|p| p.steps == 0) {
+                        self.session.cancel_group();
+                        self.proposal = None;
+                    }
+                    return answer(Err(json!({ "error": m })));
+                }
+            };
+        let r = ferro_tools::call(&mut self.session, &ctx, tool, &args)
             .unwrap_or_else(|| Err(json!({"error": format!("unknown tool: {tool}")})));
         // An import that changed nothing is not a step.
         let no_op = tool == "revit_import"
@@ -2344,6 +2999,7 @@ impl FerroApp {
             match (&r, &mut self.proposal) {
                 (Ok(_), Some(p)) => {
                     p.steps += 1;
+                    python::note_target(&mut p.targets, target);
                     self.say(format!("{} proposes: {tool}", info.name), false);
                 }
                 (Ok(_), None) => {
@@ -2366,6 +3022,12 @@ impl FerroApp {
             "{} proposes {} change(s). Review them in the viewport.",
             p.agent, p.steps
         );
+        let doc = self.session.doc();
+        let target = python::target_label(&p.targets, |o| {
+            doc.get(o)
+                .map(|e| e.label())
+                .unwrap_or_else(|| format!("#{}", o.0))
+        });
         ui.horizontal(|ui| {
             ui.label(
                 RichText::new("AI")
@@ -2373,6 +3035,11 @@ impl FerroApp {
                     .color(Color32::from_rgb(120, 60, 200)),
             );
             ui.label(text);
+            ui.label(
+                RichText::new(target)
+                    .strong()
+                    .color(Color32::from_rgb(200, 120, 0)),
+            );
             if ui.button("Accept").clicked() {
                 self.accept_proposal();
             }
@@ -2602,6 +3269,8 @@ impl FerroApp {
     }
 
     fn windows(&mut self, ctx: &egui::Context) {
+        self.project_settings_window(ctx);
+        self.plugins_windows(ctx);
         egui::Window::new("About Ferro").open(&mut self.show_about).resizable(false).show(ctx, |ui| {
             ui.heading(format!("Ferro {}", env!("CARGO_PKG_VERSION")));
             ui.label("Open-source, AI-native 3D design tool for architects.");
@@ -2646,16 +3315,22 @@ fn failure_text(f: &[Failure]) -> String {
 impl eframe::App for FerroApp {
     fn ui(&mut self, ui: &mut egui::Ui, frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
+        self.refresh_view();
         self.process_agent_calls();
+        self.poll_python(&ctx);
+        self.poll_plugins(&ctx);
+        self.sync_view();
         self.poll_chat();
         self.shortcuts(&ctx);
+        self.palette_ui(&ctx);
+        self.report_ui(&ctx);
         let title = format!(
             "Ferro — {}{}",
             self.path
                 .as_ref()
                 .and_then(|p| p.file_name())
                 .map(|n| n.to_string_lossy().to_string())
-                .unwrap_or_else(|| self.session.doc().project().name.clone()),
+                .unwrap_or_else(|| self.doc().project().name.clone()),
             if self.dirty() && self.store.is_none() {
                 " •"
             } else {
@@ -2672,7 +3347,10 @@ impl eframe::App for FerroApp {
         egui::Panel::left("tools")
             .resizable(false)
             .default_size(136.0)
-            .show(ui, |ui| self.toolbar(ui));
+            // Scrolls: the Plugins group can make it taller than the window.
+            .show(ui, |ui| {
+                egui::ScrollArea::vertical().show(ui, |ui| self.toolbar(ui))
+            });
         egui::Panel::right("side")
             .resizable(true)
             .default_size(280.0)
@@ -2680,5 +3358,41 @@ impl eframe::App for FerroApp {
         egui::CentralPanel::no_frame().show(ui, |ui| self.viewport(ui, frame));
         self.windows(&ctx);
         self.chat_window(&ctx);
+        self.script_wait_ui(&ctx);
+    }
+}
+
+/// A problem report the user is reviewing.
+struct ReportDraft {
+    /// The user's description.
+    what: String,
+    /// Version, platform, session log (or the saved crash report).
+    body: String,
+    /// Crash report file this draft came from (dismissed when closed).
+    crash_file: Option<PathBuf>,
+}
+
+impl ReportDraft {
+    fn new(crash_text: String, crash_file: Option<PathBuf>) -> ReportDraft {
+        ReportDraft {
+            what: String::new(),
+            body: if crash_text.is_empty() {
+                crate::report::report_text("(see above)")
+            } else {
+                crash_text
+            },
+            crash_file,
+        }
+    }
+}
+
+/// The failure code at the start of a status message, if any
+/// (`"ferro.model.x: …"`), else a short tag: messages may contain names.
+fn first_code(text: &str) -> &str {
+    let head = text.split([':', ' ']).next().unwrap_or("");
+    if head.starts_with("ferro.") {
+        head
+    } else {
+        "message"
     }
 }

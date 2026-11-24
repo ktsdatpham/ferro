@@ -7,8 +7,8 @@ use super::{CommandError, Transaction};
 use crate::geom::{Arc, Curve, Line};
 use crate::math::{tol, Length, Point2, Point3, Vec2, Vec3};
 use crate::model::bim::{
-    CompoundLayer, CompoundStructure, Floor, FloorType, LayerFunction, LocationLine, Material,
-    Opening, OpeningKind, Wall, WallTop, WallType,
+    CompoundLayer, CompoundStructure, Floor, FloorType, LayerFunction, LocationLine, Opening,
+    OpeningKind, Wall, WallJoin, WallTop, WallType,
 };
 use crate::model::generate::{self, WallLayout};
 use crate::model::{Category, Element, ElementBody, ElementId};
@@ -65,37 +65,7 @@ fn check_unique_name(
 
 // --------------------------------------------------------------- materials
 
-/// Create a material with a base colour (`"#rrggbb"`).
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct CreateMaterial {
-    pub name: String,
-    pub color: String,
-    #[serde(default)]
-    pub roughness: Option<f32>,
-}
-
-impl Command for CreateMaterial {
-    const NAME: &'static str = "create_material";
-    fn execute(&self, tx: &mut Transaction) -> Result<CommandOutput, CommandError> {
-        check_unique_name(tx, &self.name, |e| {
-            matches!(e.body, ElementBody::Material(_))
-        })?;
-        let color = parse_color(&self.color).ok_or_else(|| {
-            err(
-                "ferro.model.invalid_color",
-                format!("{:?} is not a #rrggbb colour", self.color),
-            )
-        })?;
-        let roughness = self.roughness.unwrap_or(0.8).clamp(0.0, 1.0);
-        let id = tx.create(
-            Category::Materials,
-            Some(self.name.clone()),
-            None,
-            ElementBody::Material(Material { color, roughness }),
-        )?;
-        Ok(json!({ "element": id }))
-    }
-}
+pub use super::material_commands::{CreateMaterial, SetMaterial};
 
 // ------------------------------------------------------------------- types
 
@@ -296,6 +266,8 @@ fn create_wall(
             base_offset: o.base_offset,
             top,
             location_line: o.location_line,
+            join_start: Default::default(),
+            join_end: Default::default(),
             geometry: Default::default(),
         }),
     )?;
@@ -475,10 +447,23 @@ impl Command for SetElementType {
     const NAME: &'static str = "set_element_type";
     fn execute(&self, tx: &mut Transaction) -> Result<CommandOutput, CommandError> {
         let t = tx.element(self.element_type)?;
+        let e = tx.element(self.element)?;
+        // Parametric walls / floors, or directly edited ones of that category.
         let ok = matches!(
-            (&tx.element(self.element)?.body, &t.body),
+            (&e.body, &t.body),
             (ElementBody::Wall(_), ElementBody::WallType(_))
                 | (ElementBody::Floor(_), ElementBody::FloorType(_))
+        ) || matches!(
+            (&e.body, e.category, &t.body),
+            (
+                ElementBody::Form(_),
+                Category::Walls,
+                ElementBody::WallType(_)
+            ) | (
+                ElementBody::Form(_),
+                Category::Floors,
+                ElementBody::FloorType(_)
+            )
         );
         if !ok {
             return Err(err(
@@ -652,6 +637,10 @@ impl Command for SetOpening {
 /// Change a wall's location and constraints; omitted fields keep their
 /// value. Give `start` and `end` (and `mid` for a curved wall) together.
 /// `height` makes the top unconnected; `top_level` attaches it to a level.
+/// `join_start` / `join_end` set the join state of each end (`auto` or
+/// `disallow`, Revit's Allow / Disallow Join; Foundation §3.8): a
+/// disallowed end stays square and never joins. Changing only the join
+/// state is not a move, so it is allowed on a pinned wall (ADR 0008).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SetWall {
     pub wall: ElementId,
@@ -671,6 +660,10 @@ pub struct SetWall {
     pub top_offset: Option<Length>,
     #[serde(default)]
     pub location_line: Option<LocationLine>,
+    #[serde(default)]
+    pub join_start: Option<WallJoin>,
+    #[serde(default)]
+    pub join_end: Option<WallJoin>,
 }
 
 impl Command for SetWall {
@@ -707,6 +700,8 @@ impl Command for SetWall {
                 }
                 w.base_offset = s.base_offset.unwrap_or(w.base_offset);
                 w.location_line = s.location_line.unwrap_or(w.location_line);
+                w.join_start = s.join_start.unwrap_or(w.join_start);
+                w.join_end = s.join_end.unwrap_or(w.join_end);
                 match (s.top_level, s.height) {
                     (Some(level), _) => {
                         let offset = s.top_offset.unwrap_or(Length::ZERO);

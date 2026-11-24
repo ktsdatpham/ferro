@@ -1,4 +1,7 @@
-use super::{Category, Element, ElementId, Uid};
+use super::{
+    builtin_definition, Category, Element, ElementBody, ElementId, ParameterDefinition,
+    Relationship, Uid,
+};
 use crate::math::{Angle, Point3};
 use imbl::OrdMap;
 use serde::{Deserialize, Serialize};
@@ -27,10 +30,23 @@ impl Default for ProjectOrigins {
     }
 }
 
+/// Project-wide information (Revit: `ProjectInfo` plus parameter bindings).
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct ProjectInfo {
     pub name: String,
     pub origins: ProjectOrigins,
+    /// Project (user-defined) parameter definitions, sorted by key, keys
+    /// unique, never in the built-in `ferro` namespace (ADR 0004 §2.3).
+    /// Omitted from files when empty, so files without it still load.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub parameter_definitions: Vec<ParameterDefinition>,
+    /// Display units, site location, currency (M5-24). Omitted when default.
+    #[serde(default, skip_serializing_if = "is_default_settings")]
+    pub settings: super::project_settings::ProjectSettings,
+}
+
+fn is_default_settings(s: &super::project_settings::ProjectSettings) -> bool {
+    *s == super::project_settings::ProjectSettings::default()
 }
 
 /// The project container (Revit: `Document`). Cheap to clone: elements live in
@@ -39,6 +55,9 @@ pub struct ProjectInfo {
 pub struct Document {
     project: ProjectInfo,
     elements: OrdMap<ElementId, Arc<Element>>,
+    /// The relationship table (ADR 0004 §5), keyed by uid.
+    #[serde(default)]
+    relationships: OrdMap<Uid, Relationship>,
     next_element_id: u64,
     /// Incremented on every commit.
     version: u64,
@@ -52,6 +71,7 @@ impl Default for Document {
                 ..Default::default()
             },
             elements: OrdMap::new(),
+            relationships: OrdMap::new(),
             next_element_id: 1,
             version: 0,
         }
@@ -72,13 +92,37 @@ impl Document {
     /// Assemble a document from loaded parts (opening a file, importing).
     /// This creates a new document; it does not mutate an existing one, so it
     /// does not bypass D-17. Ids and uids must be unique.
-    pub fn from_parts(project: ProjectInfo, elements: Vec<Element>) -> Result<Document, String> {
+    pub fn from_parts(
+        mut project: ProjectInfo,
+        elements: Vec<Element>,
+    ) -> Result<Document, String> {
+        project
+            .parameter_definitions
+            .sort_by(|a, b| a.key.cmp(&b.key));
+        for (i, d) in project.parameter_definitions.iter().enumerate() {
+            if ParameterDefinition::is_builtin_key(&d.key) {
+                return Err(format!("{} is a built-in parameter key", d.key));
+            }
+            if project.parameter_definitions[..i]
+                .iter()
+                .any(|o| o.key == d.key || o.uid == d.uid)
+            {
+                return Err(format!("duplicate parameter definition {}", d.key));
+            }
+        }
         let mut doc = Document {
             project,
             ..Default::default()
         };
         let mut uids = std::collections::HashSet::new();
-        for e in elements {
+        for mut e in elements {
+            // Ids are renumbered on load: keep view lists sorted (M5-22).
+            if let ElementBody::View(v) = &mut e.body {
+                v.hidden_elements.sort();
+                v.hidden_elements.dedup();
+                v.hidden_tags.sort();
+                v.hidden_tags.dedup();
+            }
             if doc.contains(e.id) {
                 return Err(format!("duplicate element id {}", e.id));
             }
@@ -96,17 +140,76 @@ impl Document {
                     return Err(format!("{} references missing element {r}", e.id));
                 }
             }
+            for r in [e.phase_created, e.phase_demolished].into_iter().flatten() {
+                if doc.get(r).and_then(|p| p.as_phase()).is_none() {
+                    return Err(format!("{} has phase {r}, which is not a phase", e.id));
+                }
+            }
+            if let Some(v) = e.as_view() {
+                if let Some(r) = v.phase {
+                    if doc.get(r).and_then(|p| p.as_phase()).is_none() {
+                        return Err(format!("view {} has phase {r}, which is not a phase", e.id));
+                    }
+                }
+                for r in v.hidden_elements.iter().chain(&v.design_options) {
+                    if !doc.contains(*r) {
+                        return Err(format!("view {} references missing element {r}", e.id));
+                    }
+                }
+            }
         }
         Ok(doc)
     }
 
+    /// Add a loaded relationship table to a document assembled with
+    /// [`Document::from_parts`]. Every row is validated
+    /// ([`Relationship::validate`]); uids must be unique and differ from
+    /// element uids.
+    pub fn with_relationships(mut self, rows: Vec<Relationship>) -> Result<Document, String> {
+        for r in rows {
+            if self.relationships.contains_key(&r.uid) || self.find_uid(r.uid).is_some() {
+                return Err(format!("duplicate uid {}", r.uid));
+            }
+            r.validate(&self).map_err(|e| e.to_string())?;
+            self.relationships.insert(r.uid, r);
+        }
+        Ok(self)
+    }
+
     // ---------------------------------------------------------------- reads
+
+    /// The relationship table, in uid order.
+    pub fn relationships(&self) -> impl Iterator<Item = &Relationship> {
+        self.relationships.values()
+    }
+
+    /// The relationship with this uid.
+    pub fn relationship(&self, uid: Uid) -> Option<&Relationship> {
+        self.relationships.get(&uid)
+    }
+
+    /// Relationships that link `id`, in uid order.
+    pub fn relationships_of(&self, id: ElementId) -> impl Iterator<Item = &Relationship> {
+        self.relationships.values().filter(move |r| r.involves(id))
+    }
 
     pub fn project(&self) -> &ProjectInfo {
         &self.project
     }
     pub fn version(&self) -> u64 {
         self.version
+    }
+    /// The definition of a parameter key: the built-in one for `ferro.*`
+    /// keys, else the project's. `None` if the key has no definition (any
+    /// typed value is then allowed, D-15).
+    pub fn parameter_definition(&self, key: &str) -> Option<ParameterDefinition> {
+        builtin_definition(key).or_else(|| {
+            self.project
+                .parameter_definitions
+                .iter()
+                .find(|d| d.key == key)
+                .cloned()
+        })
     }
     pub fn get(&self, id: ElementId) -> Option<&Element> {
         self.elements.get(&id).map(|e| e.as_ref())
@@ -149,6 +252,11 @@ impl Document {
         }
     }
 
+    /// The id the next new element gets (ids are never reused).
+    pub fn next_element_id(&self) -> u64 {
+        self.next_element_id
+    }
+
     // ------------------------------------------------- crate-private writes
 
     pub(crate) fn alloc_id(&mut self) -> ElementId {
@@ -160,8 +268,21 @@ impl Document {
         self.next_element_id = self.next_element_id.max(e.id.0 + 1);
         self.elements.insert(e.id, Arc::new(e));
     }
+    /// Remove an element and every relationship that links it (a row
+    /// never points at a missing element).
     pub(crate) fn remove(&mut self, id: ElementId) -> Option<Arc<Element>> {
+        let gone: Vec<Uid> = self.relationships_of(id).map(|r| r.uid).collect();
+        for u in gone {
+            self.relationships.remove(&u);
+        }
         self.elements.remove(&id)
+    }
+    /// Insert or replace a relationship row. The caller validates it.
+    pub(crate) fn put_relationship(&mut self, r: Relationship) {
+        self.relationships.insert(r.uid, r);
+    }
+    pub(crate) fn remove_relationship(&mut self, uid: Uid) -> Option<Relationship> {
+        self.relationships.remove(&uid)
     }
     pub(crate) fn project_mut(&mut self) -> &mut ProjectInfo {
         &mut self.project

@@ -4,7 +4,15 @@
 //! radians; the MCP edge converts user units (`"3m"`, degrees).
 
 use super::bim_commands::*;
+use super::design_option_commands::*;
 use super::form_commands::*;
+use super::geometry_source::*;
+use super::parameter_commands::*;
+use super::phase_commands::*;
+use super::pin_commands::*;
+use super::project_commands::*;
+use super::relationship_commands::*;
+use super::view_commands::*;
 use super::{CommandError, Transaction};
 use crate::algo::{push_pull_face, PushPullMode};
 use crate::geom::{polygon, Plane};
@@ -202,13 +210,24 @@ impl Command for CreatePolygon {
                 "points are not coplanar",
             ));
         }
+        // Exact simple-polygon test (D-53): no bow-ties, no repeated points.
+        let local: Vec<crate::math::Point2> = pts.iter().map(|p| plane.to_local(*p)).collect();
+        if crate::geom::predicates::points_are_collinear(&local) {
+            return Err(CommandError::new(
+                "ferro.geom.degenerate",
+                "points are collinear",
+            ));
+        }
+        if !crate::geom::predicates::polygon_is_simple(&local) {
+            return Err(crate::geom::GeomError::SelfIntersecting.into());
+        }
         let idx: Vec<usize> = (0..pts.len()).collect();
         let (body, faces) = Body::from_polygons(&pts, &[idx])?;
         let id = tx.create(
             Category::Forms,
             self.name.clone(),
             self.level,
-            ElementBody::Form(Form { body }),
+            ElementBody::Form(Form::new(body)),
         )?;
         Ok(json!({ "element": id, "face": faces[0] }))
     }
@@ -268,7 +287,7 @@ impl Command for PushPullFace {
         let (mode, lineage) = push_pull_face(&mut body, self.face, self.distance.mm())
             .map_err(|e| CommandError::from(e).on(self.element))?;
         tx.modify(self.element, |e| {
-            e.body = ElementBody::Form(Form { body });
+            e.body = ElementBody::Form(Form::new(body));
             Ok(())
         })?;
         let mode = match mode {
@@ -318,13 +337,17 @@ fn transform_elements(
                 "levels move with set_level_elevation",
             )
             .on(e.id)),
-            ElementBody::Material(_) | ElementBody::WallType(_) | ElementBody::FloorType(_) => {
-                Err(CommandError::new(
-                    "ferro.model.not_movable",
-                    "types and materials have no location",
-                )
-                .on(e.id))
-            }
+            ElementBody::Material(_)
+            | ElementBody::WallType(_)
+            | ElementBody::FloorType(_)
+            | ElementBody::Phase(_)
+            | ElementBody::View(_)
+            | ElementBody::OptionSet(_)
+            | ElementBody::DesignOption(_) => Err(CommandError::new(
+                "ferro.model.not_movable",
+                "types, materials, phases, views and design options have no location",
+            )
+            .on(e.id)),
             ElementBody::Wall(w) => {
                 w.curve = match w.curve.transformed(t)? {
                     crate::geom::Curve::Line(l) => {
@@ -474,10 +497,13 @@ impl Command for DeleteElements {
 
 // ------------------------------------------------------------------ data
 
-/// Rename an element (`null` clears the name).
+/// Rename an element (`null` clears the name). `name` is required: a
+/// missing `name` is rejected as bad arguments, not read as `null`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SetName {
     pub element: ElementId,
+    /// `deserialize_with` makes the field required while still taking `null`.
+    #[serde(deserialize_with = "Option::deserialize")]
     pub name: Option<String>,
 }
 
@@ -493,7 +519,13 @@ impl Command for SetName {
     }
 }
 
-/// Set a typed parameter (D-15). Computed keys are read-only.
+/// Set a typed parameter (D-15). Computed keys are read-only. Quantities are
+/// in storage units (`ParamValue::Quantity`, ADR 0004 §2).
+///
+/// Fails with `ferro.model.invalid_parameter_key`,
+/// `ferro.model.read_only_parameter`, `ferro.model.invalid_parameter_value`
+/// (NaN / infinite number) or `ferro.model.parameter_type_mismatch` (the key
+/// has a definition whose data type the value does not fit).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SetParameter {
     pub element: ElementId,
@@ -516,6 +548,27 @@ impl Command for SetParameter {
                 format!("{} is computed and read-only", self.key),
             ));
         }
+        if !self.value.is_finite() {
+            return Err(CommandError::new(
+                "ferro.model.invalid_parameter_value",
+                format!("{} must be a finite number", self.key),
+            )
+            .on(self.element));
+        }
+        if let Some(def) = tx.doc().parameter_definition(&self.key) {
+            if !def.accepts(&self.value) {
+                return Err(CommandError::new(
+                    "ferro.model.parameter_type_mismatch",
+                    format!(
+                        "{} holds {}, not {}",
+                        self.key,
+                        def.data_type.describe(),
+                        self.value.type_name()
+                    ),
+                )
+                .on(self.element));
+            }
+        }
         if let ParamValue::ElementRef(r) = &self.value {
             tx.element(*r)?;
         }
@@ -528,7 +581,9 @@ impl Command for SetParameter {
     }
 }
 
-/// Classify a Form as a BIM category (D-12), e.g. `walls`.
+/// Classify directly edited geometry as a BIM category (D-12, ADR 0004),
+/// e.g. `walls`: a free-form wall keeps its shape and gets the category's
+/// data. A type that does not fit the new category is removed.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SetCategory {
     pub element: ElementId,
@@ -545,6 +600,17 @@ impl Command for SetCategory {
             ));
         }
         let c = self.category;
+        let type_fits = tx
+            .element(self.element)?
+            .type_id
+            .and_then(|t| tx.doc().get(t))
+            .is_some_and(|t| {
+                matches!(
+                    (c, &t.body),
+                    (Category::Walls, crate::model::ElementBody::WallType(_))
+                        | (Category::Floors, crate::model::ElementBody::FloorType(_))
+                )
+            });
         tx.modify(self.element, |e| {
             if e.as_form().is_none() {
                 return Err(CommandError::new(
@@ -554,22 +620,36 @@ impl Command for SetCategory {
                 .on(e.id));
             }
             e.category = c;
+            // Keep the type only if it still fits (wall types for walls...).
+            if !type_fits {
+                e.type_id = None;
+            }
             Ok(())
         })?;
         Ok(json!({ "element": self.element }))
     }
 }
 
-/// Rename the project.
+/// Rename the project and / or switch project-wide behaviour: with
+/// `auto_pin_datums`, whether new levels (and other datums) are created
+/// pinned (ADR 0008 §4, default on). Omitted fields keep their value.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SetProjectName {
-    pub name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub auto_pin_datums: Option<bool>,
 }
 
 impl Command for SetProjectName {
     const NAME: &'static str = "set_project_name";
     fn execute(&self, tx: &mut Transaction) -> Result<CommandOutput, CommandError> {
-        tx.project_name(self.name.clone());
+        if let Some(name) = &self.name {
+            tx.project_name(name.clone());
+        }
+        if let Some(on) = self.auto_pin_datums {
+            tx.project_settings(|s| s.auto_pin_datums = on);
+        }
         Ok(json!({}))
     }
 }
@@ -637,6 +717,35 @@ any_command!(
     ScaleElements,
     EraseEdges,
     EraseFaces,
+    SubtractForms,
+    UniteForms,
+    IntersectForms,
+    SetGeometrySource,
+    SetProjectUnits,
+    SetSiteLocation,
+    SetProjectCurrency,
+    SetMaterial,
+    SetParameterDefinition,
+    CreatePhase,
+    SetPhase,
+    DeletePhase,
+    SetElementPhase,
+    SetRenovationStatus,
+    CreateRelationship,
+    DeleteRelationship,
+    SetRelationship,
+    CreateView,
+    SetView,
+    DeleteView,
+    CreateOptionSet,
+    SetOptionSet,
+    DeleteOptionSet,
+    CreateDesignOption,
+    SetDesignOption,
+    DeleteDesignOption,
+    AcceptDesignOption,
+    ApplyChanges,
+    SetPinned,
 );
 
 impl AnyCommand {

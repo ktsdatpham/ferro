@@ -1,0 +1,18 @@
+[package]
+name = "ferro-cli"
+description = "Headless command line for Ferro: run tool scripts, inspect, check and benchmark models without the UI."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "ferro-cli"
+path = "src/main.rs"
+
+[dependencies]
+ferro-core = { path = "../ferro-core" }
+ferro-io = { path = "../ferro-io" }
+ferro-kernel = { path = "../ferro-kernel" }
+ferro-mcp = { path = "../ferro-mcp" }
+serde_json.workspace = true

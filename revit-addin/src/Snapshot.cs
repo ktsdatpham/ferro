@@ -52,7 +52,7 @@ namespace Ferro.Revit
         {
             var levels = new JsonArray();
             foreach (var l in new FilteredElementCollector(doc).OfClass(typeof(Level)).Cast<Level>().OrderBy(l => l.Elevation))
-                levels.Add(new JsonObject { ["unique_id"] = l.UniqueId, ["ferro_uid"] = Uid(l), ["name"] = l.Name, ["elevation"] = l.Elevation });
+                levels.Add(new JsonObject { ["unique_id"] = l.UniqueId, ["ferro_uid"] = Uid(l), ["name"] = l.Name, ["elevation"] = l.Elevation, ["pinned"] = l.Pinned });
 
             var wallTypes = new Dictionary<ElementId, JsonObject>();
             var floorTypes = new Dictionary<ElementId, JsonObject>();
@@ -77,6 +77,7 @@ namespace Ferro.Revit
                     ["height"] = Num(w, BuiltInParameter.WALL_USER_HEIGHT_PARAM),
                     ["top_offset"] = Num(w, BuiltInParameter.WALL_TOP_OFFSET),
                     ["location_line"] = w.get_Parameter(BuiltInParameter.WALL_KEY_REF_PARAM)?.AsInteger() ?? 0,
+                    ["pinned"] = w.Pinned,
                 };
                 if (top != ElementId.InvalidElementId && doc.GetElement(top) is Level tl) j["top_level_unique_id"] = tl.UniqueId;
                 walls.Add(j);
@@ -107,6 +108,7 @@ namespace Ferro.Revit
                     ["level_unique_id"] = doc.GetElement(f.LevelId)?.UniqueId ?? "",
                     ["loops"] = loops,
                     ["offset"] = Num(f, BuiltInParameter.FLOOR_HEIGHTABOVELEVEL_PARAM),
+                    ["pinned"] = f.Pinned,
                 });
                 if (!floorTypes.ContainsKey(f.FloorType.Id)) floorTypes[f.FloorType.Id] = HostType(doc, f.FloorType);
             }
@@ -130,6 +132,7 @@ namespace Ferro.Revit
                     ["width"] = door ? Size(BuiltInParameter.DOOR_WIDTH, BuiltInParameter.FAMILY_WIDTH_PARAM, "Width") : Size(BuiltInParameter.WINDOW_WIDTH, BuiltInParameter.FAMILY_WIDTH_PARAM, "Width"),
                     ["height"] = door ? Size(BuiltInParameter.DOOR_HEIGHT, BuiltInParameter.FAMILY_HEIGHT_PARAM, "Height") : Size(BuiltInParameter.WINDOW_HEIGHT, BuiltInParameter.FAMILY_HEIGHT_PARAM, "Height"),
                     ["sill"] = Num(fi, BuiltInParameter.INSTANCE_SILL_HEIGHT_PARAM),
+                    ["pinned"] = fi.Pinned,
                 });
             }
 

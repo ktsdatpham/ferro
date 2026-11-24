@@ -1,0 +1,8 @@
+[
+ {"id":"a","tool":"create_box","args":{"origin":[0,0,0],"width":2000,"depth":2000,"height":2000}},
+ {"id":"b","tool":"create_box","args":{"origin":[3000,0,0],"width":2000,"depth":2000,"height":2000}},
+ {"id":"c","tool":"create_box","args":{"origin":[6000,0,0],"width":2000,"depth":2000,"height":2000}},
+ {"tool":"set_renovation_status","args":{"elements":[{"$ref":"a.result.element"}],"status":"demolish"}},
+ {"tool":"set_renovation_status","args":{"elements":[{"$ref":"b.result.element"}],"status":"existing"}},
+ {"tool":"set_renovation_status","args":{"elements":[{"$ref":"c.result.element"}],"status":"new"}}
+]

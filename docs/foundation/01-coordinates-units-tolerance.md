@@ -19,6 +19,7 @@ Revit equivalent: identical (Revit is right-handed, Z up).
 | Area | mm² | `f64` | ft² | Display usually in m² |
 | Volume | mm³ | `f64` | ft³ | Display usually in m³ |
 | Slope | rise / run (unitless) | `f64` | same | Display as %, ratio or degrees |
+| Other physical quantities | SI (kg, N, Pa, W/(m·K), K …) | `f64` | per spec | Table `QuantitySpec`, ADR 0004 §2 |
 
 Rules:
 
@@ -29,7 +30,13 @@ Rules:
    import / export, display formatting). The kernel never sees feet or degrees.
 3. User / agent input strings are parsed by one function: `Length::parse`
    (`"3000"`, `"3m"`, `"300cm"`, `"10'"`, `"10' 6\""`). A bare number means mm.
+   Exception, at the UI edge only: in the app (value box, settings fields) a
+   bare number is in the project's display unit for that quantity (as in
+   Revit and SketchUp), so with lengths in `m`, `4` means 4 m. MCP arguments
+   and files keep mm.
 4. Display formatting is a *project setting* (`ProjectUnits`), never hard-coded.
+   The app formats every length / area / volume / angle through one helper
+   (`ferro-app` `units`) that reads `ProjectUnits`.
 
 ## 1.3 Origins and north (D-04)
 
@@ -75,6 +82,7 @@ One set of tolerances, defined once in `ferro_core::math::tol`:
 | `SHORT_CURVE_TOL` | 0.5 mm | Shortest allowed edge / curve | `ShortCurveTolerance` (~0.8 mm) |
 | `ANGLE_TOL` | 1e-6 rad | Two directions within this are parallel | Angle tolerance |
 | `PARAM_TOL` | 1e-9 | Curve parameter equality on [0, 1] | — |
+| `QUANTITY_REL_TOL` | 1e-9 (relative) | Equality of other quantities (density, stress, U-value…; ADR 0004 §2) | — |
 
 Rules:
 

@@ -32,6 +32,7 @@ an **Element**.
 | `host_id` | `Option<ElementId>` | Hosting element (3.8) | `Host` |
 | `level_id` | `Option<ElementId>` | Associated level (3.6) | `LevelId` |
 | `body` | `ElementBody` | Category-specific data and geometry | — |
+| `pinned` | `bool` | Cannot be moved or deleted (3.13); omitted from files when `false` | `Pinned` |
 
 Rules:
 
@@ -62,6 +63,22 @@ Milestone 2 implements the system families `Wall` and `Floor` with `WallType`
 / `FloorType` (a `CompoundStructure` of `CompoundLayer`s), `Material`, and the
 hosted `Opening` (door / window). Types and materials are elements. See ADR 0001.
 
+A `Material` (ADR 0004 §3) has a colour (OpenPBR `base_color`), a roughness
+(`specular_roughness`) and optional assets: `appearance` (further OpenPBR
+parameters, image mappings), `physical` (density, Young's modulus, Poisson
+ratio, strengths, thermal expansion), `thermal` (conductivity, specific heat,
+density, emissivity, solar absorptance, vapour resistance factor),
+`environmental` (GWP per EN 15804 stage, declared unit, EPD source) and
+`cost` (unit price, ISO 4217 currency, unit). Asset values are SI with the
+unit in the field name (`conductivity_w_mk`); unknown values are absent,
+never zero. A wall / floor type derives `StructureQuantities` from its
+layers when read (not stored, since they depend on the materials):
+U-value by ISO 6946 (Rsi 0.13 / 0.10 / 0.17 m²·K/W for horizontal / upward /
+downward heat flow, Rse 0.04; wall types horizontal, floor types downward),
+mass, GWP A1–A3 and cost per m². A quantity is only given when every layer
+has the data; the layers that lack it are listed. Layers thinner than
+`VERTEX_TOL` add no resistance or mass, but per-m² GWP and prices apply.
+
 `Category` is a closed Rust `enum` (adding one is a spec change). Each category
 declares its Revit `BuiltInCategory` and IFC class (chapter 6).
 
@@ -87,7 +104,8 @@ All data on elements is held in **typed parameters**, never free-form strings.
 | Property | Values | Revit |
 |---|---|---|
 | Key | Stable string id, e.g. `ferro.wall.unconnected_height` | `BuiltInParameter` / shared GUID |
-| Storage | `Length`, `Angle`, `Area`, `Volume`, `Number`, `Integer`, `Bool`, `Text`, `ElementRef` | `StorageType` + spec |
+| Storage | `Quantity { spec, value }` (ADR 0004 §2; `Length`, `Angle`, `Area`, `Volume`, `Number` kept for older files), `Integer`, `Bool`, `Text`, `Tags`, `ElementRef` | `StorageType` + spec |
+| Definition | `ParameterDefinition` with a `Uid`: built-in registry, or project definitions in `ProjectInfo` | shared parameter / binding |
 | Scope | **Instance** or **Type** | instance / type parameter |
 | Origin | **Built-in** (defined by Ferro), **Shared** (defined in a shared parameter file, has a GUID), **Project** (user, this document only) | same |
 | Read-only | `true` when computed (e.g. `area`) | `IsReadOnly` |
@@ -137,15 +155,384 @@ a command. Geometry is derived from location + parameters + type.
 - A **hosted** element (door, window, opening) has `host_id` pointing to its host
   (wall, roof, floor). Deleting the host deletes or orphans hosted elements per
   category rule, reported as a failure (chapter 4).
-- **Joins** (wall-to-wall, floor-to-wall) are explicit relationships stored on
-  the document, not hidden geometry hacks. Until those land, milestone 2 infers
-  L-joins from coincident wall ends (ADR 0001); hosted openings are deleted
-  with their host.
+- **Relationships are data** (ADR 0004 §5, M5-5): the document holds a
+  relationship table next to its elements. A row (`Relationship`) has its own
+  `Uid`, a `RelationshipKind` and the linked element ids, ordered per kind:
+
+  | Kind | Elements | Revit / IFC |
+  |---|---|---|
+  | `join` | `[first, second]`; `first` wins where they overlap | Join Geometry, wall joins / `IfcRelConnectsPathElements` |
+  | `cut` | `[cutter, cut]`; non-destructive void | Cut Geometry / `IfcRelVoidsElement` |
+  | `host` | `[host, hosted]` | `FamilyInstance.Host` / `IfcRelFillsElement` |
+  | `attach` | `[attached, target]` | Attach Top/Base |
+  | `bounds` | `[space, boundary]` | Room Bounding / `IfcRelSpaceBoundary` |
+  | `connect` | `[a, b]`; no geometric effect | `IfcRelConnectsElements` |
+  | `aggregate` | `[whole, part, …]` | `IfcRelAggregates` |
+
+  Rules: only elements with geometry take part; elements are distinct; one
+  row per kind and pair (a reversed `join` is the same pair, a reversed `cut`
+  is not); an optional `phase` says when the row is made (ADR 0006 §5).
+  Deleting an element deletes its rows in the same transaction; a phase used
+  by a row cannot be deleted except by merging. Files store rows with
+  element uids (`relationships` in `.fro.json`, a `relationships` table in
+  `.fro`, format 4); the change format addresses them as
+  `/relationships/<uid>`. Commands: `create_relationship`,
+  `set_relationship` (replace the elements or reverse a pair, uid kept),
+  `delete_relationship`; query `list_relationships`. Failure codes:
+  `ferro.model.invalid_relationship`, `ferro.model.duplicate_relationship`,
+  `ferro.model.missing_relationship`, `ferro.model.missing_element`,
+  `ferro.model.invalid_uid`.
+- **Cuts** (M5-5.3, non-destructive, like Revit's Cut Geometry with voids):
+  a row `cut [cutter, cut]` makes the geometry of the `cut` element (the
+  *target*: a wall, a floor or a Form of any category; not an opening) its
+  own body minus the cutter's body. The cutter is any element with
+  geometry (Form, wall, floor, opening) and contributes its *uncut* body
+  (cuts do not chain). Nothing but the row is stored as source: the result
+  is regenerated through the session's `Kernel` (ADR 0007) whenever the
+  row, the cutter or the target changes, so moving or editing the cutter
+  moves the cut and deleting the row (or the cutter) restores the body.
+  Walls and floors carry the cut in their generated `geometry`; a Form keeps
+  its drawn `body` (what commands edit) and gets a derived `cut_body`
+  (omitted from files when absent), which `Element::geometry` returns.
+  Several rows on one element apply one after the other: rows without a
+  phase first, then by phase order, each group in uid order. Faces of the
+  target that survive keep their ids (kernel lineage, D-25), so references
+  to them survive re-cuts; faces made by a cut belong to no source face
+  and cannot be pushed / pulled (edit the cutter instead). Quantities
+  (`ferro.dimensions.volume`, `ferro.form.volume`, areas) come from the cut
+  body. A cut never fails a transaction: without a kernel the target keeps
+  its uncut body and regeneration warns `ferro.kernel.unavailable` once; a
+  kernel error on a row (`ferro.kernel.empty_result`,
+  `ferro.kernel.non_manifold_result`, `ferro.kernel.not_solid`, …) skips
+  that row with a warning carrying the kernel's code. A cut on a pinned
+  element is allowed (a pin blocks only moving and deleting, ADR 0008).
+  Freezing a cut wall or floor (`set_geometry_source`) freezes it uncut, so
+  its rows keep cutting the Form. Every regeneration of a session goes
+  through its kernel, including documents resolved for a design-option
+  combination, edits in an option, previews and exports of a combination,
+  so an option layer that changes a cut element keeps its cut (M5-5.6).
+  The session keeps a cache of row results (`model::cut::CutCache`,
+  M5-5.7) keyed by the target's source body, the rows before, the row
+  (uid, phase) and the cutter's body: a regeneration calls the kernel only
+  for rows whose inputs changed. The cache is not part of the document and
+  never changes a result.
+- **Voids.** A Form of category `Forms` that is the cutter of at least one
+  `cut` row is a *void* (Revit: a void form). It is derived from the table,
+  not stored. As in Revit, views hide a void once it cuts; it shows faint
+  (translucent, dashed edges, selectable) when View > Show voids is on, when
+  it is selected, or when an element it cuts is selected. Exports leave it
+  out as an element (IFC, OBJ / glTF, Revit) and quantities do not count it. Deleting its last cut row makes it an ordinary Form again. Walls,
+  floors and openings used as cutters stay ordinary elements.
+- **Interop of cuts.** IFC: a cut wall or slab gets an `IfcOpeningElement`
+  (the cutter's body; `GlobalId` from the row's uid) and an
+  `IfcRelVoidsElement`; other cut elements carry their cut body; rows made
+  after the export phase are left out. Revit: Forms send their cut body as
+  a `DirectShape`; native walls and floors are rebuilt by Revit from their
+  parameters, so their cuts are not sent and the plan carries one warning
+  `ferro.revit.cut_not_sent` (freeze them to send the cut body).
+- **Wall-end joins** (M5-5.2, `model::join`, like Revit's automatic wall
+  joins) stay inferred: straight walls whose location ends meet (within
+  1 mm) are mitred (L); a wall end on the middle of another wall stops at
+  its face (T); three or more ends at one point stay square (ADR 0001,
+  0002). They follow every edit, so walls moved into contact join and walls
+  moved apart separate. Each wall end has a **join state** `join_start` /
+  `join_end`: `auto` (default, omitted from files) or `disallow` (Revit
+  `DisallowWallJoinAtEnd`): a disallowed end stays square, never joins and
+  is not seen by the other walls, even when touching. A `join` row between
+  two walls whose ends meet sets the corner type to **butt** with the row
+  order as join order: `first` runs through to the far face of `second`,
+  `second` stops at the near face of `first`; without a row the corner is
+  mitred. At a T the crossed wall wins by default; a row with the stem
+  `first` makes the stem run through and cuts the crossed wall through the
+  kernel. Command: `set_wall` with `join_start` / `join_end`. Pinned walls
+  may change join state (not a move, ADR 0008).
+- **Geometry joins** (M5-5.2, Revit's Join Geometry): a row `join [first,
+  second]` between walls, floors and Forms (of any category; openings join
+  through their host) makes the overlap belong to `first`: `second`'s
+  geometry becomes `second` − `first` through the session's `Kernel` at
+  regeneration, exactly like a cut row but `first` stays visible and is not
+  a void. `first` contributes its unjoined, uncut body (joins do not
+  chain); joins apply before cuts; several rows on one element apply in uid
+  order. A wall pair already settled by its ends (L, or T whose stem
+  loses) needs no boolean, and bodies that only touch (bounding boxes
+  overlapping by no more than `VERTEX_TOL`) are left as they are. Join
+  booleans share the session's `CutCache` (M5-5.7): the key chains the
+  second element's source body, the rows before, the row (uid, phase, kind
+  and element order, so a switched row never reuses an old result) and the
+  first element's body; the cut chain then starts from the joined body. Walls and
+  floors carry the result in `geometry`, Forms in their derived `cut_body`
+  (Foundation's name for "body less cuts and joins"). Failures never fail a
+  transaction: without a kernel `second` keeps its body with one
+  `ferro.kernel.unavailable` warning per regeneration; a kernel error skips
+  the row with a warning carrying its code. Commands: `create_relationship`
+  / `delete_relationship` with kind `join` (Join / Unjoin Geometry) and
+  `set_relationship` (`reverse: true` = Switch Join Order, the row keeps
+  its uid). App: Solid tools Join Geometry `JG`, Unjoin Geometry `UJ`,
+  Switch Join Order `SJ` (first pick wins), and "Disallow join" / "Allow
+  join" per end in the viewport menu of a selected wall.
+- **Joins survive freezing.** Rows reference element ids, which
+  `set_geometry_source direct` keeps, so a frozen wall keeps its rows; its
+  Form keeps the shape it had (mitred, butt, without geometry-join trims,
+  which keep applying to the Form through the kernel). Freezing turns the
+  wall's inferred end joins into `join` rows with the frozen wall `first`.
+  A parametric wall end that touches a frozen wall (a Form of category
+  `Walls`) it has a `join` row with is extended square to the far side of
+  that Form, and the row trims it back: an L stays mitred, a T stem stops
+  at the face, as before freezing.
+- **Interop of joins.** IFC: every L / T wall join is an
+  `IfcRelConnectsPathElements` (`ATSTART` / `ATEND` / `ATPATH`; relating
+  element = the row's `first`, GlobalId = the row's uid when there is a
+  row, else derived from the two wall uids); geometry joins write the
+  joined bodies. Revit: disallowed ends are sent
+  (`WallUtils.DisallowWallJoinAtEnd`); rows between native walls / floors
+  become `JoinGeometryUtils.JoinGeometry` + `SwitchJoinOrder` so `first`
+  cuts (wall pairs whose ends meet are left to Revit's wall joins); a native
+  element joined to a Form is sent unjoined with `ferro.revit.join_not_sent`
+  (the Form sends its joined body).
+- Hosted openings use `host_id` and are deleted with their host.
 - **Groups** (later) are elements referencing members; a group is not a Form.
 
 ## 3.9 Out of scope for v1 (but reserved)
 
-Phases, design options, worksets, views and sheets are Revit concepts Ferro will
-need for collaboration and documentation. They are **reserved names**: do not use
+Worksets, views and sheets are Revit concepts Ferro will
+need for collaboration and documentation (phases and design options landed,
+§3.10, §3.11). They are **reserved names**: do not use
 them for anything else. Documentation (views, sheets, annotation) is
 intentionally left to Revit.
+
+## 3.10 Phases (ADR 0006, D-77)
+
+A `Phase` is an element of category `Phases` (Revit: `Phase`, `OST_Phases`)
+with an `order` and optional ISO dates (`YYYY-MM-DD`, information only). The
+project's phases are ordered by `order` (then id); commands keep `order`
+equal to the position. New documents have **no** phases; the first time the
+simple mode (`set_renovation_status`) is used, "Existing" and "New
+Construction" are created (if one phase exists it plays "Existing" and only
+"New Construction" is added). `create_phase` on an empty list creates only
+the phase asked for.
+
+Elements placed in the model (Forms, walls, floors, doors, windows) carry
+`phase_created` and `phase_demolished` (Revit: *Phase Created*, *Phase
+Demolished*); both must be phases and demolished must not be earlier than
+created (`ferro.model.invalid_phase_order`). Levels, types, materials and
+phases have no phases (`ferro.model.not_phased`) and are in every phase.
+
+**Missing fields.** No `phase_created` means "created before every phase":
+the element is *existing* in every phase until it is demolished. This is the
+state of unphased data (imports, models drawn before phasing was used, scan
+results — ADR 0006 §7 asks for the first phase, which shows the same). Revit
+instead assigns the view's phase on creation; the app does the same while
+phasing is used (new elements get the view's phase in the same undo step),
+but the kernel commands never guess a phase.
+
+**`PhaseStatus`** of an element in a view of phase *v* (pure function
+`model::phase::phase_status`):
+
+| Created | Demolished | Status | Shown |
+|---|---|---|---|
+| after *v* | any | `future` | no |
+| any | before *v* | `past` (gone) | no |
+| *v* | *v* | `temporary` | yes |
+| before *v* / none | *v* | `demolished` | yes |
+| *v* | after *v* / none | `new` | yes |
+| before *v* / none | after *v* / none | `existing` | yes |
+
+`past` is not in ADR 0006 §3 (which lists five); it names elements already
+demolished in an earlier phase, which Revit does not show either.
+
+Deleting a phase used by elements fails with `ferro.model.phase_in_use`;
+`delete_phase` with `merge_into` (the phase just before or after,
+`ferro.model.phase_not_adjacent` otherwise) moves its elements to that phase
+first (Revit: combine with previous / next).
+
+**Simple mode** (`set_renovation_status`, ADR 0006 §4) maps to the first and
+last phase: `existing` = created first; `demolish` = created first,
+demolished last; `new` = created last.
+
+**Quantities by status** (`PhaseQuantities`, MCP `get_phase_quantities`):
+per category and shown status, count, volume of closed bodies and area
+(floors: plan area; walls: gross length × height; others: the
+`ferro.dimensions.area` parameter).
+
+**Interop.** Phases are not IFC products: IFC export shows the export phase
+(the last by default), leaves out future / past elements and writes
+`Pset_<Class>Common.Status` = `NEW` / `EXISTING` / `DEMOLISH` / `TEMPORARY`
+(`PEnum_ElementStatus`). Revit: phases are looked up by name (the Revit API
+cannot create them) and *Phase Created* / *Phase Demolished* are set by name.
+
+**Phased cuts** (ADR 0006 §5, M5-23.6). A `cut` row's optional `phase`
+says when the cut is made. In a view of a phase before it the target is
+uncut; in the row's phase the removed part is demolished; in later phases
+the target is cut. The stored geometry is the latest state (every row
+applied). `model::cut::body_in_phase` gives the body in any phase and
+`removed_in_phase` the part a phase removes; `get_phase_quantities`
+(`PhaseQuantities::from_document_with_kernel`) counts each element with
+its body in the phase and, for an element *existing* in the cut's phase,
+adds the removed volume to its category's `demolished` volume (count
+unchanged: a removed part is not an element). A wall *new* in the cut's
+phase has no demolished part. The app draws the target uncut before the
+row's phase and cut from it on. In the row's phase, for an element
+*existing* there, the removed part follows the view's phase filter like a
+demolished element (M5-23.10): overridden, it is drawn as a display-only
+solid with the demolished look (translucent red, dashed edges, not
+selectable); hidden, only the cut element is drawn; *No overrides* draws
+the element as it was before the phase's rows. A cut made in the app while
+phasing is used is made in the view's phase.
+
+## 3.11 Views (D-33, M5-22)
+
+A `View` is an element of category `Views` (Revit: `View`, `OST_Views`).
+Its `ViewType` is one of:
+
+| `ViewType` | Revit | Cut |
+|---|---|---|
+| `view_3d` | `View3D` | optional `SectionPlane` and `SectionBox` (the box is stored, not drawn yet) |
+| `plan_view` | `ViewPlan` | horizontal plane at the level + `ViewRange.cut_height` (default 1200 mm); the level is the element's `level_id` |
+| `section_view` | `ViewSection` | its `SectionPlane`, showing `depth` mm beyond it (default 10 m; the far clip is not drawn yet) |
+
+Every view carries a `ViewCamera` (eye, target, up, perspective / parallel,
+vertical field of view; mm and radians), a `DisplayStyle` (shaded, X-ray,
+wireframe, hidden line), `hidden_elements` (sorted, unique; only elements
+with geometry and levels), `hidden_tags`, an optional `phase` (none = the
+last phase), a `PhaseFilter`, and a reserved `design_options` list for the
+combination shown (ADR 0006; empty until design options land). View names
+are unique (`ferro.model.duplicate_name`).
+
+Commands: `create_view`, `set_view` (also hides / unhides elements with
+`hide`, `unhide`, `unhide_all`, and sets the phase; `null` clears a 3D cut,
+a section box or the phase), `delete_view`. Failure codes:
+`ferro.model.invalid_view` (degenerate camera — eye and target within
+`VERTEX_TOL`, up along the view direction, field of view outside (0°, 180°)
+—, view range not ordered `view_depth ≤ bottom ≤ cut_height ≤ top`, section
+box without volume, depth ≤ `SHORT_CURVE_TOL`, a field the view type does
+not have), `ferro.model.not_a_view`, `ferro.model.not_hideable`, plus the
+usual `not_found`, `not_a_level`, `not_a_phase`, `invalid_name`.
+
+**References and deletion.** The view's phase, hidden elements and design
+options are element references: ids in memory, uids in files and in the
+change format (`model::change::visit_element_refs`). Deleting an element
+removes it from every view in the same transaction, silently. Deleting a
+level deletes its plan views (Revit behaviour). A phase used only by views
+is not *in use*: deleting it clears those views' phase (they show the last
+phase); `delete_phase` with `merge_into` moves views to the phase merged
+into, like elements.
+
+**Phase filters** (Revit names): show all (default), show complete, show
+new, show previous + demo, show previous + new, show demo + new, no
+overrides. `PhaseFilter::graphics(status)` gives normal / overridden /
+hidden per status; future and past are always hidden. Overridden means the
+status graphics (existing grey, demolished / temporary red and dashed).
+
+**In the app** the screen shows the active view. Each change except the
+camera is one `set_view` undo step; orbiting never creates undo steps: the
+camera is written by *Save camera* or when switching to another view (only
+if it moved). A document without views shows a default 3D view held in
+memory; the first view change creates it as "3D View" in the same undo
+step, so opening and looking never changes a file.
+
+**Interop.** Views are not IFC products and are not exported. They are not
+synced to Revit yet (Revit views need view family types; a later task).
+
+## 3.12 Design options (ADR 0006, D-32)
+
+An `OptionSet` and its `DesignOption`s are elements of category
+`DesignOptions` (Revit: `OST_DesignOptions`). An option's set is its
+`host_id`, so deleting a set deletes its options. Sets are ordered by
+`order`; options within a set too. `create_option_set` makes the set with
+its first option "Option 1", primary.
+
+**Option layer.** An option holds a list of `Change`s in the change format
+(M5-26): paths `/elements/<uid>...` and `/relationships/<uid>...` (a join
+or cut that exists only in that option). A whole new element adds it, a
+`remove` of `/elements/<uid>` hides a shared element in that option, a
+property path overrides it (e.g. `/elements/<uid>/body/top/height`). Shared
+elements are never copied. A layer never touches the project, option sets /
+options or the `design_option` field, and stores no derived data
+(regenerated geometry `body/geometry`, read-only computed parameters).
+Layers are checked against the shared model on write
+(`ferro.model.invalid_option_layer`).
+
+**Status.** `open`; `accepted` (its layer was merged); `archived` (another
+option of its set was accepted). Only open options are shown, edited or
+primary; every set with open options has exactly one primary
+(`ferro.model.invalid_design_options` otherwise). The primary option cannot
+be deleted (`ferro.model.option_is_primary`).
+
+**Combination.** One open option per set; sets not named show their primary;
+sets without open options show nothing. `resolve(doc, combination)` (pure,
+`ops::design_option_commands`) applies the chosen option layers in set order
+and regenerates. Two option layers that touch the same property (or one removes
+what another changes, `model::change::conflicts`) are reported as
+`ferro.model.option_conflict`, never merged. In a resolved document every
+option carries an empty layer (resolving again changes nothing) and each
+element added by an option layer has `design_option` = that option. In the shared
+model `design_option` is always `None`.
+
+**Editing in an option.** `Session::execute_in_option(option, combination,
+command)` runs any command on the document seen in the combination and
+stores `diff(seen without this option, edited)` (minus derived data) as the
+option layer, through one `set_design_option` (one undo step). Editing an
+element that only another set's option adds fails with
+`ferro.model.invalid_option_layer`. MCP: every command tool takes an
+optional `in_design_option`.
+
+**Accept** (`accept_design_option`): the option layer is applied to the shared model;
+the option becomes `accepted`, the other open options of its set
+`archived` (kept with their layers).
+
+**Stale option layers.** A shared change that makes an open option layer fail (e.g.
+deleting an element the option overrides) commits with a
+`ferro.model.option_layer_stale` warning on the option; the option layer is kept and
+`resolve` reports `ferro.model.invalid_option_layer` for it.
+`model::change::partition_applicable` splits the edits that still apply,
+for an explicit repair with `set_design_option`.
+
+**Interop.** IFC exports the primary combination (the app: the
+combination shown). Revit gets the primary combination, with a `warning`
+operation when other open options exist (Revit design options are a later
+step).
+
+## 3.13 Pins (ADR 0008, D-79)
+
+Every element has `pinned: bool` (Revit `Element.Pinned`). A pin keeps an
+element where it is, as in Revit: it guards datums and big references
+against a stray drag, a careless agent or a script, and nothing more.
+
+Rules:
+
+1. **What a pin blocks.** Deleting a pinned element and moving it fail
+   with `ferro.model.pinned` naming the element, and roll back. Moving
+   (`Element::pin_moved`) is: a level's elevation changing; a wall's
+   location curve changing (moved, rotated, an end dragged); a door or
+   window sliding along its wall or going into another; a Form's body or
+   a floor's outline moved as a whole (translation, rotation or mirror;
+   changes within `VERTEX_TOL` are not moves). Deleting a host whose
+   hosted element is pinned is refused the same way (the failure names the
+   pinned element, then the host). An option layer may not move or remove
+   a pinned element either (`set_design_option`, or editing in the option).
+2. **What stays free.** Everything else: parameters, type, name, level and
+   offsets, phase, category, editing a Form's shape (push / pull, moving
+   some of its vertices, scaling, freezing / unfreezing) or a floor's
+   profile, option-layer overrides other than moves, copying (copies are
+   not pinned), and everything regeneration derives (a pinned wall
+   re-mitred because its neighbour moved, a pinned Form following its
+   unpinned level).
+3. **Where it is enforced.** In the `Transaction` (`finish`, step 0, before
+   regeneration): each element pinned when the transaction began is
+   compared with what the commands made of it, so every path (commands,
+   MCP, scripts, agents, plugins, design options, `apply_changes`) obeys
+   it alike. An element pinned when a transaction begins stays pinned for
+   that whole transaction: unpinning takes effect from the next one.
+4. **Who may unpin.** Anyone who may edit (`set_pinned`): the user, an agent
+   under its normal autonomy (in a Proposal when it proposes), scripts and
+   plugins. No extra rule.
+5. **Auto-pin.** `ProjectSettings.auto_pin_datums` (default `false`, as
+   Revit; omitted from files when `false`; `set_project_name
+   {auto_pin_datums}` switches it) pins new datums (levels, grids,
+   reference planes: `Category::is_datum`) on creation. Linked models will
+   be created pinned once they exist.
+6. **Interop.** Revit: `pinned` travels in the plan's level, wall, floor,
+   opening and DirectShape operations (omitted when false); the add-in sets
+   `Element.Pinned` (unpinning while it applies an operation); the Revit
+   snapshot reports `pinned` and an import makes Ferro's pins follow
+   Revit's. IFC: not exported.

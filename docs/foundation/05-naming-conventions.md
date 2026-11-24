@@ -17,13 +17,19 @@ for the same concept.
 | `Category` | Fixed classification | Kind, Class, Layer |
 | `Family` / `FamilyType` | Definition / named type | Template, Style, Preset, Component (for this) |
 | `Parameter` | Typed data on an element | Property, Attribute, Tag, Field |
+| `ParameterDefinition` | What a parameter key means (data type, group, binding, mapping), with a `Uid` (Revit shared parameter) | ParamDef, Schema, Field definition |
+| `QuantitySpec` | Physical quantity of a value (length, density, U-value…), Revit `SpecTypeId` | UnitType, Measure (as a type), Dimension (for this) |
+| `DisplayUnit` | A unit a quantity is typed in or shown in | Unit (alone), DisplayFormat |
 | `Level` | Named elevation | Storey, Floor (as a datum), Story |
 | `Grid` | Named plan datum | Axis line |
 | `ReferencePlane` | Named alignment plane | Guide, Construction plane |
 | `ReferenceLine` / `ReferencePoint` | Alignment line / point (SketchUp guides) | Guide, Construction line, Construction point |
 | `Dimension` | Model distance annotation | Measure, Dim (as a type) |
 | `WorkPlane` | Active sketch plane | Sketch plane, Drawing plane |
-| `Form` | Free-form editable element | Mass, Group, Blob, Mesh element |
+| `Form` | Geometry edited directly (geometry source `Direct`); any category, e.g. a free-form wall | Mass, Group, Blob, Mesh element |
+| `ProjectUnits` | How quantities are shown and typed in a project (display only) | Units settings, Display settings |
+| `SiteLocation` | The project's place on Earth: latitude, longitude, elevation, UTC offset, weather file | Location (that is an element's placement), Geo |
+| `GeometrySource` | Where an element's geometry comes from: `Parametric` (generated from parameters) or `Direct` | Mode, Kind, Origin (for this) |
 | `Profile` | Outer loop + holes | Shape, Outline, Polygon (for this) |
 | `CurveLoop` | Closed connected curves | Polyline, Path, Ring |
 | `Point3` / `Vec3` | Location / displacement | XYZ, Pos, V3 |
@@ -34,12 +40,45 @@ for the same concept.
 | `Regenerate` | Rebuild dependents | Update, Refresh, Recompute |
 | `Host` / hosted | Containment relation | Parent / child (for this) |
 | `Material` | Appearance + physical data, an element | Texture, Shader (for this) |
+| `AppearanceAsset`, `PhysicalAsset`, `ThermalAsset`, `EnvironmentalAsset`, `CostAsset` | Optional data groups of a `Material` (Revit: Appearance / Physical / Thermal asset); appearance follows OpenPBR | Properties, Shader, Profile (for this) |
+| `ImageMapping` | An image laid on faces at a real-world tile size (mm) | Texture (as a type), UV map |
+| `MaterialUnit` | Unit a GWP figure or price refers to: m³, kg or m² of material (EPD "declared unit") | Measure, Uom |
+| `StructureQuantities` | U-value, mass, GWP and cost per m² of a `CompoundStructure`, from its layer materials | Build-up data, Assembly properties |
 | `CompoundStructure` / `CompoundLayer` | Layers of a wall / floor type | Build-up, Layer (alone), Ply |
 | `WallType` / `FloorType` | System family types | WallStyle, Assembly |
 | `Opening` | Door or window hosted by a wall | Hole, Cutout, Insert (as a type) |
 | `LocationLine` | Which line of a wall its curve follows | Justification, Alignment |
+| `WallJoin` (`join_start` / `join_end`) | Join state of a wall end: `auto` (joins walls it meets) or `disallow` (stays square; Revit Allow / Disallow Join) | Join mode, Join flag, Cleanup |
+| Join order | Which element of a `join` row wins: the first (it runs through a wall corner, it keeps the overlap of a geometry join); *Switch Join Order* reverses the row (`set_relationship`, `reverse`) | Join priority, Winner (as a field) |
 | Ferro Link | Local protocol for agents to drive the open app | Bridge, Socket API |
+| `Plugin` | A folder in `~/.ferro/plugins/` with a `PluginManifest` and Python code on the SDK; runs with the user's rights (ADR 0009) | Add-in, Addon, Extension, Package (for this) |
+| `PluginManifest` | A plugin's `plugin.json`: id, name, version, author, description and its `PluginCommand`s | Descriptor, Plugin config, Package file |
+| `PluginCommand` | An entry a plugin adds to the palette, the Plugins menu, the left panel and the keymap; runs Python as one script run (it is not a `Command`: the tools the script calls are) | Plugin action, Button (as a type), Macro |
 | Proposal | Agent changes awaiting the user's accept / reject | Draft, Suggestion (for this) |
+| Pin / `pinned` | An element's flag that keeps it in place (Revit `Element.Pinned`, ADR 0008): a pinned element cannot be moved or deleted (`ferro.model.pinned`), every other edit stays allowed; verbs *pin* / *unpin*, command `set_pinned` | Lock (as a type, field or command), Freeze, Protect (for this) |
+| `Phase` | A construction stage (Revit `Phase`), an element of category `Phases`; ordered | Stage, Period (for this) |
+| `PhaseStatus` | Status of an element in a view's phase: existing, new, demolished, temporary, future, past (derived, never stored) | RenovationState, Lifecycle |
+| `RenovationStatus` | Simple-mode choice existing / demolish / new, mapped to the first and last phase (ArchiCAD renovation status) | Phase type, Status (alone) |
+| `PhaseQuantities` | Volumes and areas per category split by `PhaseStatus` in one phase | Phase schedule, Demolition list |
+| `Relationship` | A row of the document's relationship table: a `Uid`, a `RelationshipKind` and the linked elements in kind order (ADR 0004 §5) | Link, Association, Connection (alone), Constraint |
+| `RelationshipKind` | `join`, `cut`, `host`, `attach`, `bounds`, `connect`, `aggregate` | RelationType, LinkType |
+| `View` (`View3D`, `PlanView`, `SectionView`) | An element of category `Views` (Revit `View`, `OST_Views`, D-33): camera, cut, display style, hidden elements / tags, phase and phase filter; `ViewType` says which kind | Viewport, Camera (as an element), Scene (for this), Sheet |
+| `ViewCamera` | A view's eye, target, up direction, projection (perspective / parallel) and vertical field of view | Viewpoint, Eye (as a type) |
+| `SectionPlane` / `SectionBox` | A plane cutting a view (a point and the normal of the side cut away) / a 3D view's box limiting what is drawn (Revit *Section Box*) | Clip plane, Cutting plane (as a type), Crop box (for this) |
+| `ViewRange` | A plan view's top, cut height, bottom and view depth as offsets from its level (Revit *View Range*) | Cut settings, Plan range |
+| `DisplayStyle` | How a view draws: shaded, X-ray, wireframe, hidden line (Revit `DisplayStyle`); presentation styles are `RenderStyle` (D-49) | Visual style, Render mode, Shading mode |
+| `PhaseFilter` / `PhaseGraphics` | A view's choice of which `PhaseStatus` values are shown and how (Revit *Phase Filter*: show all, show complete, show new…) / normal, overridden (status graphics) or hidden | Phase view mode, Phase visibility mode |
+| `OptionSet` | A set of mutually exclusive design alternatives (Revit *Option Set*), an element of category `DesignOptions`; ordered | Option group, Variant set |
+| `DesignOption` | One alternative of an `OptionSet` (Revit `DesignOption`): an **option layer** over the shared model; hosted by its set; one open option per set is primary | Variant, Alternative (as a type), Branch |
+| Option layer | The list of `Change`s a `DesignOption` holds (add elements, remove shared elements, override properties); always qualified ("option layer"), never "layer" alone | Overlay, Patch, Delta |
+| `OptionStatus` | `open` / `accepted` (merged into the shared model) / `archived` (another option of the set was accepted; kept) | Option state, Lifecycle |
+| `Combination` | One design option per option set, primary by default (ArchiCAD design option combination); what a view shows | Configuration, Scenario, Variant |
+| `Change` | One edit in the change format (M5-26): set or remove the value at a uid-keyed JSON-pointer path | Patch, Delta, Diff (for one edit) |
+| `Kernel` | The B-rep library behind Ferro's seam (booleans, later blends and curved geometry): a trait in `ferro_core::algo`, implemented by `ferro-kernel` on solidcore (ADR 0007) | Engine, Backend, Modeler, CAD core |
+| `BooleanOp` | Which boolean a `Kernel` computes: `union`, `difference`, `intersection`; a value, not a `Command` | BooleanType, CsgOp, Operation |
+| Void | A Form of category `Forms` that is the cutter of a `cut` relationship (Revit *void form*): derived from the relationship table, drawn faint, not exported as an element (M5-5.3) | Negative, Hole (as a type), Opening (for this), Cutter (as a category) |
+| `cut_body` | A Form's derived body after its `cut` relationships (its drawn `body` stays the source); `None` when uncut | Result body, Display body, Final body |
+| `DisplayScene` / `DrawRecord` | Display data derived from a `Document` snapshot (`ferro-scene`, ADR 0004 §6) / what to draw for one element; never saved | Scene (alone, as a type), Render model, Node |
 
 Adding a term requires adding it here first.
 
@@ -90,7 +129,17 @@ an edge (FFI, MCP JSON, file), the name carries the unit: `height_mm`,
 - Standard verbs only: `create`, `delete`, `move`, `rotate`, `copy`, `mirror`,
   `array`, `set`, `get`, `list`, `join`, `unjoin`, `host`, `classify`, `convert`,
   `import`, `export`, plus geometric verbs (`push_pull`, `offset`, `split`,
-  `extrude`). New verbs need a glossary entry.
+  `extrude`, `subtract`: a solid boolean difference, ADR 0007; `unite`: a
+  solid boolean union, `unite_forms`; `intersect`: a solid boolean
+  intersection, `intersect_forms`). `join` stays the verb and
+  `RelationshipKind` of joined elements, never a boolean union. New verbs
+  need a glossary entry.
+- Verbs of the change format and design options (ADR 0006): `accept`
+  (merge a proposal or a design option into the shared model:
+  `accept_design_option`), `apply` (replay a change list: `apply_changes`),
+  `diff` (compute a change list between two documents: `diff_documents`).
+- Verbs of scripts (ADR 0005): `run` (start a script: `run_python`),
+  `cancel` (stop a running script and roll it back: `cancel_python`).
 - Plural noun when the command takes many ids (`delete_elements`).
 
 ## 5.6 Parameters and failure codes

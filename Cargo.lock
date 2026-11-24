@@ -744,6 +744,9 @@ dependencies = [
  "eframe",
  "ferro-core",
  "ferro-io",
+ "ferro-kernel",
+ "ferro-mcp",
+ "ferro-scene",
  "ferro-snap",
  "ferro-tools",
  "glam",
@@ -752,6 +755,17 @@ dependencies = [
  "serde_json",
  "ureq",
  "uuid",
+]
+
+[[package]]
+name = "ferro-cli"
+version = "0.2.0"
+dependencies = [
+ "ferro-core",
+ "ferro-io",
+ "ferro-kernel",
+ "ferro-mcp",
+ "serde_json",
 ]
 
 [[package]]
@@ -788,14 +802,29 @@ dependencies = [
 ]
 
 [[package]]
+name = "ferro-kernel"
+version = "0.2.0"
+dependencies = [
+ "ferro-core",
+ "serde_json",
+ "solidcore",
+ "solidcore-ops",
+ "solidcore-record",
+]
+
+[[package]]
 name = "ferro-mcp"
 version = "0.2.0"
 dependencies = [
  "ferro-core",
  "ferro-io",
+ "ferro-kernel",
  "ferro-tools",
+ "flate2",
+ "libc",
  "serde",
  "serde_json",
+ "uuid",
 ]
 
 [[package]]
@@ -804,6 +833,14 @@ version = "0.2.0"
 dependencies = [
  "ferro-core",
  "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "ferro-scene"
+version = "0.2.0"
+dependencies = [
+ "ferro-core",
  "serde_json",
 ]
 
@@ -2746,6 +2783,45 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "dd538fb6910ac1099850255cf94a94df6551fbdd602454387d0adb2d1ca6dead"
 dependencies = [
  "serde",
+]
+
+[[package]]
+name = "solidcore"
+version = "1.0.1"
+source = "git+https://github.com/tangency-labs/solidcore?rev=3d86b62#3d86b621e05fa8e3bc0057730bbd598c4b53de6a"
+dependencies = [
+ "serde",
+ "thiserror 2.0.21",
+]
+
+[[package]]
+name = "solidcore-convert"
+version = "0.1.0"
+source = "git+https://github.com/tangency-labs/solidcore?rev=3d86b62#3d86b621e05fa8e3bc0057730bbd598c4b53de6a"
+dependencies = [
+ "solidcore",
+ "solidcore-record",
+]
+
+[[package]]
+name = "solidcore-ops"
+version = "0.1.0"
+source = "git+https://github.com/tangency-labs/solidcore?rev=3d86b62#3d86b621e05fa8e3bc0057730bbd598c4b53de6a"
+dependencies = [
+ "serde",
+ "solidcore",
+ "solidcore-convert",
+ "solidcore-record",
+]
+
+[[package]]
+name = "solidcore-record"
+version = "0.1.0"
+source = "git+https://github.com/tangency-labs/solidcore?rev=3d86b62#3d86b621e05fa8e3bc0057730bbd598c4b53de6a"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror 2.0.21",
 ]
 
 [[package]]

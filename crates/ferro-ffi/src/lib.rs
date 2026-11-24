@@ -94,7 +94,7 @@ pub unsafe extern "C" fn ferro_revit_plan(
             Err(e) => return out_json(serde_json::json!({"error": format!("invalid state: {e}")})),
         },
     };
-    out_json(serde_json::json!({"ops": ferro_revit::plan(&d.0, &state)}))
+    out_json(serde_json::json!({"ops": ferro_revit::plan(&d.0, &state, None)}))
 }
 
 /// Revit link, file mode: apply a Revit snapshot to the document in place.

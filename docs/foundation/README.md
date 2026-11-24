@@ -97,7 +97,7 @@ decision requires a new ADR in [`../decisions/`](../decisions/).
 | D-48 | **Own renderer on wgpu** (`ferro-render`), built as a composable render graph so presentation styles, AI-render buffers and path tracing are configurations of one system; export to external engines via glTF / USD (Q-G1) | **Accepted** |
 | D-49 | **Presentation styles are data** (`RenderStyle` element) composed of edge, fill, effect and background layers; user-created, shareable, AI-generatable; includes data-driven colouring (by function, area, height, phase, option) (Q-G4) | **Accepted** |
 | D-50 | **AI render is geometry-controlled**: the renderer outputs control buffers (depth, normals, edges, material / category / element masks, lighting) to pluggable diffusion providers (local, Ferro Cloud, third party); every AI image stores view, style, prompt and seed (Q-G7) | **Accepted** |
-| D-51 | **Distributed plugins run in a WASM sandbox** (component model, capability permissions); Python scripting is for personal desktop automation; both change the model only through commands (Q-K1) | **Accepted** |
+| D-51 | ~~Distributed plugins run in a WASM sandbox~~ — superseded by D-80 (ADR 0009) | **Superseded** |
 | D-52 | **Primary users: architects / designers in the concept stage**; architecture students are the growth channel; a guided homeowner mode may come later on the same core (Q-A2) | **Accepted** |
 | D-53 | **Exact predicates for every topological decision** (orientation, inside / outside, intersection) using Shewchuk-style adaptive arithmetic; coordinates stay `f64`; tolerances are only for vertex merging (Q-C3) | **Accepted** |
 | D-54 | **Constraints**: model-level relations (level, grid, host, alignment, equal spacing) solved in dependency order during regeneration; a full geometric constraint solver only inside sketch profiles and the family editor (Q-D1) | **Accepted** |
@@ -106,7 +106,7 @@ decision requires a new ADR in [`../decisions/`](../decisions/).
 | D-57 | **Revit live link, two-way**: thin C# add-in over `ferro-ffi`, local connection (socket / named pipe), elements matched by `Uid`; import levels, grids, walls, floors, rooms from existing Revit projects; support the three latest Revit versions (Q-J2) | **Accepted** |
 | D-58 | **DXF read / write in the open core; native DWG through the ODA SDK in a Ferro Pro / Cloud plugin**, kept outside the MPL core (Q-J3) | **Accepted** |
 | D-59 | **Scale**: architecture supports up to ~500k elements per document plus federation; optimisation targets houses and mid-size buildings first; urban / infrastructure scale is out of scope (Q-M2) | **Accepted** |
-| D-60 | **Inference engine** is its own pure, tested crate (`ferro-snap`) with a specified priority order (points > edges / faces > directions > grid), snaps to BIM datums (levels, grids, reference planes), uses screen-space snap tolerance, accepts typed values at any time (`3m`, `4000,3000`, `*5`), and is usable by AI (Q-F2) | **Accepted** |
+| D-60 | **Inference engine** is its own pure, tested crate (`ferro-snap`) with a specified priority order (points > edges > directions > faces > grid / ground; as SketchUp: an axis or parallel inference beats "On Face", a point or edge beats an axis lock — wording aligned with the code in M5-15.11), snaps to BIM datums (levels, grids, reference planes), uses screen-space snap tolerance, accepts typed values at any time (`3m`, `4000,3000`, `*5`), and is usable by AI (Q-F2) | **Accepted** |
 | D-61 | **Plugin permissions are explicit capabilities** (read model, write model, network per domain, files, AI calls), granted by the user at install; official-registry plugins are signed; all plugin edits go through commands (history + undo) (Q-K3) | **Accepted** |
 | D-62 | **Performance budgets enforced in CI** (reference: 3-year-old integrated-GPU laptop): house ~2k elements 60 fps / open < 1 s; 20-storey ~100k elements 30 fps (60 fps discrete GPU) / open < 5 s; tool feedback < 16 ms; commit < 10–50 ms; undo < 100 ms; PRs that regress > 10 % are blocked (Q-M1) | **Accepted** |
 | D-63 | **All other Decision Book questions (🟠 / 🟢) adopt the written recommendation** as the default; each becomes binding when its area is implemented and may be revisited by ADR (see `docs/decision-book/PHIEU-TRA-LOI.md`) | **Accepted** |
@@ -123,6 +123,10 @@ decision requires a new ADR in [`../decisions/`](../decisions/).
 | D-74 | **No CAD layers**: visibility by category, parameter filters and user Tags (SketchUp tags import as Tags), plus worksets in collaboration (Q-R14) | **Accepted** |
 | D-75 | **Import / export roadmap**: M1 `.fro` + OBJ / glTF export; M2 SKP and DXF import; M3 Revit live link, IFC export, 3DM, point clouds, PDF underlays, OSM, spreadsheets; M4 IFC import, DWG (Pro), BCF, USD / FBX, STL. All remaining Q-R recommendations (texture mapping, autosave, CAD links, copy / paste, templates, M1–M2 tool set) are adopted (Q-R1, Q-R13, Q-R15–R19) | **Accepted** |
 | D-76 | **Foundation 2** (ADR 0004): element semantics separate from geometry source (any category may be free-form); quantity-typed parameters with `Uid` definitions; materials with appearance / physical / thermal / environmental / cost assets; body kinds incl. non-manifold and curve-ready surface types; relationships as data incl. non-destructive cuts; derived `ferro-scene`; data-driven commands and keymaps. Supersedes parts of D-11, D-39, D-41, D-70 | **Accepted** |
+| D-77 | **Phases and design options** (ADR 0006): ordered phases with created / demolished per element, status derived per view, ArchiCAD-style simple mode, phased cuts; design options as layers of changes over the shared model (add / remove / override), combinations per view, accept = merge, options kept | **Accepted** |
+| D-78 | **Kernel** (ADR 0007): solidcore (safe-Rust SMLib port) for booleans and curved geometry, only inside `ferro-kernel`; `ferro-core` defines a `Kernel` trait with lineage and receives the kernel by injection like `IdSource`; without one, kernel commands fail with `ferro.kernel.unavailable` | **Accepted** |
+| D-79 | **Pin** (ADR 0008, as Revit): `pinned` blocks delete and move (`ferro.model.pinned`); other edits allowed; anyone who may edit may unpin; linked models auto-pinned, datums only with `auto_pin_datums` | **Accepted** |
+| D-80 | **Open plugins** (ADR 0009, supersedes D-51): plugins run with the user's rights like Revit / SketchUp add-ins, are a folder with a manifest and Python on the SDK, simple enough for non-programmers; only promotion to a built-in feature is reviewed through the repository gate | **Accepted** |
 
 ## Status of the current code
 
@@ -134,6 +138,6 @@ walls, floors, doors and windows with types and materials, Ferro Link, AI
 proposals and the in-app chat. Milestone 3 (`docs/milestones/M3.md`, ADR 0002)
 added the two-way Revit link, IFC4 export and T-joins. Open items: explicit join
 relationships, openings
-in curved walls, design options and views as elements (D-32, D-33), exact
+in curved walls, design options (D-32; views as elements landed with M5-22, §3.11), exact
 single curved faces (D-39), layer / glossary lints and CI performance budgets
 (D-19, D-20, D-62).

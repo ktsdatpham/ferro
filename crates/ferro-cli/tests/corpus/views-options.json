@@ -1,0 +1,122 @@
+[
+ {
+  "id": "a",
+  "tool": "create_box",
+  "args": {
+   "origin": [
+    0,
+    0,
+    0
+   ],
+   "width": 2000,
+   "depth": 2000,
+   "height": 2000
+  }
+ },
+ {
+  "id": "b",
+  "tool": "create_box",
+  "args": {
+   "origin": [
+    3000,
+    0,
+    0
+   ],
+   "width": 2000,
+   "depth": 2000,
+   "height": 2000
+  }
+ },
+ {
+  "id": "c",
+  "tool": "create_box",
+  "args": {
+   "origin": [
+    6000,
+    0,
+    0
+   ],
+   "width": 2000,
+   "depth": 2000,
+   "height": 2000
+  }
+ },
+ {
+  "tool": "set_renovation_status",
+  "args": {
+   "elements": [
+    {
+     "$ref": "a.result.element"
+    }
+   ],
+   "status": "demolish"
+  }
+ },
+ {
+  "tool": "set_renovation_status",
+  "args": {
+   "elements": [
+    {
+     "$ref": "b.result.element"
+    }
+   ],
+   "status": "existing"
+  }
+ },
+ {
+  "id": "set",
+  "tool": "create_option_set",
+  "args": {
+   "name": "Pavilion"
+  }
+ },
+ {
+  "id": "ob",
+  "tool": "create_design_option",
+  "args": {
+   "set": {
+    "$ref": "set.result.element"
+   },
+   "name": "Big pavilion"
+  }
+ },
+ {
+  "tool": "create_box",
+  "args": {
+   "origin": [
+    0,
+    4000,
+    0
+   ],
+   "width": 5000,
+   "depth": 3000,
+   "height": 3000,
+   "name": "Pavilion",
+   "in_design_option": {
+    "$ref": "ob.result.element"
+   }
+  }
+ },
+ {
+  "tool": "create_view",
+  "args": {
+   "name": "Without C",
+   "view_type": "view_3d"
+  },
+  "id": "v"
+ },
+ {
+  "tool": "set_view",
+  "args": {
+   "view": {
+    "$ref": "v.result.element"
+   },
+   "hide": [
+    {
+     "$ref": "c.result.element"
+    }
+   ],
+   "display_style": "wireframe"
+  }
+ }
+]

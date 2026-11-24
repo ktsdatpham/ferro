@@ -1,0 +1,10 @@
+[
+  {"id": "wall", "tool": "create_wall", "args": {"start": {"x": 0, "y": 0, "z": 0}, "end": {"x": 4000, "y": 0, "z": 0}, "name": "Cut wall"}},
+  {"id": "window", "tool": "create_box", "args": {"origin": [1000, -300, 900], "width": 1200, "depth": 600, "height": 1200, "name": "Window void"}},
+  {"tool": "create_relationship", "args": {"kind": "cut", "elements": [{"$ref": "window.result.element"}, {"$ref": "wall.result.element"}]}},
+  {"id": "set", "tool": "create_option_set", "args": {"name": "Wall height"}},
+  {"id": "low", "tool": "create_design_option", "args": {"set": {"$ref": "set.result.element"}, "name": "Low wall, window moved"}},
+  {"tool": "set_wall_height", "args": {"wall": {"$ref": "wall.result.element"}, "height": 4500, "in_design_option": {"$ref": "set.result.option"}}},
+  {"tool": "set_wall_height", "args": {"wall": {"$ref": "wall.result.element"}, "height": 2500, "in_design_option": {"$ref": "low.result.element"}}},
+  {"tool": "move_elements", "args": {"elements": [{"$ref": "window.result.element"}], "vector": {"x": 1500, "y": 0, "z": 0}, "in_design_option": {"$ref": "low.result.element"}}}
+]

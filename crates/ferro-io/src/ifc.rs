@@ -10,19 +10,35 @@
 //!   `IfcOpeningElement`s that void their wall.
 //! * Base quantities (`Qto_WallBaseQuantities`, `Qto_SlabBaseQuantities`)
 //!   and `Pset_FerroCommon.FerroUid` for round trips.
+//! * Material property sets (`Pset_MaterialCommon`, `Pset_MaterialThermal`,
+//!   `Pset_MaterialMechanical`, `Pset_FerroMaterial`) and type
+//!   `ThermalTransmittance` when materials carry data, with SI units.
+//!
+//! * Phases (ADR 0006): with phases, the file shows the export phase (the
+//!   last by default): elements not built yet or already demolished are left
+//!   out, the others get `Pset_<Class>Common.Status` = `NEW`, `EXISTING`,
+//!   `DEMOLISH` or `TEMPORARY` (IFC4 `PEnum_ElementStatus`). Phases are not
+//!   IFC products and are not exported themselves.
+//!
+//! * Design options (ADR 0006): the file shows the primary combination
+//!   (`export_ifc_combination` for another one); option sets and options
+//!   are not exported. An option layer that does not apply fails the export
+//!   with `ferro.io.design_option` rather than writing a wrong model.
 //!
 //! GlobalIds are the element uids in IFC's base-64 encoding, so a re-export
 //! keeps the same ids.
 
 use crate::IoError;
-use ferro_core::algo::body_mesh;
+use ferro_core::algo::{body_mesh, Kernel};
 use ferro_core::model::bim::{CompoundStructure, OpeningKind};
-use ferro_core::model::generate;
+use ferro_core::model::structure_quantities::StructureQuantities;
+use ferro_core::model::{generate, join};
 use ferro_core::model::{
     keys, Category, Document, Element, ElementBody, ElementId, ParamValue, Uid,
 };
 use std::collections::HashMap;
 use std::fmt::Write;
+use std::sync::Arc;
 
 const IFC_B64: &[u8; 64] = b"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz_$";
 
@@ -79,6 +95,30 @@ fn f(x: f64) -> String {
     } else {
         format!("{t}.")
     }
+}
+
+/// An `IfcCompoundPlaneAngleMeasure` for an angle in decimal degrees:
+/// `(degrees,minutes,seconds,millionths-of-a-second)`. IFC4 requires every
+/// component to have the angle's sign, so -33.87° is `(-33,-52,-12,0)`.
+/// Non-finite input gives `$`.
+fn compound_angle(deg: f64) -> String {
+    if !deg.is_finite() {
+        return "$".into();
+    }
+    // Whole millionths of an arc second, rounded once so 16.05 is exact.
+    let total = (deg.abs() * 3600.0 * 1e6).round() as i64;
+    let sign = if deg < 0.0 && total != 0 { -1 } else { 1 };
+    let d = total / 3_600_000_000;
+    let m = total / 60_000_000 % 60;
+    let sec = total / 1_000_000 % 60;
+    let micro = total % 1_000_000;
+    format!(
+        "({},{},{},{})",
+        sign * d,
+        sign * m,
+        sign * sec,
+        sign * micro
+    )
 }
 
 fn opt(text: Option<&str>) -> String {
@@ -144,8 +184,255 @@ fn color(doc: &Document, e: &Element) -> [f64; 3] {
     }
 }
 
-/// Serialise a document as an IFC4 file.
-pub fn export_ifc(doc: &Document) -> Result<String, IoError> {
+/// SI units for material and type properties: the named units go into the
+/// project's `IfcUnitAssignment` (returned ids); base units used only inside
+/// derived units are written but not returned. All are SI base / derived
+/// units (kg, K, Pa, kg/m³, W/(m·K), J/(kg·K), 1/K, W/(m²·K)), matching the
+/// values stored in `ferro_core::model::material`.
+fn property_units(w: &mut Writer) -> Vec<usize> {
+    let kg = w.add("IFCSIUNIT(*,.MASSUNIT.,.KILO.,.GRAM.)".into());
+    let kelvin = w.add("IFCSIUNIT(*,.THERMODYNAMICTEMPERATUREUNIT.,$,.KELVIN.)".into());
+    let pascal = w.add("IFCSIUNIT(*,.PRESSUREUNIT.,$,.PASCAL.)".into());
+    // Not assigned (the project length unit is mm): only used below.
+    let metre = w.add("IFCSIUNIT(*,.LENGTHUNIT.,$,.METRE.)".into());
+    let watt = w.add("IFCSIUNIT(*,.POWERUNIT.,$,.WATT.)".into());
+    let joule = w.add("IFCSIUNIT(*,.ENERGYUNIT.,$,.JOULE.)".into());
+    let derived_unit = |w: &mut Writer, kind: &str, parts: &[(usize, i32)]| -> usize {
+        let elems: Vec<usize> = parts
+            .iter()
+            .map(|(u, e)| w.add(format!("IFCDERIVEDUNITELEMENT(#{u},{e})")))
+            .collect();
+        w.add(format!("IFCDERIVEDUNIT(({}),.{kind}.,$)", ids(&elems)))
+    };
+    let density = derived_unit(w, "MASSDENSITYUNIT", &[(kg, 1), (metre, -3)]);
+    let conductivity = derived_unit(
+        w,
+        "THERMALCONDUCTANCEUNIT",
+        &[(watt, 1), (metre, -1), (kelvin, -1)],
+    );
+    let specific_heat = derived_unit(
+        w,
+        "SPECIFICHEATCAPACITYUNIT",
+        &[(joule, 1), (kg, -1), (kelvin, -1)],
+    );
+    let modulus = derived_unit(w, "MODULUSOFELASTICITYUNIT", &[(pascal, 1)]);
+    let expansion = derived_unit(w, "THERMALEXPANSIONCOEFFICIENTUNIT", &[(kelvin, -1)]);
+    let transmittance = derived_unit(
+        w,
+        "THERMALTRANSMITTANCEUNIT",
+        &[(watt, 1), (metre, -2), (kelvin, -1)],
+    );
+    vec![
+        kg,
+        kelvin,
+        pascal,
+        density,
+        conductivity,
+        specific_heat,
+        modulus,
+        expansion,
+        transmittance,
+    ]
+}
+
+/// `IfcMaterialProperties` of a material, one per property set that has
+/// values: `Pset_MaterialCommon` (MassDensity), `Pset_MaterialThermal`
+/// (ThermalConductivity, SpecificHeatCapacity), `Pset_MaterialMechanical`
+/// (YoungModulus, PoissonRatio, ThermalExpansionCoefficient) as named in
+/// IFC4, and `Pset_FerroMaterial` for values IFC4 has no material property
+/// for (strengths, emissivity, solar absorptance, vapour resistance, GWP per
+/// stage with declared unit and EPD source, unit price).
+fn material_psets(w: &mut Writer, mat: usize, m: &ferro_core::model::bim::Material) {
+    let prop = |w: &mut Writer, name: &str, measure: &str, v: Option<f64>| -> Option<usize> {
+        v.filter(|v| v.is_finite()).map(|v| {
+            w.add(format!(
+                "IFCPROPERTYSINGLEVALUE({},$,{measure}({}),$)",
+                s(name),
+                f(v)
+            ))
+        })
+    };
+    let text = |w: &mut Writer, name: &str, measure: &str, v: Option<&str>| -> Option<usize> {
+        v.map(|v| {
+            w.add(format!(
+                "IFCPROPERTYSINGLEVALUE({},$,{measure}({}),$)",
+                s(name),
+                s(v)
+            ))
+        })
+    };
+    let pset = |w: &mut Writer, name: &str, props: Vec<Option<usize>>| {
+        let props: Vec<usize> = props.into_iter().flatten().collect();
+        if !props.is_empty() {
+            w.add(format!(
+                "IFCMATERIALPROPERTIES({},$,({}),#{mat})",
+                s(name),
+                ids(&props)
+            ));
+        }
+    };
+    let ph = m.physical.clone().unwrap_or_default();
+    let th = m.thermal.clone().unwrap_or_default();
+
+    let p = vec![prop(
+        w,
+        "MassDensity",
+        "IFCMASSDENSITYMEASURE",
+        m.density_kg_m3(),
+    )];
+    pset(w, "Pset_MaterialCommon", p);
+    let p = vec![
+        prop(
+            w,
+            "SpecificHeatCapacity",
+            "IFCSPECIFICHEATCAPACITYMEASURE",
+            th.specific_heat_j_kgk,
+        ),
+        prop(
+            w,
+            "ThermalConductivity",
+            "IFCTHERMALCONDUCTIVITYMEASURE",
+            th.conductivity_w_mk,
+        ),
+    ];
+    pset(w, "Pset_MaterialThermal", p);
+    let p = vec![
+        prop(
+            w,
+            "YoungModulus",
+            "IFCMODULUSOFELASTICITYMEASURE",
+            ph.youngs_modulus_pa,
+        ),
+        // IfcPositiveRatioMeasure: auxetic (ν ≤ 0) values are not written.
+        prop(
+            w,
+            "PoissonRatio",
+            "IFCPOSITIVERATIOMEASURE",
+            ph.poisson_ratio.filter(|v| *v > 0.0),
+        ),
+        prop(
+            w,
+            "ThermalExpansionCoefficient",
+            "IFCTHERMALEXPANSIONCOEFFICIENTMEASURE",
+            ph.thermal_expansion_per_k,
+        ),
+    ];
+    pset(w, "Pset_MaterialMechanical", p);
+
+    let mut p = vec![
+        prop(
+            w,
+            "CompressiveStrength",
+            "IFCPRESSUREMEASURE",
+            ph.compressive_strength_pa,
+        ),
+        prop(
+            w,
+            "TensileStrength",
+            "IFCPRESSUREMEASURE",
+            ph.tensile_strength_pa,
+        ),
+        prop(w, "Emissivity", "IFCNORMALISEDRATIOMEASURE", th.emissivity),
+        prop(
+            w,
+            "SolarAbsorptance",
+            "IFCNORMALISEDRATIOMEASURE",
+            th.solar_absorptance,
+        ),
+        prop(
+            w,
+            "VapourResistanceFactor",
+            "IFCPOSITIVERATIOMEASURE",
+            th.vapour_resistance_factor,
+        ),
+    ];
+    if let Some(env) = &m.environmental {
+        p.push(text(
+            w,
+            "GWPDeclaredUnit",
+            "IFCLABEL",
+            Some(env.declared_unit.as_str()),
+        ));
+        for (k, v) in env.gwp_stages() {
+            // e.g. GWP_A1_A3, kg CO2e per declared unit.
+            p.push(prop(w, &k.to_uppercase(), "IFCREAL", v));
+        }
+        p.push(text(w, "EPDSource", "IFCTEXT", env.epd_source.as_deref()));
+    }
+    if let Some(c) = &m.cost {
+        p.push(prop(w, "UnitPrice", "IFCREAL", Some(c.unit_price)));
+        p.push(text(w, "Currency", "IFCLABEL", Some(&c.currency)));
+        p.push(text(w, "PriceUnit", "IFCLABEL", Some(c.unit.as_str())));
+    }
+    pset(w, "Pset_FerroMaterial", p);
+}
+
+/// Serialise a document as an IFC4 file (primary combination of its design
+/// options, last phase). A `cut` row on a wall or slab becomes an
+/// `IfcOpeningElement` (the cutter's body) with an `IfcRelVoidsElement`;
+/// voids (Forms that only cut) are not exported as products (M5-5.3).
+///
+/// `kernel` (the session's) regenerates the primary combination when the
+/// document has design options, so cuts on elements an option layer
+/// changes stay applied (M5-5.6); without one they are written uncut.
+pub fn export_ifc(doc: &Document, kernel: Option<&Arc<dyn Kernel>>) -> Result<String, IoError> {
+    export_ifc_phase(doc, None, kernel)
+}
+
+/// IFC4 export of the document as seen in a design-option `combination`
+/// (the primary one by default) and `phase`, regenerated with `kernel`
+/// (see [`export_ifc`]).
+///
+/// Fails with `ferro.io.design_option` when the combination cannot be
+/// shown (conflicting or stale option layers, see
+/// `ferro_core::ops::design_option_commands::resolve`).
+pub fn export_ifc_combination(
+    doc: &Document,
+    combination: &ferro_core::model::Combination,
+    phase: Option<ElementId>,
+    kernel: Option<&Arc<dyn Kernel>>,
+) -> Result<String, IoError> {
+    let seen = ferro_core::ops::design_option_commands::resolve(doc, combination, kernel).map_err(
+        |f| {
+            IoError::new(
+                "ferro.io.design_option",
+                f.iter()
+                    .map(|x| format!("{} ({})", x.message, x.code))
+                    .collect::<Vec<_>>()
+                    .join("; "),
+            )
+        },
+    )?;
+    export_resolved(&seen, phase)
+}
+
+/// IFC4 export of the document as it is in `phase` (`None` = the last
+/// phase; ignored when the document has no phases), primary combination
+/// regenerated with `kernel` (see [`export_ifc`]). See the module docs for
+/// how phases are written.
+///
+/// Fails with `ferro.io.design_option` (see [`export_ifc_combination`]).
+pub fn export_ifc_phase(
+    doc: &Document,
+    phase: Option<ElementId>,
+    kernel: Option<&Arc<dyn Kernel>>,
+) -> Result<String, IoError> {
+    if doc.option_sets().is_empty() {
+        return export_resolved(doc, phase);
+    }
+    export_ifc_combination(
+        doc,
+        &ferro_core::model::Combination::primary(),
+        phase,
+        kernel,
+    )
+}
+
+/// Export a document whose design options are already resolved.
+fn export_resolved(doc: &Document, phase: Option<ElementId>) -> Result<String, IoError> {
+    let export_phase = phase
+        .filter(|p| doc.phase_index(*p).is_some())
+        .or_else(|| doc.phases().last().map(|p| p.id));
     let mut w = Writer { lines: Vec::new() };
     let project_name = doc.project().name.clone();
 
@@ -154,7 +441,22 @@ pub fn export_ifc(doc: &Document) -> Result<String, IoError> {
     let area = w.add("IFCSIUNIT(*,.AREAUNIT.,$,.SQUARE_METRE.)".into());
     let vol = w.add("IFCSIUNIT(*,.VOLUMEUNIT.,$,.CUBIC_METRE.)".into());
     let ang = w.add("IFCSIUNIT(*,.PLANEANGLEUNIT.,$,.RADIAN.)".into());
-    let units = w.add(format!("IFCUNITASSIGNMENT((#{len},#{area},#{vol},#{ang}))"));
+    let mut unit_ids = vec![len, area, vol, ang];
+    // Units of material / type properties, only when there are some, so
+    // files without material data are unchanged.
+    let has_material_data = doc.elements().any(|e| match &e.body {
+        ElementBody::Material(m) => {
+            m.physical.is_some()
+                || m.thermal.is_some()
+                || m.environmental.is_some()
+                || m.cost.is_some()
+        }
+        _ => false,
+    });
+    if has_material_data {
+        unit_ids.extend(property_units(&mut w));
+    }
+    let units = w.add(format!("IFCUNITASSIGNMENT(({}))", ids(&unit_ids)));
     let origin = w.point(0.0, 0.0, 0.0);
     let world = w.add(format!("IFCAXIS2PLACEMENT3D(#{origin},$,$)"));
     let north = w.add("IFCDIRECTION((0.,1.))".into());
@@ -171,8 +473,24 @@ pub fn export_ifc(doc: &Document) -> Result<String, IoError> {
         s(&project_name)
     ));
     let site_pl = w.placement(None, 0.0);
+    // RefLatitude / RefLongitude / RefElevation from the project's site
+    // location (M5-24.3); `$` when the project has none. LongName = place.
+    let (long_name, lat, lon, elev) = match &doc.project().settings.location {
+        Some(l) => (
+            if l.place.trim().is_empty() {
+                "$".to_string()
+            } else {
+                s(l.place.trim())
+            },
+            compound_angle(l.latitude.deg()),
+            compound_angle(l.longitude.deg()),
+            // IfcLengthMeasure in the project length unit (mm, see above).
+            f(l.elevation.mm()),
+        ),
+        None => ("$".into(), "$".into(), "$".into(), "$".into()),
+    };
     let site = w.add(format!(
-        "IFCSITE({},$,'Site',$,$,#{site_pl},$,$,.ELEMENT.,$,$,$,$,$)",
+        "IFCSITE({},$,'Site',$,$,#{site_pl},$,{long_name},.ELEMENT.,{lat},{lon},{elev},$,$)",
         s(&derived("site"))
     ));
     let bld_pl = w.placement(Some(site_pl), 0.0);
@@ -235,6 +553,11 @@ pub fn export_ifc(doc: &Document) -> Result<String, IoError> {
             material_of.insert(e.id, m);
         }
     }
+    for e in doc.elements() {
+        if let (ElementBody::Material(m), Some(&mat)) = (&e.body, material_of.get(&e.id)) {
+            material_psets(&mut w, mat, m);
+        }
+    }
     let default_material = w.add("IFCMATERIAL('Default',$,$)".into());
     let layer_set = |w: &mut Writer, name: &str, st: &CompoundStructure| -> usize {
         let layers: Vec<usize> = st
@@ -269,8 +592,31 @@ pub fn export_ifc(doc: &Document) -> Result<String, IoError> {
             _ => continue,
         };
         let ls = layer_set(&mut w, &e.label(), st);
+        // Pset_WallCommon / Pset_SlabCommon.ThermalTransmittance when every
+        // layer has a conductivity (ISO 6946, see StructureQuantities).
+        let u_value = StructureQuantities::from_type(doc, e.id).and_then(|q| q.u_value_w_m2k);
+        let psets = match u_value {
+            Some(u) if has_material_data => {
+                let pset_name = if class == "IFCWALLTYPE" {
+                    "Pset_WallCommon"
+                } else {
+                    "Pset_SlabCommon"
+                };
+                let p = w.add(format!(
+                    "IFCPROPERTYSINGLEVALUE('ThermalTransmittance',$,IFCTHERMALTRANSMITTANCEMEASURE({}),$)",
+                    f(u)
+                ));
+                let ps = w.add(format!(
+                    "IFCPROPERTYSET({},$,{},$,(#{p}))",
+                    s(&derived(&format!("typepset:{}", e.uid))),
+                    s(pset_name)
+                ));
+                format!("(#{ps})")
+            }
+            _ => "$".into(),
+        };
         let t = w.add(format!(
-            "{class}({},$,{},$,$,$,$,$,$,{predefined})",
+            "{class}({},$,{},$,$,{psets},$,$,$,{predefined})",
             s(&ifc_guid(e.uid.0)),
             s(&e.label())
         ));
@@ -286,8 +632,18 @@ pub fn export_ifc(doc: &Document) -> Result<String, IoError> {
     let mut by_type: std::collections::BTreeMap<ElementId, Vec<usize>> = Default::default();
     let mut ifc_of: HashMap<ElementId, usize> = HashMap::new();
     let mut styles: HashMap<[u16; 3], usize> = HashMap::new();
+    let mut class_of: HashMap<ElementId, String> = HashMap::new();
     for e in doc.elements() {
         let Some(g) = e.geometry() else { continue };
+        // A void (a Form that only cuts, M5-5.3) is not a product: its
+        // cuts are in the cut elements (and their openings, below).
+        if ferro_core::model::cut::is_void(doc, e) {
+            continue;
+        }
+        let status = export_phase.map(|p| doc.phase_status(e, p));
+        if status.is_some_and(|st| !st.is_shown()) {
+            continue;
+        }
         let mesh = body_mesh(g).map_err(|err| IoError::new("ferro.io.mesh", err.to_string()))?;
         if mesh.indices.is_empty() {
             continue;
@@ -373,8 +729,10 @@ pub fn export_ifc(doc: &Document) -> Result<String, IoError> {
                 }
             }
         };
+        let entity_class = entity.split('(').next().unwrap_or_default().to_string();
         let id = w.add(entity);
         ifc_of.insert(e.id, id);
+        class_of.insert(e.id, entity_class.clone());
         let host_container = match &e.body {
             ElementBody::Opening(_) => e.host_id.and_then(|h| doc.get(h)).and_then(container),
             _ => container(e),
@@ -397,6 +755,9 @@ pub fn export_ifc(doc: &Document) -> Result<String, IoError> {
             "IFCRELDEFINESBYPROPERTIES({},$,$,$,(#{id}),#{pset})",
             s(&derived(&format!("relpset:{}", e.uid)))
         ));
+        if let Some(st) = status {
+            status_pset(&mut w, e, id, &entity_class, st);
+        }
         let lenp = |k: &str| match e.param(k) {
             Some(ParamValue::Length(l)) => Some(l.mm()),
             _ => None,
@@ -530,6 +891,103 @@ pub fn export_ifc(doc: &Document) -> Result<String, IoError> {
         ));
     }
 
+    // Cut relationships (M5-5.3): a cut wall or slab is voided by an
+    // `IfcOpeningElement` with the cutter's (uncut) body; the element's own
+    // body is already cut. Other cut elements carry only their cut body.
+    // Rows made after the export phase are left out.
+    let cut_rows: Vec<&ferro_core::model::Relationship> = doc
+        .relationships()
+        .filter(|r| r.kind == ferro_core::model::RelationshipKind::Cut)
+        .filter(|r| match (r.phase, export_phase) {
+            (Some(rp), Some(ep)) => doc.phase_index(rp) <= doc.phase_index(ep),
+            _ => true,
+        })
+        .collect();
+    let uncut = if cut_rows.is_empty() {
+        Default::default()
+    } else {
+        generate::uncut_bodies(doc)
+    };
+    for r in cut_rows {
+        let (Some(&cutter), Some(&target)) = (r.elements.first(), r.elements.get(1)) else {
+            continue;
+        };
+        let (Some(&host), Some(class)) = (ifc_of.get(&target), class_of.get(&target)) else {
+            continue;
+        };
+        if class != "IFCWALL" && class != "IFCSLAB" {
+            continue;
+        }
+        let Some(body) = uncut.get(&cutter) else {
+            continue;
+        };
+        let mesh = body_mesh(body).map_err(|err| IoError::new("ferro.io.mesh", err.to_string()))?;
+        if mesh.indices.is_empty() {
+            continue;
+        }
+        let pts: Vec<String> = mesh
+            .positions
+            .iter()
+            .map(|p| format!("({},{},{})", f(p.x), f(p.y), f(p.z)))
+            .collect();
+        let tris: Vec<String> = mesh
+            .indices
+            .iter()
+            .map(|t| format!("({},{},{})", t[0] + 1, t[1] + 1, t[2] + 1))
+            .collect();
+        let list = w.add(format!("IFCCARTESIANPOINTLIST3D(({}),$)", pts.join(",")));
+        let faces = w.add(format!(
+            "IFCTRIANGULATEDFACESET(#{list},$,.T.,({}),$)",
+            tris.join(",")
+        ));
+        let rep = w.add(format!(
+            "IFCSHAPEREPRESENTATION(#{body_ctx},'Body','Tessellation',(#{faces}))"
+        ));
+        let shape = w.add(format!("IFCPRODUCTDEFINITIONSHAPE($,$,(#{rep}))"));
+        let pl = w.placement(None, 0.0);
+        let opening = w.add(format!(
+            "IFCOPENINGELEMENT({},$,'Cut',$,$,#{pl},#{shape},$,.OPENING.)",
+            s(&ifc_guid(r.uid.0))
+        ));
+        w.add(format!(
+            "IFCRELVOIDSELEMENT({},$,$,$,#{host},#{opening})",
+            s(&derived(&format!("cutvoids:{}", r.uid)))
+        ));
+    }
+
+    // Wall joins (M5-5.2): every L / T end join as an
+    // `IfcRelConnectsPathElements`; the relating wall is the `first` of the
+    // pair's `join` row (it runs through), the row's uid its GlobalId.
+    // Geometry joins need nothing more: the joined bodies are written.
+    for c in join::wall_connections(doc) {
+        let (Some(&a), Some(&b)) = (ifc_of.get(&c.relating), ifc_of.get(&c.related)) else {
+            continue;
+        };
+        let at = |x: join::WallConnectionAt| match x {
+            join::WallConnectionAt::Start => ".ATSTART.",
+            join::WallConnectionAt::End => ".ATEND.",
+            join::WallConnectionAt::Path => ".ATPATH.",
+        };
+        let guid = match c.row {
+            Some(u) => ifc_guid(u.0),
+            None => {
+                let uid = |id: ElementId| doc.get(id).map(|e| e.uid).unwrap_or(Uid(0));
+                derived(&format!(
+                    "connects:{}:{}:{}",
+                    uid(c.relating),
+                    uid(c.related),
+                    at(c.related_at)
+                ))
+            }
+        };
+        w.add(format!(
+            "IFCRELCONNECTSPATHELEMENTS({},$,$,$,$,#{a},#{b},(),(),{},{})",
+            s(&guid),
+            at(c.related_at),
+            at(c.relating_at)
+        ));
+    }
+
     for (t, elems) in &by_type {
         let (it, _) = type_of[t];
         let uid = doc.get(*t).map(|e| e.uid).unwrap_or(Uid(0));
@@ -569,6 +1027,45 @@ pub fn export_ifc(doc: &Document) -> Result<String, IoError> {
     }
     out.push_str("ENDSEC;\nEND-ISO-10303-21;\n");
     Ok(out)
+}
+
+/// `Pset_<Class>Common.Status` (IFC4 `PEnum_ElementStatus`) of an element
+/// in the export phase. Classes whose common property set has no `Status`
+/// (furniture) get none.
+fn status_pset(
+    w: &mut Writer,
+    e: &Element,
+    id: usize,
+    class: &str,
+    status: ferro_core::model::PhaseStatus,
+) {
+    let pset_name = match class {
+        "IFCWALL" => "Pset_WallCommon",
+        "IFCSLAB" => "Pset_SlabCommon",
+        "IFCDOOR" => "Pset_DoorCommon",
+        "IFCWINDOW" => "Pset_WindowCommon",
+        "IFCROOF" => "Pset_RoofCommon",
+        "IFCCOLUMN" => "Pset_ColumnCommon",
+        "IFCCOVERING" => "Pset_CoveringCommon",
+        "IFCBUILDINGELEMENTPROXY" => "Pset_BuildingElementProxyCommon",
+        _ => return,
+    };
+    let Some(value) = status.ifc_status() else {
+        return;
+    };
+    let p = w.add(format!(
+        "IFCPROPERTYENUMERATEDVALUE('Status',$,(IFCLABEL({})),$)",
+        s(value)
+    ));
+    let ps = w.add(format!(
+        "IFCPROPERTYSET({},$,{},$,(#{p}))",
+        s(&derived(&format!("statuspset:{}", e.uid))),
+        s(pset_name)
+    ));
+    w.add(format!(
+        "IFCRELDEFINESBYPROPERTIES({},$,$,$,(#{id}),#{ps})",
+        s(&derived(&format!("relstatus:{}", e.uid)))
+    ));
 }
 
 #[cfg(test)]
@@ -626,12 +1123,221 @@ mod tests {
     }
 
     #[test]
+    fn views_are_not_exported() {
+        let plain = export_ifc(house().doc(), None).unwrap();
+        let mut s = house();
+        s.execute(
+            AnyCommand::from_tool(
+                "create_view",
+                &json!({"name": "ViewOnly", "view_type": "view_3d"}),
+            )
+            .unwrap(),
+            &ExecContext::user(),
+        )
+        .unwrap();
+        let with_view = export_ifc(s.doc(), None).unwrap();
+        assert!(!with_view.contains("ViewOnly"));
+        assert_eq!(with_view, plain, "a view changes nothing in IFC");
+    }
+
+    #[test]
+    fn renovation_status_is_written_for_the_export_phase() {
+        let plain = export_ifc(house().doc(), None).unwrap();
+        assert!(!plain.contains("'Status'"), "no phases, no status");
+        let mut s = house();
+        for (els, st) in [
+            (json!([5]), "demolish"),
+            (json!([6]), "new"),
+            (json!([12]), "existing"),
+        ] {
+            s.execute(
+                AnyCommand::from_tool(
+                    "set_renovation_status",
+                    &json!({"elements": els, "status": st}),
+                )
+                .unwrap(),
+                &ExecContext::user(),
+            )
+            .unwrap();
+        }
+        let doc = s.doc();
+        let ifc = export_ifc(doc, None).unwrap();
+        for v in ["DEMOLISH", "NEW", "EXISTING"] {
+            assert!(
+                ifc.contains(&format!(
+                    "IFCPROPERTYENUMERATEDVALUE('Status',$,(IFCLABEL('{v}')),$)"
+                )),
+                "{v}"
+            );
+        }
+        assert!(ifc.contains("'Pset_WallCommon'"));
+        assert!(ifc.contains("'Pset_BuildingElementProxyCommon'"));
+        // In the Existing phase the new wall is not built yet: left out.
+        let phases: Vec<ElementId> = doc.phases().iter().map(|p| p.id).collect();
+        let new_wall = ifc_guid(doc.get(ElementId(6)).unwrap().uid.0);
+        assert!(ifc.contains(&new_wall));
+        let early = export_ifc_phase(doc, Some(phases[0]), None).unwrap();
+        assert!(!early.contains(&new_wall));
+        assert!(!early.contains("'DEMOLISH'"));
+        assert_eq!(export_ifc_phase(doc, Some(phases[1]), None).unwrap(), ifc);
+        // Deterministic.
+        assert_eq!(export_ifc(doc, None).unwrap(), ifc);
+    }
+
+    #[test]
     fn guids_are_22_chars_and_stable() {
         assert_eq!(ifc_guid(0), "0000000000000000000000");
         assert_eq!(ifc_guid(u128::MAX), "3$$$$$$$$$$$$$$$$$$$$$");
         assert_eq!(ifc_guid(u128::MAX).len(), 22);
         assert_eq!(derived("site"), derived("site"));
         assert_ne!(derived("site"), derived("building"));
+    }
+
+    #[test]
+    fn compound_angles_carry_the_sign_on_every_part() {
+        assert_eq!(compound_angle(16.05), "(16,3,0,0)");
+        assert_eq!(compound_angle(108.2), "(108,12,0,0)");
+        assert_eq!(compound_angle(-33.87), "(-33,-52,-12,0)");
+        assert_eq!(compound_angle(-0.5), "(0,-30,0,0)");
+        assert_eq!(compound_angle(0.0), "(0,0,0,0)");
+        assert_eq!(compound_angle(-0.0), "(0,0,0,0)");
+        // Sub-microsecond noise rounds away; one millionth survives.
+        assert_eq!(compound_angle(10.0 + 1e-12), "(10,0,0,0)");
+        assert_eq!(compound_angle(1.0 / 3600e6), "(0,0,0,1)");
+        assert_eq!(compound_angle(f64::NAN), "$");
+    }
+
+    #[test]
+    fn site_location_fills_ifcsite() {
+        let mut s = house();
+        let site_line = |ifc: &str| {
+            ifc.lines()
+                .find(|l| l.contains("=IFCSITE("))
+                .unwrap_or("")
+                .to_string()
+        };
+        let none = export_ifc(s.doc(), None).unwrap();
+        assert!(site_line(&none).ends_with(",$,$,.ELEMENT.,$,$,$,$,$);"));
+        for (lat, lon, want) in [
+            (
+                16.05,
+                108.2,
+                "'Ha Noi',.ELEMENT.,(16,3,0,0),(108,12,0,0),5000.,$,$);",
+            ),
+            (
+                -33.87,
+                151.21,
+                "'Ha Noi',.ELEMENT.,(-33,-52,-12,0),(151,12,36,0),5000.,$,$);",
+            ),
+        ] {
+            let cmd = AnyCommand::from_tool(
+                "set_site_location",
+                // Core commands take radians and mm (degrees are an MCP edge).
+                &json!({"latitude": f64::to_radians(lat), "longitude": f64::to_radians(lon),
+                    "elevation": 5000.0, "place": "Ha Noi"}),
+            )
+            .unwrap();
+            s.execute(cmd, &ExecContext::user()).unwrap();
+            let ifc = export_ifc(s.doc(), None).unwrap();
+            assert!(site_line(&ifc).ends_with(want), "{}", site_line(&ifc));
+            assert_eq!(ifc, export_ifc(s.doc(), None).unwrap(), "deterministic");
+        }
+    }
+
+    #[test]
+    fn cut_rows_on_walls_become_openings_and_voids_are_not_products() {
+        let plain = export_ifc(house().doc(), None).unwrap();
+        let mut s = house();
+        let wall = s
+            .doc()
+            .elements()
+            .find(|e| e.as_wall().is_some())
+            .unwrap()
+            .id;
+        let bx = s
+            .doc()
+            .elements()
+            .find(|e| e.as_form().is_some())
+            .unwrap()
+            .id;
+        let void = s.doc().next_element_id();
+        for (name, args) in [
+            // A void box through the first wall (x = 0), cutting it and the
+            // box Form.
+            (
+                "create_box",
+                json!({"origin": {"x": -500, "y": 1000, "z": 500}, "width": 1000, "depth": 1000, "height": 1000}),
+            ),
+            (
+                "create_relationship",
+                json!({"kind": "cut", "elements": [void, wall]}),
+            ),
+            (
+                "create_relationship",
+                json!({"kind": "cut", "elements": [void, bx]}),
+            ),
+        ] {
+            // No kernel here: the bodies stay uncut (with a warning), the
+            // rows are exported all the same.
+            s.execute(
+                AnyCommand::from_tool(name, &args).unwrap(),
+                &ExecContext::user(),
+            )
+            .unwrap_or_else(|f| panic!("{name}: {f:?}"));
+        }
+        let ifc = export_ifc(s.doc(), None).unwrap();
+        let count = |t: &str, x: &str| t.matches(x).count();
+        assert_eq!(
+            count(&ifc, "=IFCOPENINGELEMENT("),
+            count(&plain, "=IFCOPENINGELEMENT(") + 1,
+            "one opening, for the wall only"
+        );
+        assert_eq!(
+            count(&ifc, "=IFCRELVOIDSELEMENT("),
+            count(&plain, "=IFCRELVOIDSELEMENT(") + 1
+        );
+        assert_eq!(
+            count(&ifc, "=IFCBUILDINGELEMENTPROXY("),
+            count(&plain, "=IFCBUILDINGELEMENTPROXY("),
+            "the void is not a product"
+        );
+        let row = s.doc().relationships().next().unwrap().uid;
+        assert!(ifc.contains(&format!("IFCOPENINGELEMENT('{}'", ifc_guid(row.0))));
+        assert_eq!(ifc, export_ifc(s.doc(), None).unwrap(), "deterministic");
+    }
+
+    #[test]
+    fn wall_joins_become_path_connections() {
+        let mut s = house();
+        let run = |s: &mut Session, name: &str, args: serde_json::Value| {
+            s.execute(
+                AnyCommand::from_tool(name, &args).unwrap(),
+                &ExecContext::user(),
+            )
+            .unwrap_or_else(|f| panic!("{name}: {f:?}"))
+        };
+        // Walls 5..8 form a closed loop; wall 6 runs through at its corner
+        // with 5, and the corner of 7 and 8 is disallowed.
+        let o = run(
+            &mut s,
+            "create_relationship",
+            json!({"kind": "join", "elements": [6, 5]}),
+        );
+        let row: Uid = o.output["relationship"].as_str().unwrap().parse().unwrap();
+        run(
+            &mut s,
+            "set_wall",
+            json!({"wall": 8, "join_start": "disallow"}),
+        );
+        let ifc = export_ifc(s.doc(), None).unwrap();
+        assert_eq!(ifc.matches("=IFCRELCONNECTSPATHELEMENTS(").count(), 3);
+        let line = ifc
+            .lines()
+            .find(|l| l.contains(&format!("IFCRELCONNECTSPATHELEMENTS('{}'", ifc_guid(row.0))))
+            .expect("the row's connection");
+        // Wall 6 (first) relates at its start; wall 5 is related at its end.
+        assert!(line.ends_with(".ATEND.,.ATSTART.);"), "{line}");
+        assert_eq!(ifc, export_ifc(s.doc(), None).unwrap(), "deterministic");
     }
 
     #[test]
@@ -646,7 +1352,7 @@ mod tests {
     #[test]
     fn house_exports_spatial_structure_and_elements() {
         let s = house();
-        let ifc = export_ifc(s.doc()).unwrap();
+        let ifc = export_ifc(s.doc(), None).unwrap();
         assert!(ifc.starts_with("ISO-10303-21;"));
         assert!(ifc.contains("FILE_SCHEMA(('IFC4'))"));
         assert_eq!(ifc.matches("=IFCBUILDINGSTOREY(").count(), 2);
@@ -658,11 +1364,17 @@ mod tests {
         assert_eq!(ifc.matches("=IFCBUILDINGELEMENTPROXY(").count(), 1);
         assert!(ifc.contains("Qto_WallBaseQuantities"));
         assert!(ifc.contains("IFCMATERIAL('G\\X2\\1EA1\\X0\\ch'"));
+        // Four L corners: one path connection each, end to start.
+        assert_eq!(ifc.matches("=IFCRELCONNECTSPATHELEMENTS(").count(), 4);
+        assert_eq!(
+            ifc.matches(".ATSTART.,.ATEND.)").count() + ifc.matches(".ATEND.,.ATSTART.)").count(),
+            4
+        );
         if let Ok(path) = std::env::var("FERRO_IFC_OUT") {
             std::fs::write(path, &ifc).unwrap();
         }
         // Re-export is identical (deterministic ids).
-        assert_eq!(ifc, export_ifc(s.doc()).unwrap());
+        assert_eq!(ifc, export_ifc(s.doc(), None).unwrap());
         // Every reference points at an existing entity.
         let n = ifc.matches("\n#").count();
         for cap in ifc.split('#').skip(1) {
@@ -671,5 +1383,88 @@ mod tests {
                 assert!(i >= 1 && i <= n, "dangling #{i}");
             }
         }
+    }
+
+    #[test]
+    fn material_data_becomes_property_sets() {
+        let s = house();
+        let plain = export_ifc(s.doc(), None).unwrap();
+        assert!(
+            !plain.contains("IFCMATERIALPROPERTIES"),
+            "no data, no psets"
+        );
+        assert!(!plain.contains("IFCDERIVEDUNIT("));
+
+        let mut s = house();
+        s.execute(
+            AnyCommand::from_tool(
+                "set_material",
+                &json!({"material": 3,
+                    "thermal": {"conductivity_w_mk": 0.77, "specific_heat_j_kgk": 840},
+                    "physical": {"density_kg_m3": 1800, "youngs_modulus_pa": 5e9, "poisson_ratio": 0.2},
+                    "environmental": {"declared_unit": "kg", "gwp_a1_a3": 0.24, "epd_source": "EPD-1"},
+                    "cost": {"unit_price": 1500000, "currency": "VND", "unit": "m3"}}),
+            )
+            .unwrap(),
+            &ExecContext::user(),
+        )
+        .unwrap();
+        let ifc = export_ifc(s.doc(), None).unwrap();
+        for needle in [
+            "IFCMATERIALPROPERTIES('Pset_MaterialCommon'",
+            "IFCMATERIALPROPERTIES('Pset_MaterialThermal'",
+            "IFCMATERIALPROPERTIES('Pset_MaterialMechanical'",
+            "IFCMATERIALPROPERTIES('Pset_FerroMaterial'",
+            "'MassDensity',$,IFCMASSDENSITYMEASURE(1800.)",
+            "'ThermalConductivity',$,IFCTHERMALCONDUCTIVITYMEASURE(0.77)",
+            "'YoungModulus',$,IFCMODULUSOFELASTICITYMEASURE(5000000000.)",
+            "'GWP_A1_A3',$,IFCREAL(0.24)",
+            "'Currency',$,IFCLABEL('VND')",
+            ".MASSDENSITYUNIT.",
+            ".THERMALCONDUCTANCEUNIT.",
+        ] {
+            assert!(ifc.contains(needle), "missing {needle}");
+        }
+        // The finish layers of the wall type have no material, so no
+        // U-value is claimed for it.
+        assert!(!ifc.contains("ThermalTransmittance"));
+        let n = ifc.matches("\n#").count();
+        for cap in ifc.split('#').skip(1) {
+            let num: String = cap.chars().take_while(|c| c.is_ascii_digit()).collect();
+            if let Ok(i) = num.parse::<usize>() {
+                assert!(i >= 1 && i <= n, "dangling #{i}");
+            }
+        }
+    }
+
+    #[test]
+    fn complete_wall_type_gets_thermal_transmittance() {
+        let mut s = Session::new(Document::new("U"), Box::new(SequentialIds::new(1)));
+        for (name, args) in [
+            (
+                "create_material",
+                json!({"name": "Brick", "color": "#b5533c", "thermal": {"conductivity_w_mk": 0.77}}),
+            ),
+            (
+                "create_wall_type",
+                json!({"name": "Brick 200", "thickness": 200, "material": 1}),
+            ),
+        ] {
+            s.execute(
+                AnyCommand::from_tool(name, &args).unwrap(),
+                &ExecContext::user(),
+            )
+            .unwrap();
+        }
+        let ifc = export_ifc(s.doc(), None).unwrap();
+        // U = 1 / (0.13 + 0.2/0.77 + 0.04) = 2.3172...
+        let at = ifc
+            .find("IFCTHERMALTRANSMITTANCEMEASURE(")
+            .expect("thermal transmittance");
+        let rest = &ifc[at + "IFCTHERMALTRANSMITTANCEMEASURE(".len()..];
+        let v: f64 = rest[..rest.find(')').unwrap()].parse().unwrap();
+        assert!((v - 1.0 / (0.13 + 0.2 / 0.77 + 0.04)).abs() < 1e-9);
+        assert!(ifc.contains("'Pset_WallCommon'"));
+        assert!(ifc.contains(".THERMALTRANSMITTANCEUNIT."));
     }
 }

@@ -1,0 +1,479 @@
+{
+  "elements": {
+    "1": {
+      "body": "form",
+      "bounding_box": [
+        [
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          2000.0,
+          2000.0,
+          1000.0
+        ]
+      ],
+      "category": "forms",
+      "closed": true,
+      "counts": {
+        "edges": 24,
+        "faces": 11,
+        "vertices": 16
+      },
+      "faces": [
+        {
+          "area": 3520000.0,
+          "face": 5,
+          "normal": [
+            0.0,
+            0.0,
+            1.0
+          ],
+          "vertices": 4
+        },
+        {
+          "area": 4000000.0,
+          "face": 23,
+          "normal": [
+            0.0,
+            0.0,
+            -1.0
+          ],
+          "vertices": 4
+        },
+        {
+          "area": 2000000.0,
+          "face": 29,
+          "normal": [
+            0.0,
+            -1.0,
+            0.0
+          ],
+          "vertices": 4
+        },
+        {
+          "area": 2000000.0,
+          "face": 34,
+          "normal": [
+            1.0,
+            0.0,
+            0.0
+          ],
+          "vertices": 4
+        },
+        {
+          "area": 2000000.0,
+          "face": 39,
+          "normal": [
+            0.0,
+            1.0,
+            0.0
+          ],
+          "vertices": 4
+        },
+        {
+          "area": 2000000.0,
+          "face": 44,
+          "normal": [
+            -1.0,
+            0.0,
+            0.0
+          ],
+          "vertices": 4
+        },
+        {
+          "area": 240000.0,
+          "face": 70,
+          "normal": [
+            1.0,
+            0.0,
+            0.0
+          ],
+          "vertices": 4
+        },
+        {
+          "area": 320000.0,
+          "face": 76,
+          "normal": [
+            0.0,
+            -1.0,
+            0.0
+          ],
+          "vertices": 4
+        },
+        {
+          "area": 240000.0,
+          "face": 82,
+          "normal": [
+            -1.0,
+            0.0,
+            0.0
+          ],
+          "vertices": 4
+        },
+        {
+          "area": 320000.0,
+          "face": 88,
+          "normal": [
+            0.0,
+            1.0,
+            0.0
+          ],
+          "vertices": 4
+        },
+        {
+          "area": 480000.0,
+          "face": 94,
+          "normal": [
+            0.0,
+            0.0,
+            1.0
+          ],
+          "vertices": 4
+        }
+      ],
+      "name": "Pocket",
+      "volume": 3808000000.0
+    },
+    "2": {
+      "body": "form",
+      "bounding_box": [
+        [
+          4000.0,
+          0.0,
+          0.0
+        ],
+        [
+          6000.0,
+          2000.0,
+          1000.0
+        ]
+      ],
+      "category": "forms",
+      "closed": true,
+      "counts": {
+        "edges": 24,
+        "faces": 10,
+        "vertices": 16
+      },
+      "faces": [
+        {
+          "area": 3800000.0,
+          "face": 5,
+          "normal": [
+            0.0,
+            0.0,
+            1.0
+          ],
+          "vertices": 4
+        },
+        {
+          "area": 3800000.0,
+          "face": 23,
+          "normal": [
+            0.0,
+            0.0,
+            -1.0
+          ],
+          "vertices": 4
+        },
+        {
+          "area": 2000000.0,
+          "face": 29,
+          "normal": [
+            0.0,
+            -1.0,
+            0.0
+          ],
+          "vertices": 4
+        },
+        {
+          "area": 2000000.0,
+          "face": 34,
+          "normal": [
+            1.0,
+            0.0,
+            0.0
+          ],
+          "vertices": 4
+        },
+        {
+          "area": 2000000.0,
+          "face": 39,
+          "normal": [
+            0.0,
+            1.0,
+            0.0
+          ],
+          "vertices": 4
+        },
+        {
+          "area": 2000000.0,
+          "face": 44,
+          "normal": [
+            -1.0,
+            0.0,
+            0.0
+          ],
+          "vertices": 4
+        },
+        {
+          "area": 400000.0,
+          "face": 75,
+          "normal": [
+            -1.0,
+            0.0,
+            0.0
+          ],
+          "vertices": 4
+        },
+        {
+          "area": 500000.0,
+          "face": 81,
+          "normal": [
+            0.0,
+            -1.0,
+            0.0
+          ],
+          "vertices": 4
+        },
+        {
+          "area": 400000.0,
+          "face": 87,
+          "normal": [
+            1.0,
+            0.0,
+            0.0
+          ],
+          "vertices": 4
+        },
+        {
+          "area": 500000.0,
+          "face": 93,
+          "normal": [
+            0.0,
+            1.0,
+            0.0
+          ],
+          "vertices": 4
+        }
+      ],
+      "name": "Through hole",
+      "volume": 3800000000.0
+    },
+    "3": {
+      "body": "form",
+      "bounding_box": [
+        [
+          8000.0,
+          0.0,
+          0.0
+        ],
+        [
+          12000.0,
+          200.0,
+          3000.0
+        ]
+      ],
+      "category": "forms",
+      "closed": true,
+      "counts": {
+        "edges": 24,
+        "faces": 10,
+        "vertices": 16
+      },
+      "faces": [
+        {
+          "area": 800000.0,
+          "face": 5,
+          "normal": [
+            0.0,
+            0.0,
+            1.0
+          ],
+          "vertices": 4
+        },
+        {
+          "area": 800000.0,
+          "face": 23,
+          "normal": [
+            0.0,
+            0.0,
+            -1.0
+          ],
+          "vertices": 4
+        },
+        {
+          "area": 10560000.0,
+          "face": 29,
+          "normal": [
+            0.0,
+            -1.0,
+            0.0
+          ],
+          "vertices": 4
+        },
+        {
+          "area": 600000.0,
+          "face": 34,
+          "normal": [
+            1.0,
+            0.0,
+            0.0
+          ],
+          "vertices": 4
+        },
+        {
+          "area": 10560000.0,
+          "face": 39,
+          "normal": [
+            0.0,
+            1.0,
+            0.0
+          ],
+          "vertices": 4
+        },
+        {
+          "area": 600000.0,
+          "face": 44,
+          "normal": [
+            -1.0,
+            0.0,
+            0.0
+          ],
+          "vertices": 4
+        },
+        {
+          "area": 240000.0,
+          "face": 75,
+          "normal": [
+            -1.0,
+            0.0,
+            0.0
+          ],
+          "vertices": 4
+        },
+        {
+          "area": 240000.0,
+          "face": 81,
+          "normal": [
+            0.0,
+            0.0,
+            -1.0
+          ],
+          "vertices": 4
+        },
+        {
+          "area": 240000.0,
+          "face": 87,
+          "normal": [
+            1.0,
+            0.0,
+            0.0
+          ],
+          "vertices": 4
+        },
+        {
+          "area": 240000.0,
+          "face": 93,
+          "normal": [
+            0.0,
+            0.0,
+            1.0
+          ],
+          "vertices": 4
+        }
+      ],
+      "name": "Wall with flush opening",
+      "volume": 2112000000.0
+    },
+    "4": {
+      "body": "form",
+      "bounding_box": [
+        [
+          9000.0,
+          0.0,
+          900.0
+        ],
+        [
+          10200.0,
+          200.0,
+          2100.0
+        ]
+      ],
+      "category": "forms",
+      "closed": true,
+      "counts": {
+        "edges": 12,
+        "faces": 6,
+        "vertices": 8
+      },
+      "faces": [
+        {
+          "area": 240000.0,
+          "face": 5,
+          "normal": [
+            0.0,
+            0.0,
+            1.0
+          ],
+          "vertices": 4
+        },
+        {
+          "area": 240000.0,
+          "face": 23,
+          "normal": [
+            0.0,
+            0.0,
+            -1.0
+          ],
+          "vertices": 4
+        },
+        {
+          "area": 1440000.0,
+          "face": 29,
+          "normal": [
+            0.0,
+            -1.0,
+            0.0
+          ],
+          "vertices": 4
+        },
+        {
+          "area": 240000.0,
+          "face": 34,
+          "normal": [
+            1.0,
+            0.0,
+            0.0
+          ],
+          "vertices": 4
+        },
+        {
+          "area": 1440000.0,
+          "face": 39,
+          "normal": [
+            0.0,
+            1.0,
+            0.0
+          ],
+          "vertices": 4
+        },
+        {
+          "area": 240000.0,
+          "face": 44,
+          "normal": [
+            -1.0,
+            0.0,
+            0.0
+          ],
+          "vertices": 4
+        }
+      ],
+      "name": "Kept cutter",
+      "volume": 288000000.0
+    }
+  },
+  "settings": {}
+}

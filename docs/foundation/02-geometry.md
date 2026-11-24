@@ -99,7 +99,12 @@ A **circle** is an `Arc` whose sweep is 2π, and `is_closed()` is true.
   Revit: `CurveLoop`.
 - `Profile`: one **outer** loop (counter-clockwise about the plane normal) and
   zero or more **hole** loops (clockwise), all coplanar and non-intersecting.
-  `Profile::from_loops(...)` normalises orientation and validates.
+  `Profile::from_loops(...)` normalises orientation and validates with exact
+  predicates (D-53): every loop is simple (`ferro.geom.self_intersecting_profile`
+  for a bow-tie or a repeated point; `ferro.geom.degenerate` when all points
+  are collinear), holes lie inside the outer loop without touching it or each
+  other (`ferro.geom.invalid_profile`). `create_polygon` and closed imprint
+  curves apply the same simple-loop test.
   Revit: the sketch of a floor / roof / extrusion (`CurveArrArray`).
 
 Every sketch-based element (floor, roof, extrusion, opening) is defined by a
@@ -129,6 +134,13 @@ Rules:
    operation. A `Form` may also hold open shells (sheet bodies, SketchUp-style
    loose faces); they are valid Form geometry but are never called a `Solid`
    and are excluded from volume and boolean operations until closed.
+   Faces meet only along their shared edges and vertices: a body whose faces
+   cross or touch elsewhere is invalid (`ferro.topo.self_intersecting`).
+   `Body::validate()` (run by every `Transaction` on changed Forms) checks it
+   with exact triangle–triangle predicates (D-53) for faces that share no
+   vertex, after bounding-box prefilters; push / pull reports it for a pocket
+   pushed past the opposite face (pushed onto it within `VERTEX_TOL`, the
+   pocket goes through instead).
 3. Faces may have holes (SketchUp behaviour). Each face carries a `Surface`;
    v1 supports **`Plane` and `Cylinder`** (curved walls, round columns, barrel
    vaults, from extruded arcs) exactly. NURBS and SubD surfaces plug in later

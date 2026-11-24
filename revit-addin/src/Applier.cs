@@ -57,6 +57,10 @@ namespace Ferro.Revit
                         case "floor": Floor(op); break;
                         case "opening": Opening(op); break;
                         case "direct_shape": DirectShape(op); break;
+                        case "site_location": SiteLocationOf(op); break;
+                        case "phase": PhaseOp(op); break;
+                        case "join_geometry": JoinGeometry(op); break;
+                        case "warning": _report.Problems.Add(Str(op, "message")); break;
                         default: _report.Problems.Add($"unknown operation {kind}"); break;
                     }
                 }
@@ -88,6 +92,8 @@ namespace Ferro.Revit
 
         private void Tag(Element e, JsonObject op, bool created)
         {
+            Phases(e, op);
+            Pin(e, op);
             Tags.Set(e, Str(op, "uid"), Str(op, "signature"));
             _byUid[Str(op, "uid")] = e;
             if (created) _report.Created++; else _report.Updated++;
@@ -102,6 +108,20 @@ namespace Ferro.Revit
                 if (!taken.Contains($"{name} ({i})")) return $"{name} ({i})";
         }
 
+        /// <summary>`Element.Pinned` from the op (ADR 0008); absent = not pinned.
+        /// Elements are unpinned while an op edits them and pinned again in
+        /// <see cref="Tag"/>.</summary>
+        private static void Pin(Element e, JsonObject op)
+        {
+            var pinned = op["pinned"] is JsonValue v && v.TryGetValue<bool>(out var b) && b;
+            if (e.Pinned != pinned) e.Pinned = pinned;
+        }
+
+        private static void Unpin(Element? e)
+        {
+            if (e != null && e.Pinned) e.Pinned = false;
+        }
+
         private static void SetParam(Element e, BuiltInParameter p, double v) { var x = e.get_Parameter(p); if (x != null && !x.IsReadOnly) x.Set(v); }
         private static void SetParam(Element e, BuiltInParameter p, int v) { var x = e.get_Parameter(p); if (x != null && !x.IsReadOnly) x.Set(v); }
         private static void SetParam(Element e, BuiltInParameter p, ElementId v) { var x = e.get_Parameter(p); if (x != null && !x.IsReadOnly) x.Set(v); }
@@ -112,9 +132,31 @@ namespace Ferro.Revit
         {
             var e = _doc.GetElement(Str(op, "unique_id"));
             if (e == null) return;
+            Unpin(e);
             _doc.Delete(e.Id);
             _byUid.Remove(Str(op, "ferro_uid"));
             _report.Deleted++;
+        }
+
+        /// <summary>Project location (M5-24.3): latitude / longitude in
+        /// radians, time zone in hours, place name. Revit's SiteLocation
+        /// elevation is read-only, so the op's `elevation` (feet) is not
+        /// applied here.</summary>
+        private void SiteLocationOf(JsonObject op)
+        {
+            var site = _doc.SiteLocation ?? throw new InvalidOperationException("this model has no site location");
+            site.Latitude = Num(op, "latitude");
+            site.Longitude = Num(op, "longitude");
+            site.TimeZone = Num(op, "time_zone");
+            var place = Str(op, "place");
+            if (place.Length > 0) site.PlaceName = place;
+            var created = Existing(op) == null;
+            try { Tag(site, op, created); }
+            catch (Exception ex)
+            {
+                // Values are applied; without the tag the op is just re-sent.
+                _report.Problems.Add($"site location: not tagged ({ex.Message})");
+            }
         }
 
         private void Material(JsonObject op)
@@ -126,7 +168,54 @@ namespace Ferro.Revit
             m ??= (Material)_doc.GetElement(Autodesk.Revit.DB.Material.Create(_doc, UniqueName<Material>(name, null)));
             var c = op["color"]!;
             m.Color = new Color((byte)c[0]!.GetValue<int>(), (byte)c[1]!.GetValue<int>(), (byte)c[2]!.GetValue<int>());
+            if (op["thermal"] is JsonObject th) ThermalAssetOf(m, th);
+            if (op["physical"] is JsonObject ph) StructuralAssetOf(m, ph);
             Tag(m, op, created);
+        }
+
+        // Optional SI number from an asset object (null when absent).
+        private static double? Si(JsonObject o, string k) =>
+            o[k] is JsonValue v && v.TryGetValue<double>(out var d) ? d : null;
+
+        private static double ToInternal(double v, ForgeTypeId unit) => UnitUtils.ConvertToInternalUnits(v, unit);
+
+        /// <summary>Thermal asset from Ferro's `thermal` (SI units): reuse the
+        /// material's own property set or create one.</summary>
+        private void ThermalAssetOf(Material m, JsonObject t)
+        {
+            var asset = new ThermalAsset(UniqueName<PropertySetElement>(m.Name + " (Ferro thermal)", null), ThermalMaterialType.Solid);
+            if (Si(t, "conductivity_w_mk") is double k) asset.ThermalConductivity = ToInternal(k, UnitTypeId.WattsPerMeterKelvin);
+            if (Si(t, "specific_heat_j_kgk") is double cp) asset.SpecificHeat = ToInternal(cp, UnitTypeId.JoulesPerKilogramDegreeCelsius);
+            if (Si(t, "density_kg_m3") is double rho) asset.Density = ToInternal(rho, UnitTypeId.KilogramsPerCubicMeter);
+            if (Si(t, "emissivity") is double e) asset.Emissivity = e;
+            if (_doc.GetElement(m.ThermalAssetId) is PropertySetElement pse)
+            {
+                asset.Name = pse.Name;
+                pse.SetThermalAsset(asset);
+            }
+            else
+            {
+                m.SetMaterialAspectByPropertySet(MaterialAspect.Thermal, PropertySetElement.Create(_doc, asset).Id);
+            }
+        }
+
+        /// <summary>Structural (physical) asset from Ferro's `physical` (SI units).</summary>
+        private void StructuralAssetOf(Material m, JsonObject p)
+        {
+            var asset = new StructuralAsset(UniqueName<PropertySetElement>(m.Name + " (Ferro physical)", null), StructuralAssetClass.Generic);
+            if (Si(p, "density_kg_m3") is double rho) asset.Density = ToInternal(rho, UnitTypeId.KilogramsPerCubicMeter);
+            if (Si(p, "youngs_modulus_pa") is double e) asset.SetYoungModulus(ToInternal(e, UnitTypeId.Pascals));
+            if (Si(p, "poisson_ratio") is double nu) asset.SetPoissonRatio(nu);
+            if (Si(p, "thermal_expansion_per_k") is double a) asset.SetThermalExpansionCoefficient(ToInternal(a, UnitTypeId.InverseDegreesCelsius));
+            if (_doc.GetElement(m.StructuralAssetId) is PropertySetElement pse)
+            {
+                asset.Name = pse.Name;
+                pse.SetStructuralAsset(asset);
+            }
+            else
+            {
+                m.SetMaterialAspectByPropertySet(MaterialAspect.Structural, PropertySetElement.Create(_doc, asset).Id);
+            }
         }
 
         private void Level(JsonObject op)
@@ -136,10 +225,59 @@ namespace Ferro.Revit
             var lvl = Existing(op) as Level
                 ?? new FilteredElementCollector(_doc).OfClass(typeof(Level)).Cast<Level>().FirstOrDefault(x => x.Name == name);
             var created = lvl == null;
+            Unpin(lvl);
             lvl ??= Autodesk.Revit.DB.Level.Create(_doc, elev);
             if (Math.Abs(lvl.Elevation - elev) > 1e-9) lvl.Elevation = elev;
             if (lvl.Name != name) lvl.Name = UniqueName<Level>(name, lvl);
             Tag(lvl, op, created);
+        }
+
+        // ------------------------------------------------------------ phases
+
+        private Phase? PhaseNamed(string name)
+        {
+            foreach (Phase p in _doc.Phases)
+                if (p.Name == name) return p;
+            return null;
+        }
+
+        /// <summary>The Revit API cannot create phases: find the phase by name,
+        /// else rename the phase at the same position, else report.</summary>
+        private void PhaseOp(JsonObject op)
+        {
+            var name = Str(op, "name");
+            if (PhaseNamed(name) != null) return;
+            var order = (int)Num(op, "order");
+            if (order >= 0 && order < _doc.Phases.Size)
+            {
+                var p = _doc.Phases.get_Item(order);
+                p.Name = name;
+                _report.Updated++;
+                return;
+            }
+            _report.Problems.Add($"phase {name}: add it in Manage > Phases (Revit cannot create phases from an add-in)");
+        }
+
+        /// <summary>PHASE_CREATED / PHASE_DEMOLISHED from phase names; only
+        /// when the operation carries phases (unphased elements are left alone).</summary>
+        private void Phases(Element e, JsonObject op)
+        {
+            var created = OptStr(op, "phase_created");
+            var demolished = OptStr(op, "phase_demolished");
+            if (created == null && demolished == null) return;
+            if (created != null)
+            {
+                var p = PhaseNamed(created);
+                if (p != null) SetParam(e, BuiltInParameter.PHASE_CREATED, p.Id);
+                else _report.Problems.Add($"{Name(op)}: no phase {created}");
+            }
+            if (demolished == null) SetParam(e, BuiltInParameter.PHASE_DEMOLISHED, ElementId.InvalidElementId);
+            else
+            {
+                var p = PhaseNamed(demolished);
+                if (p != null) SetParam(e, BuiltInParameter.PHASE_DEMOLISHED, p.Id);
+                else _report.Problems.Add($"{Name(op)}: no phase {demolished}");
+            }
         }
 
         private CompoundStructure Structure(JsonObject op)
@@ -194,6 +332,7 @@ namespace Ferro.Revit
             var curve = MakeCurve(op["curve"]!);
             var w = Existing(op) as Wall;
             var created = w == null;
+            Unpin(w);
             w ??= Autodesk.Revit.DB.Wall.Create(_doc, curve, type.Id, level.Id, Math.Max(Num(op, "height"), 1.0), Num(op, "base_offset"), false, false);
             if (w.WallType.Id != type.Id) w.ChangeTypeId(type.Id);
             SetParam(w, BuiltInParameter.WALL_BASE_CONSTRAINT, level.Id);
@@ -212,7 +351,41 @@ namespace Ferro.Revit
                 SetParam(w, BuiltInParameter.WALL_USER_HEIGHT_PARAM, Num(op, "height"));
             }
             if (OptStr(op, "name") is { } n) w.get_Parameter(BuiltInParameter.ALL_MODEL_MARK)?.Set(n);
+            JoinStates(w, op);
             Tag(w, op, created);
+        }
+
+        /// <summary>Wall end join states (M5-5.2): `disallow_join_start` /
+        /// `disallow_join_end` absent = allowed.</summary>
+        private static void JoinStates(Wall w, JsonObject op)
+        {
+            for (var end = 0; end < 2; end++)
+            {
+                var key = end == 0 ? "disallow_join_start" : "disallow_join_end";
+                var disallow = op[key] is JsonValue v && v.TryGetValue<bool>(out var b) && b;
+                var allowed = WallUtils.IsWallJoinAllowedAtEnd(w, end);
+                if (disallow && allowed) WallUtils.DisallowWallJoinAtEnd(w, end);
+                else if (!disallow && !allowed) WallUtils.AllowWallJoinAtEnd(w, end);
+            }
+        }
+
+        /// <summary>A Ferro `join` row between two native elements: join their
+        /// geometry and make `first` the cutting element. Idempotent (the op
+        /// is re-sent on every sync, nothing is tagged).</summary>
+        private void JoinGeometry(JsonObject op)
+        {
+            var first = Need<Element>(Str(op, "first_uid"), "element");
+            var second = Need<Element>(Str(op, "second_uid"), "element");
+            if (!JoinGeometryUtils.AreElementsJoined(_doc, first, second))
+            {
+                JoinGeometryUtils.JoinGeometry(_doc, first, second);
+                _report.Created++;
+            }
+            if (!JoinGeometryUtils.IsCuttingElementInJoin(_doc, first, second))
+            {
+                JoinGeometryUtils.SwitchJoinOrder(_doc, first, second);
+                _report.Updated++;
+            }
         }
 
         private void Floor(JsonObject op)
@@ -230,6 +403,7 @@ namespace Ferro.Revit
             // Floor sketches are replaced rather than edited (simple and reliable).
             var old = Existing(op);
             var created = old == null;
+            Unpin(old);
             if (old != null) _doc.Delete(old.Id);
             var f = Autodesk.Revit.DB.Floor.Create(_doc, loops, type.Id, level.Id);
             SetParam(f, BuiltInParameter.FLOOR_HEIGHTABOVELEVEL_PARAM, Num(op, "offset"));
@@ -270,6 +444,7 @@ namespace Ferro.Revit
             var point = Xyz(op["point"]);
             var fi = Existing(op) as FamilyInstance;
             var created = fi == null;
+            Unpin(fi);
             if (fi != null && fi.Host?.Id != host.Id)
             {
                 _doc.Delete(fi.Id);
@@ -300,6 +475,7 @@ namespace Ferro.Revit
             var geometry = builder.GetBuildResult().GetGeometricalObjects();
             var ds = Existing(op) as DirectShape;
             var created = ds == null;
+            Unpin(ds);
             if (ds == null)
             {
                 var bic = Enum.TryParse<BuiltInCategory>(Str(op, "category"), out var c) ? c : BuiltInCategory.OST_GenericModel;

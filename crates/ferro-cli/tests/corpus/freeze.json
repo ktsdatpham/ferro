@@ -1,0 +1,11 @@
+[
+  {"id": "l1", "tool": "create_level", "args": {"name": "Ground", "elevation": 0}},
+  {"id": "w", "tool": "create_walls", "args": {"points": [[0, 0], ["6m", 0], ["6m", "4m"]], "height": "3m",
+    "level": {"$ref": "l1.result.element"}}},
+  {"tool": "create_opening", "args": {"wall": {"$ref": "w.result.elements.0"}, "kind": "door", "position": "2m"}},
+  {"id": "fr", "tool": "set_geometry_source", "args": {"element": {"$ref": "w.result.elements.0"}, "source": "direct"}},
+  {"id": "fl", "tool": "create_floor", "args": {"points": [[0, 0], ["6m", 0], ["6m", "4m"], [0, "4m"]],
+    "level": {"$ref": "l1.result.element"}}},
+  {"tool": "set_geometry_source", "args": {"element": {"$ref": "fl.result.element"}, "source": "direct"}},
+  {"tool": "set_geometry_source", "args": {"element": {"$ref": "fl.result.element"}, "source": "parametric"}}
+]

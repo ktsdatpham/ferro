@@ -38,10 +38,23 @@ pub enum ToolKind {
     Floor,
     Door,
     Window,
+    /// Solid tools (two picks: target, then the other Form): booleans
+    /// through the kernel (ADR 0007) and the non-destructive cut (M5-5.3).
+    Subtract,
+    Unite,
+    Intersect,
+    /// Cut (keep cutter): a `cut` relationship row; the cutter stays.
+    CutGeometry,
+    /// Join Geometry (M5-5.2): a `join` row; the first pick wins.
+    JoinGeometry,
+    /// Unjoin Geometry: delete the `join` row of the two picks.
+    UnjoinGeometry,
+    /// Switch Join Order: reverse the `join` row of the two picks.
+    SwitchJoinOrder,
 }
 
 impl ToolKind {
-    pub const ALL: [ToolKind; 19] = [
+    pub const ALL: [ToolKind; 26] = [
         ToolKind::Select,
         ToolKind::Line,
         ToolKind::Rectangle,
@@ -61,12 +74,32 @@ impl ToolKind {
         ToolKind::Floor,
         ToolKind::Door,
         ToolKind::Window,
+        ToolKind::Subtract,
+        ToolKind::Unite,
+        ToolKind::Intersect,
+        ToolKind::CutGeometry,
+        ToolKind::JoinGeometry,
+        ToolKind::UnjoinGeometry,
+        ToolKind::SwitchJoinOrder,
     ];
     /// Tools that draw a chain of clicked points.
     pub fn is_chain(self) -> bool {
         matches!(
             self,
             ToolKind::Line | ToolKind::Polygon | ToolKind::Wall | ToolKind::Floor
+        )
+    }
+    /// The solid tools: pick a target, then the other element.
+    pub fn is_solid(self) -> bool {
+        matches!(
+            self,
+            ToolKind::Subtract
+                | ToolKind::Unite
+                | ToolKind::Intersect
+                | ToolKind::CutGeometry
+                | ToolKind::JoinGeometry
+                | ToolKind::UnjoinGeometry
+                | ToolKind::SwitchJoinOrder
         )
     }
     pub fn is_bim(self) -> bool {
@@ -96,34 +129,82 @@ impl ToolKind {
             ToolKind::Floor => "Floor",
             ToolKind::Door => "Door",
             ToolKind::Window => "Window",
+            ToolKind::Subtract => "Subtract",
+            ToolKind::Unite => "Unite",
+            ToolKind::Intersect => "Intersect",
+            ToolKind::CutGeometry => "Cut (keep cutter)",
+            ToolKind::JoinGeometry => "Join Geometry",
+            ToolKind::UnjoinGeometry => "Unjoin Geometry",
+            ToolKind::SwitchJoinOrder => "Switch Join Order",
         }
     }
-    /// Keyboard shortcut (SketchUp defaults; BIM tools on free keys).
-    pub fn shortcut(self) -> &'static str {
-        match self {
-            ToolKind::Select => "Space",
-            ToolKind::Line => "L",
-            ToolKind::Rectangle => "R",
-            ToolKind::Circle => "C",
-            ToolKind::Arc => "A",
-            ToolKind::Tape => "T",
-            ToolKind::Section => "J",
-            ToolKind::Polygon => "G",
-            ToolKind::PushPull => "P",
-            ToolKind::Offset => "F",
-            ToolKind::Move => "M",
-            ToolKind::Rotate => "Q",
-            ToolKind::Scale => "S",
-            ToolKind::Eraser => "E",
-            ToolKind::Paint => "B",
-            ToolKind::Wall => "W",
-            ToolKind::Floor => "U",
-            ToolKind::Door => "D",
-            ToolKind::Window => "N",
+}
+
+/// The command of a join tool (M5-5.2) on two picks: Join Geometry makes a
+/// `join [first, second]` row (the first pick wins, as in Revit); Unjoin
+/// deletes the pair's row; Switch Join Order reverses it in place. `Err`
+/// is the status-line text when the picks have no join to undo or switch.
+pub fn join_command(
+    kind: ToolKind,
+    first: ElementId,
+    second: ElementId,
+    doc: &Document,
+) -> Result<AnyCommand, String> {
+    use ferro_core::model::{join, RelationshipKind};
+    use ferro_core::ops::relationship_commands::{
+        CreateRelationship, DeleteRelationship, SetRelationship,
+    };
+    if kind == ToolKind::JoinGeometry {
+        return Ok(CreateRelationship {
+            kind: RelationshipKind::Join,
+            elements: vec![first, second],
+            phase: None,
         }
+        .into());
     }
-    pub fn icon(self) -> &'static str {
-        self.shortcut()
+    let row = join::join_between(doc, first, second)
+        .ok_or_else(|| "These two elements are not joined.".to_string())?;
+    let relationship = row.uid.to_string();
+    Ok(match kind {
+        ToolKind::UnjoinGeometry => DeleteRelationship { relationship }.into(),
+        _ => SetRelationship {
+            relationship,
+            elements: None,
+            reverse: true,
+        }
+        .into(),
+    })
+}
+
+/// The command of a solid tool: `target` picked first, then `other`.
+pub fn solid_command(kind: ToolKind, target: ElementId, other: ElementId) -> AnyCommand {
+    use ferro_core::model::RelationshipKind;
+    use ferro_core::ops::relationship_commands::CreateRelationship;
+    match kind {
+        ToolKind::Unite => UniteForms {
+            target,
+            other,
+            keep_other: false,
+        }
+        .into(),
+        ToolKind::Intersect => IntersectForms {
+            target,
+            other,
+            keep_other: false,
+        }
+        .into(),
+        ToolKind::CutGeometry => CreateRelationship {
+            kind: RelationshipKind::Cut,
+            elements: vec![other, target],
+            phase: None,
+        }
+        .into(),
+        _ => SubtractForms {
+            target,
+            cutter: other,
+            keep_cutter: false,
+        }
+        .into(),
     }
 }
 
@@ -194,12 +275,9 @@ pub enum ToolEvent {
     Select(SelectOp),
 }
 
-/// A section plane: a point on it and the normal of the side cut away.
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct SectionPlane {
-    pub point: Point3,
-    pub normal: UnitVec3,
-}
+/// A section plane: a point on it and the normal of the side cut away
+/// (the same type views store, M5-22).
+pub use ferro_core::model::SectionPlane;
 
 /// Parameter along the line `start + t·dir` of the point closest to `ray`.
 /// `None` when the ray runs along the line.
@@ -326,6 +404,8 @@ pub struct ToolState {
     tape: Option<Point3>,
     /// Section Plane: the clicked face (point and outward normal).
     section: Option<SectionPlane>,
+    /// Solid tools: the target picked first.
+    solid_target: Option<ElementId>,
 }
 
 fn is_point_snap(k: SnapKind) -> bool {
@@ -357,26 +437,6 @@ fn on_plane(ctx: &ToolCtx, plane: &DrawPlane) -> Option<Point3> {
         }
     }
     ctx.snap.map(|s| plane.project(s.point))
-}
-
-/// Parse "4000", "4m", "4000,3000", "4m;3m".
-pub fn parse_lengths(text: &str) -> Result<Vec<f64>, String> {
-    let parts: Vec<&str> = text
-        .split([',', ';'])
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
-        .collect();
-    if parts.is_empty() {
-        return Err("type a value, e.g. 3000 or 3m".into());
-    }
-    parts
-        .iter()
-        .map(|p| {
-            Length::parse(p)
-                .map(|l| l.mm())
-                .ok_or_else(|| format!("cannot read {p:?}"))
-        })
-        .collect()
 }
 
 /// The face of Form `element` whose plane holds every point of `pts`, with
@@ -507,6 +567,7 @@ impl ToolState {
             arc: Vec::new(),
             tape: None,
             section: None,
+            solid_target: None,
         }
     }
 
@@ -521,6 +582,7 @@ impl ToolState {
             || self.offset.is_some()
             || self.move_base.is_some()
             || self.pivot.is_some()
+            || self.solid_target.is_some()
     }
 
     pub fn cancel(&mut self) {
@@ -929,14 +991,18 @@ impl ToolState {
 
     /// Live measurement shown in the value box.
     pub fn measurement(&self, ctx: &ToolCtx) -> String {
-        let m = |x: f64| format!("{:.0}", x);
+        let units = &ctx.doc.project().settings.units;
+        let m = |x: f64| crate::units::length(units, x);
         match self.kind {
             ToolKind::Rectangle => (|| {
                 let (f, plane) = (self.rect_first?, self.plane?);
                 let p = on_plane(ctx, &plane)?;
                 let (a0, b0) = plane.local(f);
                 let (a1, b1) = plane.local(p);
-                Some(format!("{}, {}", m((a1 - a0).abs()), m((b1 - b0).abs())))
+                Some(crate::units::lengths(
+                    units,
+                    &[(a1 - a0).abs(), (b1 - b0).abs()],
+                ))
             })()
             .unwrap_or_default(),
             ToolKind::Tape => (|| {
@@ -973,7 +1039,7 @@ impl ToolState {
                 .unwrap_or_default(),
             ToolKind::Rotate => self
                 .rotate_angle(ctx)
-                .map(|a| format!("{:.1}°", a.to_degrees()))
+                .map(|a| crate::units::angle(units, a))
                 .unwrap_or_default(),
             ToolKind::Scale => self
                 .scale_factor(ctx)
@@ -1035,6 +1101,20 @@ impl ToolState {
             ToolKind::Floor => "Click the next corner. Click the first point or press Enter to finish.",
             ToolKind::Door => "Hover a wall and click to place a 900 × 2100 door.",
             ToolKind::Window => "Hover a wall and click to place a 1200 × 1200 window (sill 900).",
+            ToolKind::Subtract if self.solid_target.is_none() => "Click the Form to cut (the target).",
+            ToolKind::Subtract => "Click the Form to cut away: it is subtracted and deleted.",
+            ToolKind::Unite if self.solid_target.is_none() => "Click the Form to keep (the target).",
+            ToolKind::Unite => "Click the Form to add: it is united with the target and deleted.",
+            ToolKind::Intersect if self.solid_target.is_none() => "Click the Form to keep (the target).",
+            ToolKind::Intersect => "Click the other Form: the target keeps what both share; the other is deleted.",
+            ToolKind::CutGeometry if self.solid_target.is_none() => "Click the element to cut (a wall, floor or Form).",
+            ToolKind::CutGeometry => "Click the cutter: it stays (a Form becomes a hidden void) and the cut follows it when it moves.",
+            ToolKind::JoinGeometry if self.solid_target.is_none() => "Click the element that wins where they overlap (a wall, floor or Form).",
+            ToolKind::JoinGeometry => "Click the element to join: it loses the overlap, the first keeps its shape.",
+            ToolKind::UnjoinGeometry if self.solid_target.is_none() => "Click the first of two joined elements.",
+            ToolKind::UnjoinGeometry => "Click the other element: their join is removed.",
+            ToolKind::SwitchJoinOrder if self.solid_target.is_none() => "Click the first of two joined elements.",
+            ToolKind::SwitchJoinOrder => "Click the other element: the other one now wins the overlap.",
         }
     }
 
@@ -1075,6 +1155,34 @@ impl ToolState {
                 Some(e) => ToolEvent::Commit(DeleteElements { elements: vec![e] }.into()),
                 None => ToolEvent::None,
             },
+            k @ (ToolKind::Subtract
+            | ToolKind::Unite
+            | ToolKind::Intersect
+            | ToolKind::CutGeometry) => {
+                let Some(e) = s.element else {
+                    return ToolEvent::None;
+                };
+                let Some(target) = self.solid_target.filter(|t| *t != e) else {
+                    self.solid_target = Some(e);
+                    return ToolEvent::None;
+                };
+                self.solid_target = None;
+                ToolEvent::Commit(solid_command(k, target, e))
+            }
+            k @ (ToolKind::JoinGeometry | ToolKind::UnjoinGeometry | ToolKind::SwitchJoinOrder) => {
+                let Some(e) = s.element else {
+                    return ToolEvent::None;
+                };
+                let Some(first) = self.solid_target.filter(|t| *t != e) else {
+                    self.solid_target = Some(e);
+                    return ToolEvent::None;
+                };
+                self.solid_target = None;
+                match join_command(k, first, e, ctx.doc) {
+                    Ok(c) => ToolEvent::Commit(c),
+                    Err(m) => ToolEvent::Message(m),
+                }
+            }
             ToolKind::Paint => match (s.element, ctx.material) {
                 (Some(e), Some(m)) => ToolEvent::Commit(
                     SetParameter {
@@ -1112,12 +1220,14 @@ impl ToolState {
                 Some(a) => {
                     self.tape = None;
                     let d = s.point - a;
+                    let u = &ctx.doc.project().settings.units;
+                    let l = |v: f64| crate::units::length(u, v);
                     ToolEvent::Message(format!(
-                        "Distance {:.0} mm  (Δx {:.0}, Δy {:.0}, Δz {:.0})",
-                        d.length(),
-                        d.x,
-                        d.y,
-                        d.z
+                        "Distance {}  (Δx {}, Δy {}, Δz {})",
+                        l(d.length()),
+                        l(d.x),
+                        l(d.y),
+                        l(d.z)
                     ))
                 }
             },
@@ -1479,11 +1589,8 @@ impl ToolState {
         }
         match self.kind {
             ToolKind::Rotate => {
-                let deg: f64 = text
-                    .trim()
-                    .trim_end_matches('°')
-                    .parse()
-                    .map_err(|_| "type an angle in degrees")?;
+                let rad = crate::units::parse_angle(&ctx.doc.project().settings.units, text)
+                    .ok_or("type an angle, e.g. 90 or 90°")?;
                 let c = self.pivot.ok_or("click the centre first")?;
                 self.pivot = None;
                 self.reference = None;
@@ -1491,7 +1598,7 @@ impl ToolState {
                     RotateElements {
                         elements: self.move_elems.clone(),
                         center: c,
-                        angle: Angle::from_deg(deg),
+                        angle: Angle::from_rad(rad),
                     }
                     .into(),
                 ));
@@ -1516,7 +1623,7 @@ impl ToolState {
             }
             _ => {}
         }
-        let vals = parse_lengths(text)?;
+        let vals = crate::units::parse_lengths(&ctx.doc.project().settings.units, text)?;
         match self.kind {
             ToolKind::Rectangle => {
                 let first = self.rect_first.ok_or("click the first corner first")?;
@@ -1693,11 +1800,91 @@ mod tests {
     }
 
     #[test]
+    fn solid_tools_pick_the_target_then_the_other() {
+        use ferro_core::model::RelationshipKind;
+        match solid_command(ToolKind::CutGeometry, ElementId(1), ElementId(2)) {
+            AnyCommand::CreateRelationship(c) => {
+                assert_eq!(c.kind, RelationshipKind::Cut);
+                assert_eq!(c.elements, [ElementId(2), ElementId(1)], "[cutter, cut]");
+                assert_eq!(c.phase, None);
+            }
+            other => panic!("{other:?}"),
+        }
+        assert!(matches!(
+            solid_command(ToolKind::Subtract, ElementId(1), ElementId(2)),
+            AnyCommand::SubtractForms(SubtractForms {
+                target: ElementId(1),
+                cutter: ElementId(2),
+                keep_cutter: false
+            })
+        ));
+        assert!(matches!(
+            solid_command(ToolKind::Unite, ElementId(1), ElementId(2)),
+            AnyCommand::UniteForms(UniteForms {
+                target: ElementId(1),
+                other: ElementId(2),
+                keep_other: false
+            })
+        ));
+        assert!(matches!(
+            solid_command(ToolKind::Intersect, ElementId(1), ElementId(2)),
+            AnyCommand::IntersectForms(IntersectForms {
+                target: ElementId(1),
+                other: ElementId(2),
+                ..
+            })
+        ));
+        assert!(ToolKind::ALL.iter().filter(|k| k.is_solid()).count() == 7);
+        let t = ToolState::new(ToolKind::Unite);
+        assert!(!t.is_active());
+        assert!(t.hint().contains("keep"));
+    }
+
+    #[test]
+    fn join_tools_create_unjoin_and_switch_the_pair_row() {
+        use ferro_core::model::RelationshipKind;
+        use ferro_core::ops::{ExecContext, SequentialIds};
+        let mut s =
+            ferro_core::Session::new(Document::new("Joins"), Box::new(SequentialIds::new(1)));
+        let mut boxed = |x: f64| {
+            let args = serde_json::json!({"origin": [x, 0, 0], "width": 1000, "depth": 1000, "height": 1000});
+            let cmd = AnyCommand::from_tool("create_box", &args).unwrap();
+            let o = s.execute(cmd, &ExecContext::user()).unwrap();
+            serde_json::from_value::<ElementId>(o.output["element"].clone()).unwrap()
+        };
+        let (a, b) = (boxed(0.0), boxed(500.0));
+        // Nothing joined yet: unjoin / switch explain instead of failing.
+        assert!(join_command(ToolKind::UnjoinGeometry, a, b, s.doc()).is_err());
+        let join = join_command(ToolKind::JoinGeometry, a, b, s.doc()).unwrap();
+        match &join {
+            AnyCommand::CreateRelationship(c) => {
+                assert_eq!(c.kind, RelationshipKind::Join);
+                assert_eq!(c.elements, [a, b], "the first pick wins");
+            }
+            other => panic!("{other:?}"),
+        }
+        s.execute(join, &ExecContext::user()).unwrap();
+        // Picked in either order, the pair's row is found.
+        assert!(matches!(
+            join_command(ToolKind::SwitchJoinOrder, b, a, s.doc()).unwrap(),
+            AnyCommand::SetRelationship(r) if r.reverse
+        ));
+        assert!(matches!(
+            join_command(ToolKind::UnjoinGeometry, a, b, s.doc()).unwrap(),
+            AnyCommand::DeleteRelationship(_)
+        ));
+        let t = ToolState::new(ToolKind::JoinGeometry);
+        assert!(t.hint().contains("wins"));
+    }
+
+    #[test]
     fn value_box_parsing() {
-        assert_eq!(parse_lengths("4000,3000").unwrap(), vec![4000.0, 3000.0]);
-        assert_eq!(parse_lengths("4m; 3m").unwrap(), vec![4000.0, 3000.0]);
-        assert!(parse_lengths("abc").is_err());
-        assert!(parse_lengths("  ").is_err());
+        use crate::units::parse_lengths;
+        let u = ferro_core::model::project_settings::ProjectUnits::default();
+        assert_eq!(parse_lengths(&u, "4000,3000"), Ok(vec![4000.0, 3000.0]));
+        assert_eq!(parse_lengths(&u, "4m; 3m"), Ok(vec![4000.0, 3000.0]));
+        assert!(parse_lengths(&u, "abc").is_err());
+        assert!(parse_lengths(&u, "  ").is_err());
     }
 
     #[test]

@@ -12,6 +12,8 @@ pub mod model;
 pub mod ops;
 pub mod topo;
 
-pub use math::{Angle, BoundingBox3, Length, Point2, Point3, Transform, UnitVec3, Vec2, Vec3};
+pub use math::{
+    Angle, BoundingBox3, Length, Point2, Point3, QuantitySpec, Transform, UnitVec3, Vec2, Vec3,
+};
 pub use model::{Category, Document, Element, ElementBody, ElementId, ParamValue, Uid};
 pub use ops::{AnyCommand, ExecContext, Session};

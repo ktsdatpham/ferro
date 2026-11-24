@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+# The one check humans, agents and CI run before a PR (ADR 0003 §5).
+#   scripts/ferro-check          lints + fmt + clippy + tests
+#   scripts/ferro-check --quick  lints + fmt only (seconds)
+# Paste the last lines of its output into the PR description.
+set -euo pipefail
+cd "$(dirname "$0")/.."
+step() { printf '\n== %s\n' "$1"; }
+
+step "structure (glossary, layers, core deps, task tree, API map)"
+python3 scripts/lint.py
+step "python sdk tests"
+python3 -m unittest discover -s python/tests
+step "format"
+cargo fmt --all -- --check
+if [[ "${1:-}" == "--quick" ]]; then
+  echo; echo "ferro-check: quick checks passed"; exit 0
+fi
+step "clippy"
+cargo clippy --workspace --all-targets -- -D warnings
+step "tests"
+cargo test --workspace -q
+step "ferro-cli: build the sample house headless, then self-check it"
+tmp="$(mktemp -d)"
+trap 'rm -rf "$tmp"' EXIT
+cargo run -q -p ferro-cli -- run crates/ferro-cli/tests/scripts/house.json \
+  --out "$tmp/house.fro" --ifc "$tmp/house.ifc" | tail -n 1
+cargo run -q -p ferro-cli -- check "$tmp/house.fro" > "$tmp/check.json" \
+  || { cat "$tmp/check.json"; exit 1; }
+echo "ferro-cli check: ok"
+echo; echo "ferro-check: all checks passed ($(git rev-parse --short HEAD 2>/dev/null || echo no-git))"

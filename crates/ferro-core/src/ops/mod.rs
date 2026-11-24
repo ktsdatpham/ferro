@@ -10,18 +10,59 @@
 
 pub mod bim_commands;
 pub mod commands;
+pub mod design_option_commands;
 mod events;
 mod failure;
 pub mod form_commands;
+pub mod geometry_source;
+pub mod material_commands;
+pub mod parameter_commands;
+pub mod phase_commands;
+pub mod pin_commands;
+pub mod project_commands;
+pub mod relationship_commands;
 mod session;
 mod transaction;
+pub mod view_commands;
 
 pub use commands::{AnyCommand, Command, CommandOutput};
 pub use events::DocumentChanged;
 pub use failure::{CommandError, Failure, Severity};
-pub use session::{Actor, ActorKind, ExecContext, JournalEntry, Outcome, Session};
+pub use session::{Actor, ActorKind, ExecContext, JournalEntry, Outcome, Session, SubTransaction};
 pub use transaction::{IdSource, SequentialIds, Transaction};
 #[cfg(test)]
 mod bim_tests;
 #[cfg(test)]
+mod change_tests;
+#[cfg(test)]
+mod cut_tests;
+#[cfg(test)]
+mod design_option_tests;
+#[cfg(test)]
 mod form_tests;
+#[cfg(test)]
+mod fuzz_tests;
+#[cfg(test)]
+mod geometry_source_tests;
+#[cfg(test)]
+mod join_tests;
+#[cfg(test)]
+mod kernel_tests;
+#[cfg(test)]
+mod material_tests;
+#[cfg(test)]
+mod phase_tests;
+#[cfg(test)]
+mod pin_tests;
+#[cfg(test)]
+mod project_tests;
+#[cfg(test)]
+mod relationship_tests;
+#[cfg(test)]
+mod scenario_common_tests;
+#[cfg(test)]
+mod scenario_tests;
+#[cfg(test)]
+mod stress_tests;
+#[cfg(test)]
+mod view_tests;

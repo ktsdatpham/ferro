@@ -6,6 +6,15 @@ on:
   pull_request:
 
 jobs:
+  lint:
+    # Glossary, layers, ferro-core deps, task tree, API map, generated Python
+    # SDK freshness (scripts/lint.py), then the Python SDK tests.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 scripts/lint.py
+      - run: python3 -m unittest discover -s python/tests
+
   test:
     strategy:
       fail-fast: false
@@ -23,6 +32,12 @@ jobs:
       - run: cargo fmt --all -- --check
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - run: cargo test --workspace
+      # M5-18: build the sample house headless and self-check it (ferro-cli).
+      - name: ferro-cli house + check
+        if: runner.os == 'Linux'
+        run: |
+          cargo run -q -p ferro-cli -- run crates/ferro-cli/tests/scripts/house.json --out "$RUNNER_TEMP/house.fro" --ifc "$RUNNER_TEMP/house.ifc"
+          cargo run -q -p ferro-cli -- check "$RUNNER_TEMP/house.fro"
 
   wasm:
     # D-35: ferro-core must always build for the web.

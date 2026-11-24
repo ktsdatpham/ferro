@@ -415,6 +415,50 @@ impl Body {
         Ok(self.face_area_vector(f)?.length())
     }
 
+    /// Triangles covering face `f` (holes supported), as vertex ids,
+    /// counter-clockwise about the face normal: ear clipping in the face
+    /// plane. Collinear boundary vertices may be left out of every triangle.
+    ///
+    /// Fails with `NotFound` for an unknown face and `DegenerateLoop` when
+    /// the face cannot be triangulated.
+    pub fn face_triangles(&self, f: FaceId) -> Result<Vec<[VertexId; 3]>, TopoError> {
+        let face = self.face(f)?;
+        let n = self.face_normal(f)?;
+        let mut ids = self.loop_vertices(face.outer);
+        let first = self
+            .point(*ids.first().ok_or(TopoError::DegenerateLoop)?)
+            .ok_or(TopoError::DegenerateLoop)?;
+        let plane = Plane::from_origin_normal(first, n);
+        let mut holes = Vec::new();
+        for h in &face.holes {
+            holes.push(ids.len());
+            ids.extend(self.loop_vertices(*h));
+        }
+        let pts: Vec<Point3> = ids
+            .iter()
+            .map(|v| self.point(*v).ok_or(TopoError::DegenerateLoop))
+            .collect::<Result<_, _>>()?;
+        let flat: Vec<f64> = pts
+            .iter()
+            .flat_map(|p| {
+                let q = plane.to_local(*p);
+                [q.x, q.y]
+            })
+            .collect();
+        let idx = earcutr::earcut(&flat, &holes, 2).map_err(|_| TopoError::DegenerateLoop)?;
+        let mut tris = Vec::with_capacity(idx.len() / 3);
+        for t in idx.chunks_exact(3) {
+            let (a, b, c) = (pts[t[0]], pts[t[1]], pts[t[2]]);
+            // earcut output winding is not guaranteed; orient to the normal.
+            if (b - a).cross(c - a).dot(n.as_vec()) >= 0.0 {
+                tris.push([ids[t[0]], ids[t[1]], ids[t[2]]]);
+            } else {
+                tris.push([ids[t[0]], ids[t[2]], ids[t[1]]]);
+            }
+        }
+        Ok(tris)
+    }
+
     /// Faces adjacent to `f` across its outer-loop edges, in loop order
     /// (`None` for open edges).
     pub fn neighbors(&self, f: FaceId) -> Result<Vec<Option<FaceId>>, TopoError> {
@@ -552,7 +596,10 @@ impl Body {
 
     // ---------------------------------------------------------------- checks
 
-    /// Structural validity (links consistent, manifold, planar faces planar).
+    /// Validity of the body: links consistent, manifold, planar faces planar,
+    /// no degenerate face, and no self-intersection (faces sharing no vertex
+    /// do not touch; exact predicates, D-53). Fails with the matching
+    /// `TopoError` (`SelfIntersecting` for the last rule).
     pub fn validate(&self) -> Result<(), TopoError> {
         let corrupt = |s: String| Err(TopoError::Corrupt(s));
         for (hid, h) in &self.half_edges {
@@ -592,6 +639,87 @@ impl Body {
             }
             if self.face_area(*fid)? < tol::VERTEX_TOL * tol::VERTEX_TOL {
                 return Err(TopoError::DegenerateLoop);
+            }
+        }
+        self.check_self_intersection()
+    }
+
+    /// Faces meet only along shared edges and vertices (D-11): two planar
+    /// faces that share no vertex must not touch at all. Decided with exact
+    /// predicates (D-53) on the faces' triangles, after a sweep over face
+    /// bounding boxes and a per-triangle box test.
+    ///
+    /// Limitations: faces sharing a vertex are not compared, curved faces
+    /// are skipped, and so are faces that cannot be triangulated.
+    fn check_self_intersection(&self) -> Result<(), TopoError> {
+        struct Item {
+            face: FaceId,
+            verts: std::collections::BTreeSet<VertexId>,
+            tris: Vec<([Point3; 3], BoundingBox3)>,
+            bb: BoundingBox3,
+        }
+        let mut items: Vec<Item> = Vec::new();
+        for (fid, f) in &self.faces {
+            if !f.surface.is_planar() {
+                continue;
+            }
+            let Ok(tris) = self.face_triangles(*fid) else {
+                continue;
+            };
+            let mut out = Vec::with_capacity(tris.len());
+            for t in tris {
+                let (Some(a), Some(b), Some(c)) =
+                    (self.point(t[0]), self.point(t[1]), self.point(t[2]))
+                else {
+                    continue;
+                };
+                let p = [a, b, c];
+                if crate::geom::predicates::triangle_is_degenerate(p) {
+                    continue;
+                }
+                if let Some(bb) = BoundingBox3::from_points(p) {
+                    out.push((p, bb));
+                }
+            }
+            let Some(bb) = out.iter().map(|t| t.1).reduce(BoundingBox3::union) else {
+                continue;
+            };
+            let verts = std::iter::once(&f.outer)
+                .chain(&f.holes)
+                .flat_map(|l| self.loop_vertices(*l))
+                .collect();
+            items.push(Item {
+                face: *fid,
+                verts,
+                tris: out,
+                bb,
+            });
+        }
+        // Sweep along x (stable sort: deterministic order).
+        items.sort_by(|a, b| a.bb.min.x.total_cmp(&b.bb.min.x));
+        for i in 0..items.len() {
+            let a = &items[i];
+            for b in &items[i + 1..] {
+                if b.bb.min.x > a.bb.max.x {
+                    break;
+                }
+                if !a.bb.intersects(b.bb) || a.verts.intersection(&b.verts).next().is_some() {
+                    continue;
+                }
+                for (ta, ba) in &a.tris {
+                    for (tb, bbx) in &b.tris {
+                        if ba.intersects(*bbx)
+                            && crate::geom::predicates::triangles_intersect(*ta, *tb)
+                        {
+                            let (x, y) = if a.face < b.face {
+                                (a.face, b.face)
+                            } else {
+                                (b.face, a.face)
+                            };
+                            return Err(TopoError::SelfIntersecting(format!("faces {x} and {y}")));
+                        }
+                    }
+                }
             }
         }
         Ok(())
@@ -738,6 +866,62 @@ mod tests {
         b.transform(&Transform::mirror(Point3::ORIGIN, UnitVec3::X));
         b.validate_solid().unwrap();
         assert!(b.volume() > 0.0);
+    }
+
+    /// Two boxes as one body (two shells), the second shifted by `dx`.
+    fn two_boxes(dx: f64) -> Body {
+        let (a, _) = box_body(1000.0, 1000.0, 1000.0);
+        let mut p: Vec<Point3> = Vec::new();
+        let mut faces: Vec<Vec<usize>> = Vec::new();
+        for shift in [0.0, dx] {
+            let mut map = std::collections::BTreeMap::new();
+            for (v, q) in a.vertices() {
+                map.insert(v, p.len());
+                p.push(q + Vec3::new(shift, 0.0, 0.0));
+            }
+            for s in a.face_specs() {
+                faces.push(s.outer.iter().map(|v| map[v]).collect());
+            }
+        }
+        Body::from_polygons(&p, &faces).unwrap().0
+    }
+
+    #[test]
+    fn interpenetrating_shells_are_self_intersecting() {
+        let b = two_boxes(500.0);
+        assert!(b.is_closed() && b.volume() > 0.0);
+        assert!(matches!(
+            b.validate_solid(),
+            Err(TopoError::SelfIntersecting(_))
+        ));
+        assert_eq!(
+            b.validate().map_err(|e| e.code()),
+            Err("ferro.topo.self_intersecting")
+        );
+    }
+
+    #[test]
+    fn separate_shells_are_valid_and_touching_ones_are_not() {
+        two_boxes(2000.0).validate_solid().unwrap();
+        // Tolerance edge: exactly touching (coplanar faces, no shared vertex)
+        // vs a hair apart.
+        assert!(matches!(
+            two_boxes(1000.0).validate(),
+            Err(TopoError::SelfIntersecting(_))
+        ));
+        two_boxes(1000.0 + 1e-9).validate_solid().unwrap();
+    }
+
+    #[test]
+    fn face_triangles_follow_the_face_normal() {
+        let (b, ids) = box_body(1000.0, 1000.0, 1000.0);
+        let t = b.face_triangles(ids[1]).unwrap();
+        assert_eq!(t.len(), 2);
+        let n = b.face_normal(ids[1]).unwrap().as_vec();
+        for tri in t {
+            let p: Vec<Point3> = tri.iter().map(|v| b.point(*v).unwrap()).collect();
+            assert!((p[1] - p[0]).cross(p[2] - p[0]).dot(n) > 0.0);
+        }
     }
 
     #[test]

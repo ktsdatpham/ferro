@@ -29,12 +29,14 @@ math     Point3, Vec3, UnitVec3, Transform, BoundingBox3, Length, Angle, tol
 | `ferro-core` | `serde`, minimal math deps | Everything in 7.1 |
 | `ferro-io` | `ferro-core`, `rusqlite` | `.fro` / `.fro.json` files, OBJ / glTF export |
 | `ferro-snap` | `ferro-core` | Inference (snapping) |
+| `ferro-scene` | `ferro-core` | Display scene derived from a document snapshot (ADR 0004 §6): draw records, shared meshes for translated copies, incremental sync; pure, no GPU |
 | `ferro-tools` | `ferro-core` | Tool schemas, unit normalisation, dispatch, Ferro Link protocol (ADR 0001) |
-| `ferro-mcp` | `ferro-core`, `ferro-io`, `ferro-tools` | MCP server; forwards to the open app over Ferro Link |
+| `ferro-mcp` | `ferro-core`, `ferro-io`, `ferro-tools` | MCP server; forwards to the open app over Ferro Link. Its tool host (`tools::Server`) is also a library, and `python` runs `run_python` scripts for it and for the app, and stops them (`cancel_python`; process spawning and killing stay out of `ferro-core`); `plugins` loads plugins (ADR 0009: manifests, keys, hot-reload watch, template, `.zip` install) and runs their commands through `python` |
+| `ferro-cli` | `ferro-core`, `ferro-io`, `ferro-mcp` | Headless command line: run tool scripts, `info`, `check` (self-acceptance), `bench` (D-62) |
 | `ferro-revit` | `ferro-core` | Revit edge: Ferro → Revit operations (feet), Revit → Ferro import (ADR 0002) |
 | `ferro-ffi` | `ferro-core`, `ferro-io`, `ferro-revit` | C ABI for the Revit add-in and native shells |
 | `ferro-render` (M1) | `ferro-core`, `wgpu` | Turns elements into GPU meshes, camera-relative |
-| `ferro-app` | all above, `eframe` / `wgpu`, `ureq` | Tools, selection, UI, input, Ferro Link server, AI chat |
+| `ferro-app` | all above (incl. `ferro-mcp` for `run_python`), `eframe` / `wgpu`, `ureq` | Tools, selection, UI, input, Ferro Link server, AI chat |
 
 Rules:
 

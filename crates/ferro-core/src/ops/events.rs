@@ -30,6 +30,27 @@ impl DocumentChanged {
                 c.deleted.push(e.id);
             }
         }
+        // A changed relationship changes the generated geometry of the
+        // elements it links (a join, a cut): report them as modified.
+        let mut touched: Vec<ElementId> = Vec::new();
+        for r in after.relationships() {
+            if before.relationship(r.uid) != Some(r) {
+                touched.extend(&r.elements);
+            }
+        }
+        for r in before.relationships() {
+            if after.relationship(r.uid).is_none() {
+                touched.extend(&r.elements);
+            }
+        }
+        touched.sort();
+        touched.dedup();
+        for id in touched {
+            if after.contains(id) && before.contains(id) && !c.modified.contains(&id) {
+                c.modified.push(id);
+            }
+        }
+        c.modified.sort();
         c
     }
 

@@ -1,0 +1,103 @@
+"""Ferro Python SDK (ADR 0005): script the Ferro app open on this computer.
+
+    import ferro
+    doc = ferro.connect()
+    walls = doc.create_walls([(0, 0), ("8m", 0), ("8m", "6m"), (0, "6m")], closed=True, height="3m")
+    walls[0].add_door(position="2m")
+    print([w.refresh().volume_m3 for w in doc.walls])
+
+``ferro.tools`` has one generated function per Ferro tool (the same API as
+MCP); ``Document`` and the element wrappers are a small object layer on top.
+Pure Python >= 3.9, standard library only (numpy optional, for arrays).
+"""
+
+__version__ = "0.0.0"
+
+from typing import Optional  # noqa: E402
+
+from . import _runtime  # noqa: E402
+from . import _tools as tools  # noqa: E402
+from .document import (  # noqa: E402
+    Document,
+    Element,
+    Selection,
+    Floor,
+    FloorType,
+    Level,
+    Material,
+    Opening,
+    Wall,
+    WallType,
+    as_array,
+)
+from .link import FerroError, Link  # noqa: E402
+
+__all__ = [
+    "Document",
+    "Element",
+    "FerroError",
+    "Floor",
+    "FloorType",
+    "Level",
+    "Link",
+    "Material",
+    "Opening",
+    "Selection",
+    "Wall",
+    "WallType",
+    "as_array",
+    "ask",
+    "connect",
+    "tools",
+]
+
+
+def connect(home: Optional[str] = None, agent: str = "python", timeout: float = 120.0) -> Document:
+    """Connect to the open Ferro app and return its :class:`Document`.
+
+    Args:
+        home: Ferro folder holding ``link.json`` (default ``$FERRO_HOME``, else
+            ``~/.ferro``).
+        agent: Name recorded in the journal for changes made by this script.
+        timeout: Seconds to wait for each answer.
+
+    Raises:
+        FerroError: ``ferro.link.not_open`` when the app is not running,
+            ``ferro.link.unreachable`` when it does not answer,
+            ``ferro.link.invalid_token`` when it refuses the token.
+
+    The returned document also becomes the default target of ``ferro.tools``.
+    Inside ``run_python`` the arguments are ignored and the script's own
+    document is returned (its calls belong to the run's transaction group).
+    """
+    run = _runtime.run_link()
+    if run is not None:
+        return Document(run)
+    link = Link.find(home, agent=agent, timeout=timeout)
+    link.call("link_status", {})  # check that the app answers and accepts the token
+    _runtime.set_default(link)
+    return Document(link)
+
+
+def ask(prompt: str, default: Optional[str] = None) -> Optional[str]:
+    """Ask the user for one value in a small dialog of the Ferro app.
+
+        height = ferro.ask("Height", default="3m")
+        if height is None:
+            return  # the user pressed Cancel
+
+    Returns the text the user typed (``default`` is filled in), or ``None``
+    when the user cancelled. Only a script Ferro runs (``run_python`` or a
+    plugin command) can ask: elsewhere, and in headless Ferro (``ferro-mcp``
+    or ``ferro-cli`` without the app), ``default`` is returned at once
+    (as text; ``None`` stays ``None``). The script's time limit is paused
+    while the dialog is open. Sends the Ferro Link request
+    ``get_user_input {prompt, default}``.
+    """
+    text = None if default is None else str(default)
+    run = _runtime.run_link()
+    if run is None:
+        return text
+    body = run.call("get_user_input", {"prompt": str(prompt), "default": text})
+    value = body.get("value") if isinstance(body, dict) else None
+    return None if value is None else str(value)

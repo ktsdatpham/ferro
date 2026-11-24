@@ -1,0 +1,19 @@
+[
+  {"id": "l1", "tool": "create_level", "args": {"name": "Ground", "elevation": 0}},
+  {"id": "l2", "tool": "create_level", "args": {"name": "Level 2", "elevation": "3m"}},
+  {"tool": "set_level_elevation", "args": {"level": {"$ref": "l2.result.element"}, "elevation": "3.2m"}},
+  {"tool": "set_project_name", "args": {"name": "Corpus pins", "auto_pin_datums": true}},
+  {"id": "l3", "tool": "create_level", "args": {"name": "Roof", "elevation": "6m"}},
+  {"id": "w", "tool": "create_walls", "args": {"points": [[0, 0], ["8m", 0], ["8m", "6m"]],
+    "level": {"$ref": "l1.result.element"}, "top_level": {"$ref": "l2.result.element"}}},
+  {"id": "b", "tool": "create_box", "args": {"origin": ["10m", 0, 0], "width": "1m", "depth": "1m", "height": "1m"}},
+  {"tool": "set_pinned", "args": {"elements": [{"$ref": "w.result.elements.0"}, {"$ref": "b.result.element"}], "pinned": true}},
+  {"tool": "set_name", "args": {"element": {"$ref": "w.result.elements.0"}, "name": "South (pinned)"}},
+  {"tool": "set_wall", "args": {"wall": {"$ref": "w.result.elements.0"}, "top_level": {"$ref": "l3.result.element"}}},
+  {"tool": "set_parameter", "args": {"element": {"$ref": "b.result.element"}, "key": "ferro.common.comments", "value": {"type": "text", "value": "pinned box"}}},
+  {"tool": "scale_elements", "args": {"elements": [{"$ref": "b.result.element"}], "center": ["10m", 0, 0], "factors": [2, 1, 1]}},
+  {"tool": "create_opening", "args": {"wall": {"$ref": "w.result.elements.0"}, "kind": "door", "position": "2m"}},
+  {"tool": "move_elements", "args": {"elements": [{"$ref": "w.result.elements.1"}], "vector": [0, "500mm", 0]}},
+  {"tool": "set_pinned", "args": {"elements": [{"$ref": "b.result.element"}], "pinned": false}},
+  {"tool": "move_elements", "args": {"elements": [{"$ref": "b.result.element"}], "vector": ["1m", 0, 0]}}
+]

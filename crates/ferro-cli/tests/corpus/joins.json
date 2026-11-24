@@ -1,0 +1,20 @@
+[
+  {"id": "l1", "tool": "create_level", "args": {"name": "Ground", "elevation": 0}},
+  {"id": "mitre", "tool": "create_walls", "args": {"points": [[0, 0], ["4m", 0], ["4m", "4m"]], "level": {"$ref": "l1.result.element"}}},
+  {"id": "butt", "tool": "create_walls", "args": {"points": [["8m", 0], ["12m", 0], ["12m", "4m"]], "level": {"$ref": "l1.result.element"}}},
+  {"id": "butt_row", "tool": "create_relationship", "args": {"kind": "join", "elements": [{"$ref": "butt.result.elements.1"}, {"$ref": "butt.result.elements.0"}]}},
+  {"id": "square", "tool": "create_walls", "args": {"points": [["16m", 0], ["20m", 0], ["20m", "4m"]], "level": {"$ref": "l1.result.element"}}},
+  {"tool": "set_wall", "args": {"wall": {"$ref": "square.result.elements.1"}, "join_start": "disallow"}},
+  {"id": "bar", "tool": "create_wall", "args": {"start": [0, "8m", 0], "end": ["6m", "8m", 0], "level": {"$ref": "l1.result.element"}, "name": "T bar"}},
+  {"id": "stem", "tool": "create_wall", "args": {"start": ["3m", "8m", 0], "end": ["3m", "11m", 0], "level": {"$ref": "l1.result.element"}, "name": "T stem"}},
+  {"id": "stem_row", "tool": "create_relationship", "args": {"kind": "join", "elements": [{"$ref": "bar.result.element"}, {"$ref": "stem.result.element"}]}},
+  {"tool": "set_relationship", "args": {"relationship": {"$ref": "stem_row.result.relationship"}, "reverse": true}},
+  {"id": "slab_wall", "tool": "create_wall", "args": {"start": ["8m", "8m", 0], "end": ["12m", "8m", 0], "level": {"$ref": "l1.result.element"}, "name": "Wall under slab"}},
+  {"id": "slab", "tool": "create_floor", "args": {"points": [["7.5m", "7m"], ["12.5m", "7m"], ["12.5m", "9m"], ["7.5m", "9m"]], "offset": 3100, "level": {"$ref": "l1.result.element"}, "name": "Slab on wall"}},
+  {"tool": "create_relationship", "args": {"kind": "join", "elements": [{"$ref": "slab.result.element"}, {"$ref": "slab_wall.result.element"}]}},
+  {"id": "column", "tool": "create_box", "args": {"origin": ["16.9m", "7.8m", 0], "width": 400, "depth": 400, "height": 3000, "name": "Column"}},
+  {"id": "col_wall", "tool": "create_wall", "args": {"start": ["16m", "8m", 0], "end": ["20m", "8m", 0], "level": {"$ref": "l1.result.element"}, "name": "Wall through column"}},
+  {"tool": "create_relationship", "args": {"kind": "join", "elements": [{"$ref": "column.result.element"}, {"$ref": "col_wall.result.element"}]}},
+  {"id": "frozen", "tool": "create_walls", "args": {"points": [[0, "14m"], ["4m", "14m"], ["4m", "18m"]], "level": {"$ref": "l1.result.element"}}},
+  {"tool": "set_geometry_source", "args": {"element": {"$ref": "frozen.result.elements.0"}, "source": "direct"}}
+]

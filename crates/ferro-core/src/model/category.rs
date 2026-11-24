@@ -25,10 +25,19 @@ pub enum Category {
     Furniture,
     GenericModels,
     Materials,
+    /// Construction stages (ADR 0006). Not IFC products: a phase maps to
+    /// `Pset_*Common.Status` on the exported elements.
+    Phases,
+    /// Views (D-33, M5-22): `View3D`, `PlanView`, `SectionView`. Not IFC
+    /// products and not exported.
+    Views,
+    /// Option sets and design options (ADR 0006). Not IFC products: the
+    /// export writes one combination.
+    DesignOptions,
 }
 
 impl Category {
-    pub const ALL: [Category; 17] = [
+    pub const ALL: [Category; 20] = [
         Category::Levels,
         Category::Grids,
         Category::ReferencePlanes,
@@ -46,6 +55,9 @@ impl Category {
         Category::Furniture,
         Category::GenericModels,
         Category::Materials,
+        Category::Phases,
+        Category::Views,
+        Category::DesignOptions,
     ];
 
     /// Revit `BuiltInCategory` name.
@@ -68,6 +80,9 @@ impl Category {
             Category::Furniture => "OST_Furniture",
             Category::GenericModels => "OST_GenericModel",
             Category::Materials => "OST_Materials",
+            Category::Phases => "OST_Phases",
+            Category::Views => "OST_Views",
+            Category::DesignOptions => "OST_DesignOptions",
         }
     }
 
@@ -91,7 +106,24 @@ impl Category {
             Category::Furniture => "IfcFurniture",
             Category::GenericModels => "IfcBuildingElementProxy",
             Category::Materials => "IfcMaterial",
+            // Not an IFC product: exported as `Pset_*Common.Status` values
+            // (ADR 0006); `IfcWorkSchedule` is not used.
+            Category::Phases => "IfcPropertySingleValue",
+            // Not exported: views have no geometry and IFC4 has no view
+            // product. `IfcAnnotation` is the nearest presentation class.
+            Category::Views => "IfcAnnotation",
+            // Not exported: IFC gets one combination (ADR 0006).
+            Category::DesignOptions => "IfcGroup",
         }
+    }
+
+    /// Datums: levels, grids and reference planes (ADR 0008 §4). New datums
+    /// are created pinned while `ProjectSettings::auto_pin_datums` is on.
+    pub fn is_datum(&self) -> bool {
+        matches!(
+            self,
+            Category::Levels | Category::Grids | Category::ReferencePlanes
+        )
     }
 
     /// Categories a `Form` may be classified as (D-12).
@@ -103,6 +135,9 @@ impl Category {
                 | Category::ReferencePlanes
                 | Category::Rooms
                 | Category::Materials
+                | Category::Phases
+                | Category::Views
+                | Category::DesignOptions
         )
     }
 }

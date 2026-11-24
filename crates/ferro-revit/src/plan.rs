@@ -4,16 +4,20 @@ use crate::{ft, signature};
 use ferro_core::algo::body_mesh;
 use ferro_core::geom::Curve;
 use ferro_core::model::bim::{
-    CompoundStructure, LayerFunction, LocationLine, OpeningKind, WallTop,
+    CompoundStructure, LayerFunction, LocationLine, OpeningKind, WallJoin, WallTop,
 };
-use ferro_core::model::generate;
-use ferro_core::model::{Document, Element, ElementBody};
+use ferro_core::model::material::{PhysicalAsset, ThermalAsset};
+use ferro_core::model::{generate, join, Document, Element, ElementBody};
 use ferro_core::Point2;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 /// Uid of the level created in Revit for elements that have no level.
 pub const DEFAULT_LEVEL_UID: &str = "ferro:level:0";
+
+/// Uid the add-in tags Revit's `SiteLocation` with (one per project). It is
+/// never deleted: clearing the location in Ferro leaves Revit's as it was.
+pub const SITE_LOCATION_UID: &str = "ferro:site_location";
 
 /// What the Revit model already holds: one record per element tagged with a
 /// Ferro uid (the add-in scans the model to build this).
@@ -59,23 +63,39 @@ pub struct OpCurve {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "op", rename_all = "snake_case")]
 pub enum RevitOp {
+    /// Something the add-in should show the user; changes nothing (e.g.
+    /// design options other than the primary ones are not sent yet).
+    Warning { code: String, message: String },
     /// Delete the Revit element (skip silently if it is already gone).
     Delete {
         ferro_uid: String,
         unique_id: String,
     },
+    /// Create / update a material: colour, and when the Ferro material has
+    /// them, a Thermal and a Physical (structural) asset. Asset values are
+    /// SI as in `ferro_core::model::material` (not feet); the add-in converts
+    /// them with `UnitUtils`. Absent assets are omitted from the JSON, so
+    /// materials without assets keep their M3 signature.
     Material {
         uid: String,
         signature: String,
         name: String,
         /// sRGB 0–255.
         color: [u8; 3],
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        thermal: Option<ThermalAsset>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        physical: Option<PhysicalAsset>,
     },
     Level {
         uid: String,
         signature: String,
         name: String,
         elevation: f64,
+        /// `Element.Pinned` (ADR 0008). Omitted when false, so unpinned
+        /// elements keep their signature.
+        #[serde(default, skip_serializing_if = "is_false")]
+        pinned: bool,
     },
     /// Duplicate a basic wall type and set its compound structure.
     WallType {
@@ -113,6 +133,38 @@ pub enum RevitOp {
         /// `WallLocationLine` value: 0 centerline, 1 core centerline,
         /// 2 finish exterior, 3 finish interior.
         location_line: i32,
+        /// `WallUtils.DisallowWallJoinAtEnd(wall, 0)` when the start's join
+        /// state is `disallow` (M5-5.2), else `AllowWallJoinAtEnd`. Omitted
+        /// when false, so walls that join keep their signature.
+        #[serde(default, skip_serializing_if = "is_false")]
+        disallow_join_start: bool,
+        /// The same for the end (`DisallowWallJoinAtEnd(wall, 1)`).
+        #[serde(default, skip_serializing_if = "is_false")]
+        disallow_join_end: bool,
+        /// Phase names for `PHASE_CREATED` / `PHASE_DEMOLISHED` (looked up
+        /// by name in Revit). Omitted when the element has no phases, so
+        /// unphased elements keep their signature.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        phase_created: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        phase_demolished: Option<String>,
+        /// `Element.Pinned` (ADR 0008). Omitted when false, so unpinned
+        /// elements keep their signature.
+        #[serde(default, skip_serializing_if = "is_false")]
+        pinned: bool,
+    },
+    /// A `join` row between two native elements (walls, floors; M5-5.2):
+    /// `JoinGeometryUtils.JoinGeometry(first, second)` unless they are
+    /// joined, then `SwitchJoinOrder` unless `first` is the cutting element
+    /// (`IsCuttingElementInJoin`). `uid` is the row's uid; nothing is tagged
+    /// in Revit, so the op is re-sent on every sync and must stay
+    /// idempotent. Wall pairs whose ends meet are left to Revit's own wall
+    /// joins.
+    JoinGeometry {
+        uid: String,
+        signature: String,
+        first_uid: String,
+        second_uid: String,
     },
     /// `Floor.Create(loops, type, level)`, then `FLOOR_HEIGHTABOVELEVEL_PARAM`.
     /// First loop is the outline (counter-clockwise), then holes (clockwise),
@@ -125,6 +177,17 @@ pub enum RevitOp {
         level_uid: String,
         loops: Vec<Vec<[f64; 3]>>,
         offset: f64,
+        /// Phase names for `PHASE_CREATED` / `PHASE_DEMOLISHED` (looked up
+        /// by name in Revit). Omitted when the element has no phases, so
+        /// unphased elements keep their signature.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        phase_created: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        phase_demolished: Option<String>,
+        /// `Element.Pinned` (ADR 0008). Omitted when false, so unpinned
+        /// elements keep their signature.
+        #[serde(default, skip_serializing_if = "is_false")]
+        pinned: bool,
     },
     /// A door or window family instance hosted by a wall, placed at `point`
     /// (on the wall's location line, at the wall base). Size via the type's
@@ -143,6 +206,46 @@ pub enum RevitOp {
         width: f64,
         height: f64,
         sill: f64,
+        /// Phase names for `PHASE_CREATED` / `PHASE_DEMOLISHED` (looked up
+        /// by name in Revit). Omitted when the element has no phases, so
+        /// unphased elements keep their signature.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        phase_created: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        phase_demolished: Option<String>,
+        /// `Element.Pinned` (ADR 0008). Omitted when false, so unpinned
+        /// elements keep their signature.
+        #[serde(default, skip_serializing_if = "is_false")]
+        pinned: bool,
+    },
+    /// A phase (ADR 0006). The Revit API cannot create phases: the add-in
+    /// finds the phase by `name`, else renames the phase at position
+    /// `order` (0 = first), else reports a problem. Phases are not tagged.
+    Phase {
+        uid: String,
+        signature: String,
+        name: String,
+        order: u32,
+    },
+    /// The project's place on Earth: set `Document.SiteLocation`
+    /// (`Latitude`, `Longitude`, `TimeZone`, `PlaceName`). Only planned when
+    /// the Ferro project has a location (M5-24.3); `uid` is
+    /// [`SITE_LOCATION_UID`].
+    SiteLocation {
+        uid: String,
+        signature: String,
+        /// `PlaceName`; empty keeps Revit's.
+        place: String,
+        /// Radians, north positive (as Revit stores it).
+        latitude: f64,
+        /// Radians, east positive.
+        longitude: f64,
+        /// Elevation of the project origin above sea level, feet. Revit's
+        /// `SiteLocation.Elevation` is read-only, so the add-in reports it
+        /// but does not move the survey point.
+        elevation: f64,
+        /// `TimeZone`: hours from UTC (Vietnam 7, India 5.5).
+        time_zone: f64,
     },
     /// Free-form geometry as a `DirectShape` mesh.
     DirectShape {
@@ -153,6 +256,17 @@ pub enum RevitOp {
         category: String,
         vertices: Vec<[f64; 3]>,
         triangles: Vec<[u32; 3]>,
+        /// Phase names for `PHASE_CREATED` / `PHASE_DEMOLISHED` (looked up
+        /// by name in Revit). Omitted when the element has no phases, so
+        /// unphased elements keep their signature.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        phase_created: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        phase_demolished: Option<String>,
+        /// `Element.Pinned` (ADR 0008). Omitted when false, so unpinned
+        /// elements keep their signature.
+        #[serde(default, skip_serializing_if = "is_false")]
+        pinned: bool,
     },
 }
 
@@ -160,6 +274,7 @@ impl RevitOp {
     pub fn uid(&self) -> &str {
         match self {
             RevitOp::Delete { ferro_uid, .. } => ferro_uid,
+            RevitOp::Warning { .. } => "",
             RevitOp::Material { uid, .. }
             | RevitOp::Level { uid, .. }
             | RevitOp::WallType { uid, .. }
@@ -167,13 +282,16 @@ impl RevitOp {
             | RevitOp::Wall { uid, .. }
             | RevitOp::Floor { uid, .. }
             | RevitOp::Opening { uid, .. }
-            | RevitOp::DirectShape { uid, .. } => uid,
+            | RevitOp::SiteLocation { uid, .. }
+            | RevitOp::DirectShape { uid, .. }
+            | RevitOp::JoinGeometry { uid, .. }
+            | RevitOp::Phase { uid, .. } => uid,
         }
     }
 
     fn signature_mut(&mut self) -> Option<&mut String> {
         match self {
-            RevitOp::Delete { .. } => None,
+            RevitOp::Delete { .. } | RevitOp::Warning { .. } => None,
             RevitOp::Material { signature, .. }
             | RevitOp::Level { signature, .. }
             | RevitOp::WallType { signature, .. }
@@ -181,7 +299,10 @@ impl RevitOp {
             | RevitOp::Wall { signature, .. }
             | RevitOp::Floor { signature, .. }
             | RevitOp::Opening { signature, .. }
-            | RevitOp::DirectShape { signature, .. } => Some(signature),
+            | RevitOp::SiteLocation { signature, .. }
+            | RevitOp::DirectShape { signature, .. }
+            | RevitOp::JoinGeometry { signature, .. }
+            | RevitOp::Phase { signature, .. } => Some(signature),
         }
     }
 
@@ -199,7 +320,7 @@ impl RevitOp {
 
     fn signature(&self) -> &str {
         match self {
-            RevitOp::Delete { .. } => "",
+            RevitOp::Delete { .. } | RevitOp::Warning { .. } => "",
             RevitOp::Material { signature, .. }
             | RevitOp::Level { signature, .. }
             | RevitOp::WallType { signature, .. }
@@ -207,9 +328,16 @@ impl RevitOp {
             | RevitOp::Wall { signature, .. }
             | RevitOp::Floor { signature, .. }
             | RevitOp::Opening { signature, .. }
-            | RevitOp::DirectShape { signature, .. } => signature,
+            | RevitOp::SiteLocation { signature, .. }
+            | RevitOp::DirectShape { signature, .. }
+            | RevitOp::JoinGeometry { signature, .. }
+            | RevitOp::Phase { signature, .. } => signature,
         }
     }
+}
+
+fn is_false(b: &bool) -> bool {
+    !*b
 }
 
 /// Rounded feet (1e-9 ft ≈ 0.3 nm) so signatures ignore float noise.
@@ -281,10 +409,129 @@ fn signed_area(pts: &[Point2]) -> f64 {
     a * 0.5
 }
 
+/// The `site_location` operation for the project's location, if it has one.
+/// Angles stay in radians, elevation goes to feet, the UTC offset to hours.
+fn site_location_op(doc: &Document) -> Option<RevitOp> {
+    let l = doc.project().settings.location.as_ref()?;
+    // Rounded so signatures ignore float noise (1e-12 rad ≈ 6 µm on Earth).
+    let rad = |a: f64| (a * 1e12).round() / 1e12;
+    Some(RevitOp::SiteLocation {
+        uid: SITE_LOCATION_UID.into(),
+        signature: String::new(),
+        place: l.place.trim().to_string(),
+        latitude: rad(l.latitude.rad()),
+        longitude: rad(l.longitude.rad()),
+        elevation: r(ft(l.elevation.mm())),
+        time_zone: l.utc_offset_minutes as f64 / 60.0,
+    })
+}
+
+/// `join_geometry` operations for the `join` rows between native walls and
+/// floors (M5-5.2), in uid order, and the number of native elements left
+/// unjoined because their row's `first` is a Form (a direct shape, which
+/// Revit cannot join; the Form itself sends its joined body). Wall pairs
+/// whose ends meet are left to Revit's wall joins.
+fn join_ops(doc: &Document) -> (Vec<RevitOp>, usize) {
+    let rows: Vec<&ferro_core::model::Relationship> = doc
+        .relationships()
+        .filter(|r| r.kind == ferro_core::model::RelationshipKind::Join && r.elements.len() == 2)
+        .collect();
+    if rows.is_empty() {
+        return (Vec::new(), 0);
+    }
+    let settled = join::settled_wall_pairs(doc);
+    let native = |e: &Element| matches!(e.body, ElementBody::Wall(_) | ElementBody::Floor(_));
+    let mut ops = Vec::new();
+    let mut not_sent = 0;
+    for r in rows {
+        let (Some(a), Some(b)) = (doc.get(r.elements[0]), doc.get(r.elements[1])) else {
+            continue;
+        };
+        match (native(a), native(b)) {
+            (true, true) => {
+                if settled.contains(&(a.id.min(b.id), a.id.max(b.id))) {
+                    continue;
+                }
+                ops.push(RevitOp::JoinGeometry {
+                    uid: r.uid.to_string(),
+                    signature: String::new(),
+                    first_uid: a.uid.to_string(),
+                    second_uid: b.uid.to_string(),
+                });
+            }
+            (false, true) => not_sent += 1,
+            _ => {}
+        }
+    }
+    (ops, not_sent)
+}
+
 /// Operations that bring a Revit model holding `state` up to date with
-/// `doc`. Order: deletes, materials, levels, types, walls, floors, openings,
-/// direct shapes. Elements whose signature is unchanged are skipped.
-pub fn plan(doc: &Document, state: &RevitState) -> Vec<RevitOp> {
+/// `doc`. Order: warnings, deletes, site location, materials, levels and
+/// phases, types, walls, floors, openings, direct shapes, join geometry.
+/// Elements whose signature is unchanged are skipped.
+///
+/// Joins (M5-5.2): wall ends whose join state is `disallow` carry
+/// `disallow_join_start` / `_end`; `join` rows between native walls and
+/// floors become `join_geometry` ops (see [`join_ops`]); a native element
+/// joined to a Form is sent unjoined with one `warning`
+/// (`ferro.revit.join_not_sent`).
+///
+/// Cuts (M5-5.3): Forms send their cut body; voids are not sent; native
+/// walls and floors with cut rows are sent uncut with one `warning`
+/// (`ferro.revit.cut_not_sent`).
+///
+/// Design options (ADR 0006): Revit gets the primary combination. When
+/// other open options exist, a `warning` (`ferro.revit.design_options`)
+/// says they are not sent; when the primary combination cannot be resolved
+/// (conflicting or stale option layers), a `warning`
+/// (`ferro.revit.design_option_failed`) and the shared model are sent.
+/// The combination is regenerated with `kernel` (the session's), so cut
+/// Forms an option layer changes keep their cut body (M5-5.6); without
+/// one they are sent uncut.
+pub fn plan(
+    doc: &Document,
+    state: &RevitState,
+    kernel: Option<&std::sync::Arc<dyn ferro_core::algo::Kernel>>,
+) -> Vec<RevitOp> {
+    if doc.option_sets().is_empty() {
+        return plan_resolved(doc, state);
+    }
+    let mut warnings = Vec::new();
+    let others = doc.secondary_options();
+    if !others.is_empty() {
+        warnings.push(RevitOp::Warning {
+            code: "ferro.revit.design_options".into(),
+            message: format!(
+                "only the primary design options are sent to Revit; {} other option(s) are not",
+                others.len()
+            ),
+        });
+    }
+    let combination = ferro_core::model::Combination::primary();
+    let mut out = match ferro_core::ops::design_option_commands::resolve(doc, &combination, kernel)
+    {
+        Ok(seen) => plan_resolved(&seen, state),
+        Err(f) => {
+            warnings.push(RevitOp::Warning {
+                code: "ferro.revit.design_option_failed".into(),
+                message: format!(
+                    "the primary design options cannot be shown ({}); the shared model is sent",
+                    f.iter()
+                        .map(|x| x.code.as_str())
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                ),
+            });
+            plan_resolved(doc, state)
+        }
+    };
+    warnings.append(&mut out);
+    warnings
+}
+
+/// [`plan`] for a document whose design options are already resolved.
+fn plan_resolved(doc: &Document, state: &RevitState) -> Vec<RevitOp> {
     let uid_of = |id: ferro_core::ElementId| doc.get(id).map(|e| e.uid.to_string());
     let needs_default_level = doc.elements().any(|e| {
         e.level_id.is_none()
@@ -299,20 +546,30 @@ pub fn plan(doc: &Document, state: &RevitState) -> Vec<RevitOp> {
             .unwrap_or_else(|| DEFAULT_LEVEL_UID.to_string())
     };
     let level_z = |e: &Element| generate::level_elevation(doc, e.level_id);
+    let phase_name = |id: Option<ferro_core::ElementId>| {
+        id.and_then(|i| doc.get(i))
+            .filter(|p| p.as_phase().is_some())
+            .map(|p| p.label())
+    };
 
-    let mut groups: [Vec<RevitOp>; 7] = Default::default();
+    let mut groups: [Vec<RevitOp>; 8] = Default::default();
+    groups[0].extend(site_location_op(doc));
     if needs_default_level {
         groups[1].push(RevitOp::Level {
             uid: DEFAULT_LEVEL_UID.into(),
             signature: String::new(),
             name: "Ferro Level 0".into(),
             elevation: 0.0,
+            pinned: false,
         });
     }
     for e in doc.elements() {
         let uid = e.uid.to_string();
         let name = e.name.clone();
         let (group, op) = match &e.body {
+            // Views are not synced to Revit yet (M5-22): Revit views need
+            // view family types and sheets; a later task maps them.
+            ElementBody::View(_) => continue,
             ElementBody::Material(m) => (
                 0,
                 RevitOp::Material {
@@ -320,6 +577,8 @@ pub fn plan(doc: &Document, state: &RevitState) -> Vec<RevitOp> {
                     signature: String::new(),
                     name: e.label(),
                     color: m.color.map(|c| (c.clamp(0.0, 1.0) * 255.0).round() as u8),
+                    thermal: m.thermal.clone(),
+                    physical: m.physical.clone(),
                 },
             ),
             ElementBody::Level(l) => (
@@ -329,6 +588,7 @@ pub fn plan(doc: &Document, state: &RevitState) -> Vec<RevitOp> {
                     signature: String::new(),
                     name: e.label(),
                     elevation: r(ft(l.elevation.mm())),
+                    pinned: e.pinned,
                 },
             ),
             ElementBody::WallType(t) => {
@@ -399,6 +659,11 @@ pub fn plan(doc: &Document, state: &RevitState) -> Vec<RevitOp> {
                         top_level_uid,
                         top_offset: r(ft(top_offset)),
                         location_line: location_line(w.location_line),
+                        disallow_join_start: w.join_start == WallJoin::Disallow,
+                        disallow_join_end: w.join_end == WallJoin::Disallow,
+                        phase_created: phase_name(e.phase_created),
+                        phase_demolished: phase_name(e.phase_demolished),
+                        pinned: e.pinned,
                     },
                 )
             }
@@ -426,6 +691,9 @@ pub fn plan(doc: &Document, state: &RevitState) -> Vec<RevitOp> {
                         level_uid: level_uid(e),
                         loops,
                         offset: r(ft(f.offset.mm())),
+                        phase_created: phase_name(e.phase_created),
+                        phase_demolished: phase_name(e.phase_demolished),
+                        pinned: e.pinned,
                     },
                 )
             }
@@ -462,11 +730,31 @@ pub fn plan(doc: &Document, state: &RevitState) -> Vec<RevitOp> {
                         width: r(ft(o.width.mm())),
                         height: r(ft(o.height.mm())),
                         sill: r(ft(lay.z0 - host_level + o.sill.mm())),
+                        phase_created: phase_name(e.phase_created),
+                        phase_demolished: phase_name(e.phase_demolished),
+                        pinned: e.pinned,
                     },
                 )
             }
+            // Design options are resolved before planning (see `plan`).
+            ElementBody::OptionSet(_) | ElementBody::DesignOption(_) => continue,
+            // Phases go first, with the levels (elements refer to them).
+            ElementBody::Phase(p) => (
+                1,
+                RevitOp::Phase {
+                    uid,
+                    signature: String::new(),
+                    name: e.label(),
+                    order: doc.phase_index(e.id).map(|i| i as u32).unwrap_or(p.order),
+                },
+            ),
+            // A void (a Form that only cuts, M5-5.3) is not an element in
+            // Revit: its cuts are already in the cut elements' bodies.
+            ElementBody::Form(_) if ferro_core::model::cut::is_void(doc, e) => continue,
             ElementBody::Form(f) => {
-                let Ok(m) = body_mesh(&f.body) else { continue };
+                // The cut body when cut (M5-5.3).
+                let g = f.cut_body.as_ref().unwrap_or(&f.body);
+                let Ok(m) = body_mesh(g) else { continue };
                 if m.indices.is_empty() {
                     continue;
                 }
@@ -479,12 +767,18 @@ pub fn plan(doc: &Document, state: &RevitState) -> Vec<RevitOp> {
                         category: e.category.revit_builtin().into(),
                         vertices: m.positions.iter().map(|p| p3(p.x, p.y, p.z)).collect(),
                         triangles: m.indices.clone(),
+                        phase_created: phase_name(e.phase_created),
+                        phase_demolished: phase_name(e.phase_demolished),
+                        pinned: e.pinned,
                     },
                 )
             }
         };
         groups[group].push(op);
     }
+    // Join rows (M5-5.2), after every element they name.
+    let (joins, join_not_sent) = join_ops(doc);
+    groups[7] = joins;
 
     let records: HashMap<&str, &RevitRecord> = state
         .elements
@@ -507,7 +801,7 @@ pub fn plan(doc: &Document, state: &RevitState) -> Vec<RevitOp> {
         }
     }
     for rec in &state.elements {
-        if !present.contains(&rec.ferro_uid) {
+        if !present.contains(&rec.ferro_uid) && rec.ferro_uid != SITE_LOCATION_UID {
             out.push(RevitOp::Delete {
                 ferro_uid: rec.ferro_uid.clone(),
                 unique_id: rec.unique_id.clone(),
@@ -515,6 +809,35 @@ pub fn plan(doc: &Document, state: &RevitState) -> Vec<RevitOp> {
         }
     }
     out.extend(upserts);
+    // Native walls and floors are rebuilt by Revit from their parameters:
+    // a cut on them (M5-5.3) is not sent, and the user is told.
+    let natively_cut = doc
+        .elements()
+        .filter(|e| matches!(e.body, ElementBody::Wall(_) | ElementBody::Floor(_)))
+        .filter(|e| !ferro_core::model::cut::cuts_of(doc, e.id).is_empty())
+        .count();
+    if join_not_sent > 0 {
+        out.insert(
+            0,
+            RevitOp::Warning {
+                code: "ferro.revit.join_not_sent".into(),
+                message: format!(
+                    "{join_not_sent} wall(s) / floor(s) are joined to a direct shape (a Form); Revit cannot join them, so they are sent unjoined"
+                ),
+            },
+        );
+    }
+    if natively_cut > 0 {
+        out.insert(
+            0,
+            RevitOp::Warning {
+                code: "ferro.revit.cut_not_sent".into(),
+                message: format!(
+                    "{natively_cut} wall(s) / floor(s) have cut relationships that Revit walls and floors do not receive; freeze them (Edit freely) to send the cut body as a direct shape"
+                ),
+            },
+        );
+    }
     out
 }
 
@@ -580,9 +903,296 @@ mod tests {
     use serde_json::json;
 
     #[test]
+    fn cuts_send_no_void_and_warn_for_native_walls() {
+        let mut s = house();
+        let wall = s
+            .doc()
+            .elements()
+            .find(|e| e.as_wall().is_some())
+            .unwrap()
+            .id;
+        let bx = s
+            .doc()
+            .elements()
+            .find(|e| e.as_form().is_some())
+            .unwrap()
+            .id;
+        let shapes = |ops: &[RevitOp]| {
+            ops.iter()
+                .filter(|o| matches!(o, RevitOp::DirectShape { .. }))
+                .count()
+        };
+        let before = plan(s.doc(), &RevitState::default(), None);
+        assert_eq!(shapes(&before), 1);
+        let void = s.doc().next_element_id();
+        for (t, a) in [
+            (
+                "create_box",
+                json!({"origin": {"x": -500, "y": 500, "z": 500}, "width": 1000, "depth": 1000, "height": 1000}),
+            ),
+            (
+                "create_relationship",
+                json!({"kind": "cut", "elements": [void, wall]}),
+            ),
+            (
+                "create_relationship",
+                json!({"kind": "cut", "elements": [void, bx]}),
+            ),
+        ] {
+            s.execute(AnyCommand::from_tool(t, &a).unwrap(), &ExecContext::user())
+                .unwrap();
+        }
+        let ops = plan(s.doc(), &RevitState::default(), None);
+        assert_eq!(shapes(&ops), 1, "the void is not sent");
+        assert!(
+            matches!(&ops[0], RevitOp::Warning { code, .. } if code == "ferro.revit.cut_not_sent")
+        );
+    }
+
+    #[test]
+    fn joins_send_disallowed_ends_and_join_geometry() {
+        let mut s = house();
+        let run = |s: &mut ferro_core::Session, t: &str, a: serde_json::Value| {
+            s.execute(AnyCommand::from_tool(t, &a).unwrap(), &ExecContext::user())
+                .unwrap_or_else(|f| panic!("{t}: {f:?}"))
+                .output
+        };
+        let walls: Vec<ferro_core::ElementId> = s
+            .doc()
+            .elements()
+            .filter(|e| e.as_wall().is_some())
+            .map(|e| e.id)
+            .collect();
+        let floor = s
+            .doc()
+            .elements()
+            .find(|e| matches!(e.body, ElementBody::Floor(_)))
+            .unwrap()
+            .id;
+        let bx = s
+            .doc()
+            .elements()
+            .find(|e| e.as_form().is_some())
+            .unwrap()
+            .id;
+        let plain = plan(s.doc(), &RevitState::default(), None);
+        assert!(plain
+            .iter()
+            .all(|o| !matches!(o, RevitOp::JoinGeometry { .. })));
+        run(
+            &mut s,
+            "set_wall",
+            json!({"wall": walls[0], "join_end": "disallow"}),
+        );
+        // A corner pair (left to Revit's wall joins), a floor–wall join
+        // (sent) and a Form–wall join (not sent, warned).
+        run(
+            &mut s,
+            "create_relationship",
+            json!({"kind": "join", "elements": [walls[1], walls[2]]}),
+        );
+        run(
+            &mut s,
+            "create_relationship",
+            json!({"kind": "join", "elements": [floor, walls[3]]}),
+        );
+        run(
+            &mut s,
+            "create_relationship",
+            json!({"kind": "join", "elements": [bx, walls[2]]}),
+        );
+        let ops = plan(s.doc(), &RevitState::default(), None);
+        let wall_op = ops
+            .iter()
+            .find(|o| o.uid() == s.doc().get(walls[0]).unwrap().uid.to_string())
+            .unwrap();
+        assert!(matches!(
+            wall_op,
+            RevitOp::Wall {
+                disallow_join_start: false,
+                disallow_join_end: true,
+                ..
+            }
+        ));
+        let joins: Vec<&RevitOp> = ops
+            .iter()
+            .filter(|o| matches!(o, RevitOp::JoinGeometry { .. }))
+            .collect();
+        assert_eq!(joins.len(), 1);
+        let RevitOp::JoinGeometry {
+            first_uid,
+            second_uid,
+            ..
+        } = joins[0]
+        else {
+            unreachable!()
+        };
+        assert_eq!(first_uid, &s.doc().get(floor).unwrap().uid.to_string());
+        assert_eq!(second_uid, &s.doc().get(walls[3]).unwrap().uid.to_string());
+        assert!(
+            matches!(ops.last(), Some(RevitOp::JoinGeometry { .. })),
+            "joins go last"
+        );
+        assert!(ops.iter().any(
+            |o| matches!(o, RevitOp::Warning { code, .. } if code == "ferro.revit.join_not_sent")
+        ));
+        // Walls that join keep their signature: the flags are omitted.
+        let text = serde_json::to_string(&plain).unwrap();
+        assert!(!text.contains("disallow_join"));
+    }
+
+    #[test]
+    fn primary_design_options_are_planned_with_a_warning_for_the_others() {
+        let mut s = house();
+        let run = |s: &mut ferro_core::Session, t: &str, a: serde_json::Value| {
+            s.execute(AnyCommand::from_tool(t, &a).unwrap(), &ExecContext::user())
+                .unwrap()
+                .output
+        };
+        let o = run(&mut s, "create_option_set", json!({"name": "Roof"}));
+        let a = ferro_core::ElementId(o["option"].as_u64().unwrap());
+        let only_primary = plan(s.doc(), &RevitState::default(), None);
+        assert!(only_primary
+            .iter()
+            .all(|o| !matches!(o, RevitOp::Warning { .. })));
+        s.execute_in_option(
+            a,
+            &ferro_core::model::Combination::primary(),
+            AnyCommand::from_tool(
+                "create_wall",
+                &json!({"start": {"x": 0, "y": 9000, "z": 0}, "end": {"x": 3000, "y": 9000, "z": 0}, "name": "Option wall"}),
+            )
+            .unwrap(),
+            &ExecContext::user(),
+        )
+        .unwrap();
+        run(&mut s, "create_design_option", json!({"set": o["element"]}));
+        let ops = plan(s.doc(), &RevitState::default(), None);
+        assert!(
+            matches!(&ops[0], RevitOp::Warning { code, .. } if code == "ferro.revit.design_options"),
+            "{:?}",
+            ops[0]
+        );
+        assert!(ops
+            .iter()
+            .any(|o| matches!(o, RevitOp::Wall { name: Some(n), .. } if n == "Option wall")));
+    }
+
+    /// ADR 0008 §6: `pinned` goes into the ops of synced elements (a pinned
+    /// wall and box), omitted when false, and a pin change re-sends the
+    /// element (its signature changes).
+    #[test]
+    fn pinned_is_planned_for_synced_elements() {
+        let mut s = house();
+        let ops = plan(s.doc(), &RevitState::default(), None);
+        let levels: Vec<bool> = ops
+            .iter()
+            .filter_map(|o| match o {
+                RevitOp::Level { pinned, .. } => Some(*pinned),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(levels, vec![false, false], "levels are not auto-pinned");
+        let wall_op = |ops: &[RevitOp]| {
+            ops.iter()
+                .find(|o| matches!(o, RevitOp::Wall { .. }))
+                .cloned()
+                .expect("a wall")
+        };
+        let w0 = wall_op(&ops);
+        assert!(!serde_json::to_string(&w0).unwrap().contains("pinned"));
+        let wall = s
+            .doc()
+            .elements()
+            .find(|e| e.as_wall().is_some())
+            .map(|e| e.id)
+            .unwrap();
+        let bx = s
+            .doc()
+            .elements()
+            .find(|e| e.as_form().is_some())
+            .map(|e| e.id)
+            .unwrap();
+        s.execute(
+            AnyCommand::from_tool(
+                "set_pinned",
+                &json!({"elements": [wall, bx], "pinned": true}),
+            )
+            .unwrap(),
+            &ExecContext::user(),
+        )
+        .unwrap();
+        let ops = plan(s.doc(), &RevitState::default(), None);
+        let w1 = wall_op(&ops);
+        assert!(matches!(w1, RevitOp::Wall { pinned: true, .. }));
+        assert_ne!(w0.signature(), w1.signature(), "a pin change is sent");
+        assert!(ops
+            .iter()
+            .any(|o| matches!(o, RevitOp::DirectShape { pinned: true, .. })));
+        let text = serde_json::to_string(&w1).unwrap();
+        assert!(text.contains("\"pinned\":true"), "{text}");
+        let back: RevitOp = serde_json::from_str(&text).unwrap();
+        assert_eq!(back, w1);
+    }
+
+    #[test]
+    fn phases_and_element_phase_names_are_planned() {
+        let mut s = house();
+        // Unphased elements carry no phase fields (signatures unchanged).
+        let before = plan(s.doc(), &RevitState::default(), None);
+        assert!(!serde_json::to_string(&before).unwrap().contains("phase"));
+        let wall = s
+            .doc()
+            .elements()
+            .find(|e| e.as_wall().is_some())
+            .map(|e| e.id)
+            .unwrap();
+        s.execute(
+            AnyCommand::from_tool(
+                "set_renovation_status",
+                &json!({"elements": [wall], "status": "demolish"}),
+            )
+            .unwrap(),
+            &ExecContext::user(),
+        )
+        .unwrap();
+        let ops = plan(s.doc(), &RevitState::default(), None);
+        let phases: Vec<(String, u32)> = ops
+            .iter()
+            .filter_map(|o| match o {
+                RevitOp::Phase { name, order, .. } => Some((name.clone(), *order)),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(
+            phases,
+            [
+                ("Existing".to_string(), 0),
+                ("New Construction".to_string(), 1)
+            ]
+        );
+        let uid = s.doc().get(wall).unwrap().uid.to_string();
+        let op = ops.iter().find(|o| o.uid() == uid).unwrap();
+        let RevitOp::Wall {
+            phase_created,
+            phase_demolished,
+            ..
+        } = op
+        else {
+            panic!("{op:?}")
+        };
+        assert_eq!(phase_created.as_deref(), Some("Existing"));
+        assert_eq!(phase_demolished.as_deref(), Some("New Construction"));
+        // Phases come before walls.
+        let first_wall = ops.iter().position(|o| matches!(o, RevitOp::Wall { .. }));
+        let last_phase = ops.iter().rposition(|o| matches!(o, RevitOp::Phase { .. }));
+        assert!(last_phase < first_wall);
+    }
+
+    #[test]
     fn full_plan_is_ordered_and_in_feet() {
         let s = house();
-        let ops = plan(s.doc(), &RevitState::default());
+        let ops = plan(s.doc(), &RevitState::default(), None);
         let kinds: Vec<&str> = ops
             .iter()
             .map(|o| match o {
@@ -594,7 +1204,11 @@ mod tests {
                 RevitOp::Floor { .. } => "floor",
                 RevitOp::Opening { .. } => "opening",
                 RevitOp::DirectShape { .. } => "direct_shape",
+                RevitOp::SiteLocation { .. } => "site_location",
+                RevitOp::Phase { .. } => "phase",
+                RevitOp::JoinGeometry { .. } => "join_geometry",
                 RevitOp::Delete { .. } => "delete",
+                RevitOp::Warning { .. } => "warning",
             })
             .collect();
         let mut sorted = kinds.clone();
@@ -702,7 +1316,7 @@ mod tests {
     #[test]
     fn unchanged_elements_are_skipped_and_removed_ones_deleted() {
         let mut s = house();
-        let first = plan(s.doc(), &RevitState::default());
+        let first = plan(s.doc(), &RevitState::default(), None);
         let mut state = RevitState {
             elements: first
                 .iter()
@@ -714,9 +1328,16 @@ mod tests {
                 })
                 .collect(),
         };
-        assert!(plan(s.doc(), &state).is_empty(), "nothing changed");
+        assert!(plan(s.doc(), &state, None).is_empty(), "nothing changed");
 
-        // Raise L2: only the level changes in Revit (walls follow it there).
+        // Raise L2 (unpinned first, ADR 0008): only the level changes in
+        // Revit (walls follow it there).
+        s.execute(
+            AnyCommand::from_tool("set_pinned", &json!({"elements": [2], "pinned": false}))
+                .unwrap(),
+            &ExecContext::user(),
+        )
+        .unwrap();
         s.execute(
             AnyCommand::from_tool(
                 "set_level_elevation",
@@ -726,7 +1347,7 @@ mod tests {
             &ExecContext::user(),
         )
         .unwrap();
-        let ops = plan(s.doc(), &state);
+        let ops = plan(s.doc(), &state, None);
         assert_eq!(ops.len(), 1, "{ops:?}");
         assert!(matches!(&ops[0], RevitOp::Level { name, .. } if name == "L2"));
 
@@ -736,7 +1357,7 @@ mod tests {
             unique_id: "rvt-x".into(),
             signature: String::new(),
         });
-        let ops = plan(s.doc(), &state);
+        let ops = plan(s.doc(), &state, None);
         assert!(matches!(&ops[0], RevitOp::Delete { unique_id, .. } if unique_id == "rvt-x"));
     }
 
@@ -752,7 +1373,7 @@ mod tests {
             &ExecContext::user(),
         )
         .unwrap();
-        let ops = plan(s.doc(), &RevitState::default());
+        let ops = plan(s.doc(), &RevitState::default(), None);
         assert!(ops.iter().any(|o| o.uid() == DEFAULT_LEVEL_UID));
         let RevitOp::Wall { level_uid, .. } = ops
             .iter()
@@ -762,5 +1383,115 @@ mod tests {
             unreachable!()
         };
         assert_eq!(level_uid, DEFAULT_LEVEL_UID);
+    }
+
+    #[test]
+    fn site_location_op_follows_the_project_location() {
+        let mut s = house();
+        let none = plan(s.doc(), &RevitState::default(), None);
+        assert!(!none
+            .iter()
+            .any(|o| matches!(o, RevitOp::SiteLocation { .. })));
+        let set = |s: &mut Session, lat: f64| {
+            let args = json!({"latitude": f64::to_radians(lat), "longitude": f64::to_radians(108.2),
+                "elevation": 3048.0, "utc_offset_minutes": 420, "place": "Da Nang"});
+            s.execute(
+                AnyCommand::from_tool("set_site_location", &args).unwrap(),
+                &ExecContext::user(),
+            )
+            .unwrap();
+        };
+        set(&mut s, 16.05);
+        let ops = plan(s.doc(), &RevitState::default(), None);
+        let first = ops.first().cloned();
+        let Some(RevitOp::SiteLocation {
+            uid,
+            signature,
+            place,
+            latitude,
+            longitude,
+            elevation,
+            time_zone,
+        }) = first
+        else {
+            panic!("site location is planned first: {ops:?}");
+        };
+        assert_eq!(uid, SITE_LOCATION_UID);
+        assert_eq!(place, "Da Nang");
+        assert!((latitude - 16.05f64.to_radians()).abs() < 1e-9);
+        assert!((longitude - 108.2f64.to_radians()).abs() < 1e-9);
+        assert!((elevation - 10.0).abs() < 1e-9, "3048 mm = 10 ft");
+        assert!((time_zone - 7.0).abs() < 1e-12);
+        let json = serde_json::to_value(&ops[0]).unwrap();
+        assert_eq!(json["op"], "site_location");
+
+        // Unchanged → skipped; a new latitude changes the signature.
+        let state = RevitState {
+            elements: vec![RevitRecord {
+                ferro_uid: SITE_LOCATION_UID.into(),
+                unique_id: "site".into(),
+                signature: signature.clone(),
+            }],
+        };
+        assert!(!plan(s.doc(), &state, None)
+            .iter()
+            .any(|o| o.uid() == SITE_LOCATION_UID));
+        set(&mut s, -33.87);
+        let moved = plan(s.doc(), &state, None);
+        let again = moved.iter().find(|o| o.uid() == SITE_LOCATION_UID);
+        assert!(again.is_some_and(|o| o.signature() != signature));
+
+        // Clearing the location never deletes Revit's SiteLocation.
+        s.execute(
+            AnyCommand::from_tool("set_site_location", &json!({"clear": true})).unwrap(),
+            &ExecContext::user(),
+        )
+        .unwrap();
+        assert!(!plan(s.doc(), &state, None)
+            .iter()
+            .any(|o| o.uid() == SITE_LOCATION_UID));
+    }
+
+    #[test]
+    fn material_op_carries_thermal_and_physical_assets() {
+        let mut s = house();
+        let ops = plan(s.doc(), &RevitState::default(), None);
+        let mat = |ops: &[RevitOp]| {
+            ops.iter()
+                .find(|o| matches!(o, RevitOp::Material { .. }))
+                .cloned()
+                .unwrap()
+        };
+        let before = mat(&ops);
+        // Without assets the JSON is as in M3 (no asset keys).
+        let text = serde_json::to_string(&before).unwrap();
+        assert!(
+            !text.contains("thermal") && !text.contains("physical"),
+            "{text}"
+        );
+
+        s.execute(
+            AnyCommand::from_tool(
+                "set_material",
+                &json!({"material": 3, "thermal": {"conductivity_w_mk": 0.77},
+                    "physical": {"density_kg_m3": 1800}, "cost": {"unit_price": 1, "currency": "VND", "unit": "m3"}}),
+            )
+            .unwrap(),
+            &ExecContext::user(),
+        )
+        .unwrap();
+        let after = mat(&plan(s.doc(), &RevitState::default(), None));
+        let RevitOp::Material {
+            thermal, physical, ..
+        } = &after
+        else {
+            unreachable!()
+        };
+        assert!((thermal.as_ref().unwrap().conductivity_w_mk.unwrap() - 0.77).abs() < 1e-12);
+        assert!((physical.as_ref().unwrap().density_kg_m3.unwrap() - 1800.0).abs() < 1e-12);
+        // New data changes the signature, so Revit updates the material.
+        assert_ne!(before.signature(), after.signature());
+        let v = serde_json::to_value(&after).unwrap();
+        assert!((v["thermal"]["conductivity_w_mk"].as_f64().unwrap() - 0.77).abs() < 1e-12);
     }
 }

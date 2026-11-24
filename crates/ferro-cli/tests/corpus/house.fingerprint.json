@@ -1,0 +1,709 @@
+{
+  "elements": {
+    "1": {
+      "body": "level",
+      "category": "levels",
+      "name": "Ground"
+    },
+    "10": {
+      "body": "opening",
+      "bounding_box": [
+        [
+          3450.0,
+          5990.0,
+          950.0
+        ],
+        [
+          4550.0,
+          6010.0,
+          2050.0
+        ]
+      ],
+      "category": "windows",
+      "closed": true,
+      "counts": {
+        "edges": 12,
+        "faces": 6,
+        "vertices": 8
+      },
+      "faces": [
+        {
+          "area": 22000.0,
+          "face": 9,
+          "normal": [
+            0.0,
+            0.0,
+            -1.0
+          ],
+          "vertices": 4
+        },
+        {
+          "area": 22000.0,
+          "face": 15,
+          "normal": [
+            0.0,
+            0.0,
+            1.0
+          ],
+          "vertices": 4
+        },
+        {
+          "area": 1210000.0,
+          "face": 21,
+          "normal": [
+            0.0,
+            -1.0,
+            0.0
+          ],
+          "vertices": 4
+        },
+        {
+          "area": 1210000.0,
+          "face": 27,
+          "normal": [
+            0.0,
+            1.0,
+            0.0
+          ],
+          "vertices": 4
+        },
+        {
+          "area": 22000.0,
+          "face": 33,
+          "normal": [
+            -1.0,
+            0.0,
+            0.0
+          ],
+          "vertices": 4
+        },
+        {
+          "area": 22000.0,
+          "face": 39,
+          "normal": [
+            1.0,
+            0.0,
+            0.0
+          ],
+          "vertices": 4
+        }
+      ],
+      "host": 4,
+      "level": 1,
+      "volume": 24200000.0
+    },
+    "2": {
+      "body": "wall_type",
+      "category": "walls",
+      "name": "Generic - 200mm"
+    },
+    "3": {
+      "body": "wall",
+      "bounding_box": [
+        [
+          -100.0,
+          -100.0,
+          0.0
+        ],
+        [
+          100.0,
+          6100.0,
+          3000.0
+        ]
+      ],
+      "category": "walls",
+      "closed": true,
+      "counts": {
+        "edges": 24,
+        "faces": 10,
+        "vertices": 16
+      },
+      "faces": [
+        {
+          "area": 16710000.0,
+          "face": 17,
+          "normal": [
+            -1.0,
+            0.0,
+            0.0
+          ],
+          "vertices": 8
+        },
+        {
+          "area": 15510000.0,
+          "face": 27,
+          "normal": [
+            1.0,
+            0.0,
+            0.0
+          ],
+          "vertices": 8
+        },
+        {
+          "area": 1200000.0,
+          "face": 37,
+          "normal": [
+            0.0,
+            0.0,
+            1.0
+          ],
+          "vertices": 4
+        },
+        {
+          "area": 510000.0,
+          "face": 43,
+          "normal": [
+            0.0,
+            0.0,
+            -1.0
+          ],
+          "vertices": 4
+        },
+        {
+          "area": 510000.0,
+          "face": 49,
+          "normal": [
+            0.0,
+            0.0,
+            -1.0
+          ],
+          "vertices": 4
+        },
+        {
+          "area": 848528.137,
+          "face": 55,
+          "normal": [
+            0.707,
+            -0.707,
+            0.0
+          ],
+          "vertices": 4
+        },
+        {
+          "area": 848528.137,
+          "face": 61,
+          "normal": [
+            0.707,
+            0.707,
+            0.0
+          ],
+          "vertices": 4
+        },
+        {
+          "area": 420000.0,
+          "face": 67,
+          "normal": [
+            0.0,
+            1.0,
+            0.0
+          ],
+          "vertices": 4
+        },
+        {
+          "area": 420000.0,
+          "face": 73,
+          "normal": [
+            0.0,
+            -1.0,
+            0.0
+          ],
+          "vertices": 4
+        },
+        {
+          "area": 180000.0,
+          "face": 79,
+          "normal": [
+            0.0,
+            0.0,
+            -1.0
+          ],
+          "vertices": 4
+        }
+      ],
+      "level": 1,
+      "type": 2,
+      "volume": 3222000000.0
+    },
+    "4": {
+      "body": "wall",
+      "bounding_box": [
+        [
+          -100.0,
+          5900.0,
+          0.0
+        ],
+        [
+          8100.0,
+          6100.0,
+          3000.0
+        ]
+      ],
+      "category": "walls",
+      "closed": true,
+      "counts": {
+        "edges": 24,
+        "faces": 10,
+        "vertices": 16
+      },
+      "faces": [
+        {
+          "area": 23160000.0,
+          "face": 17,
+          "normal": [
+            0.0,
+            1.0,
+            0.0
+          ],
+          "vertices": 4
+        },
+        {
+          "area": 21960000.0,
+          "face": 28,
+          "normal": [
+            0.0,
+            -1.0,
+            0.0
+          ],
+          "vertices": 4
+        },
+        {
+          "area": 1600000.0,
+          "face": 39,
+          "normal": [
+            0.0,
+            0.0,
+            1.0
+          ],
+          "vertices": 4
+        },
+        {
+          "area": 1600000.0,
+          "face": 45,
+          "normal": [
+            0.0,
+            0.0,
+            -1.0
+          ],
+          "vertices": 4
+        },
+        {
+          "area": 848528.137,
+          "face": 51,
+          "normal": [
+            -0.707,
+            -0.707,
+            0.0
+          ],
+          "vertices": 4
+        },
+        {
+          "area": 848528.137,
+          "face": 57,
+          "normal": [
+            0.707,
+            -0.707,
+            0.0
+          ],
+          "vertices": 4
+        },
+        {
+          "area": 240000.0,
+          "face": 63,
+          "normal": [
+            1.0,
+            0.0,
+            0.0
+          ],
+          "vertices": 4
+        },
+        {
+          "area": 240000.0,
+          "face": 69,
+          "normal": [
+            -1.0,
+            0.0,
+            0.0
+          ],
+          "vertices": 4
+        },
+        {
+          "area": 240000.0,
+          "face": 75,
+          "normal": [
+            0.0,
+            0.0,
+            -1.0
+          ],
+          "vertices": 4
+        },
+        {
+          "area": 240000.0,
+          "face": 81,
+          "normal": [
+            0.0,
+            0.0,
+            1.0
+          ],
+          "vertices": 4
+        }
+      ],
+      "level": 1,
+      "type": 2,
+      "volume": 4512000000.0
+    },
+    "5": {
+      "body": "wall",
+      "bounding_box": [
+        [
+          7900.0,
+          -100.0,
+          0.0
+        ],
+        [
+          8100.0,
+          6100.0,
+          3000.0
+        ]
+      ],
+      "category": "walls",
+      "closed": true,
+      "counts": {
+        "edges": 12,
+        "faces": 6,
+        "vertices": 8
+      },
+      "faces": [
+        {
+          "area": 18600000.0,
+          "face": 9,
+          "normal": [
+            1.0,
+            0.0,
+            0.0
+          ],
+          "vertices": 4
+        },
+        {
+          "area": 17400000.0,
+          "face": 15,
+          "normal": [
+            -1.0,
+            0.0,
+            0.0
+          ],
+          "vertices": 4
+        },
+        {
+          "area": 1200000.0,
+          "face": 21,
+          "normal": [
+            0.0,
+            0.0,
+            1.0
+          ],
+          "vertices": 4
+        },
+        {
+          "area": 1200000.0,
+          "face": 27,
+          "normal": [
+            0.0,
+            0.0,
+            -1.0
+          ],
+          "vertices": 4
+        },
+        {
+          "area": 848528.137,
+          "face": 33,
+          "normal": [
+            -0.707,
+            0.707,
+            0.0
+          ],
+          "vertices": 4
+        },
+        {
+          "area": 848528.137,
+          "face": 39,
+          "normal": [
+            -0.707,
+            -0.707,
+            0.0
+          ],
+          "vertices": 4
+        }
+      ],
+      "level": 1,
+      "type": 2,
+      "volume": 3600000000.0
+    },
+    "6": {
+      "body": "wall",
+      "bounding_box": [
+        [
+          -100.0,
+          -100.0,
+          0.0
+        ],
+        [
+          8100.0,
+          100.0,
+          3000.0
+        ]
+      ],
+      "category": "walls",
+      "closed": true,
+      "counts": {
+        "edges": 12,
+        "faces": 6,
+        "vertices": 8
+      },
+      "faces": [
+        {
+          "area": 24600000.0,
+          "face": 9,
+          "normal": [
+            0.0,
+            -1.0,
+            0.0
+          ],
+          "vertices": 4
+        },
+        {
+          "area": 23400000.0,
+          "face": 15,
+          "normal": [
+            0.0,
+            1.0,
+            0.0
+          ],
+          "vertices": 4
+        },
+        {
+          "area": 1600000.0,
+          "face": 21,
+          "normal": [
+            0.0,
+            0.0,
+            1.0
+          ],
+          "vertices": 4
+        },
+        {
+          "area": 1600000.0,
+          "face": 27,
+          "normal": [
+            0.0,
+            0.0,
+            -1.0
+          ],
+          "vertices": 4
+        },
+        {
+          "area": 848528.137,
+          "face": 33,
+          "normal": [
+            0.707,
+            0.707,
+            0.0
+          ],
+          "vertices": 4
+        },
+        {
+          "area": 848528.137,
+          "face": 39,
+          "normal": [
+            -0.707,
+            0.707,
+            0.0
+          ],
+          "vertices": 4
+        }
+      ],
+      "level": 1,
+      "type": 2,
+      "volume": 4800000000.0
+    },
+    "7": {
+      "body": "floor_type",
+      "category": "floors",
+      "name": "Generic - 200mm"
+    },
+    "8": {
+      "body": "floor",
+      "bounding_box": [
+        [
+          0.0,
+          0.0,
+          -200.0
+        ],
+        [
+          8000.0,
+          6000.0,
+          0.0
+        ]
+      ],
+      "category": "floors",
+      "closed": true,
+      "counts": {
+        "edges": 12,
+        "faces": 6,
+        "vertices": 8
+      },
+      "faces": [
+        {
+          "area": 48000000.0,
+          "face": 9,
+          "normal": [
+            0.0,
+            0.0,
+            1.0
+          ],
+          "vertices": 4
+        },
+        {
+          "area": 48000000.0,
+          "face": 15,
+          "normal": [
+            0.0,
+            0.0,
+            -1.0
+          ],
+          "vertices": 4
+        },
+        {
+          "area": 1200000.0,
+          "face": 21,
+          "normal": [
+            -1.0,
+            0.0,
+            0.0
+          ],
+          "vertices": 4
+        },
+        {
+          "area": 1600000.0,
+          "face": 27,
+          "normal": [
+            0.0,
+            1.0,
+            0.0
+          ],
+          "vertices": 4
+        },
+        {
+          "area": 1200000.0,
+          "face": 33,
+          "normal": [
+            1.0,
+            0.0,
+            0.0
+          ],
+          "vertices": 4
+        },
+        {
+          "area": 1600000.0,
+          "face": 39,
+          "normal": [
+            0.0,
+            -1.0,
+            0.0
+          ],
+          "vertices": 4
+        }
+      ],
+      "level": 1,
+      "type": 7,
+      "volume": 9600000000.0
+    },
+    "9": {
+      "body": "opening",
+      "bounding_box": [
+        [
+          -20.0,
+          2560.0,
+          0.0
+        ],
+        [
+          20.0,
+          3440.0,
+          2090.0
+        ]
+      ],
+      "category": "doors",
+      "closed": true,
+      "counts": {
+        "edges": 12,
+        "faces": 6,
+        "vertices": 8
+      },
+      "faces": [
+        {
+          "area": 35200.0,
+          "face": 9,
+          "normal": [
+            0.0,
+            0.0,
+            -1.0
+          ],
+          "vertices": 4
+        },
+        {
+          "area": 35200.0,
+          "face": 15,
+          "normal": [
+            0.0,
+            0.0,
+            1.0
+          ],
+          "vertices": 4
+        },
+        {
+          "area": 1839200.0,
+          "face": 21,
+          "normal": [
+            1.0,
+            0.0,
+            0.0
+          ],
+          "vertices": 4
+        },
+        {
+          "area": 1839200.0,
+          "face": 27,
+          "normal": [
+            -1.0,
+            0.0,
+            0.0
+          ],
+          "vertices": 4
+        },
+        {
+          "area": 83600.0,
+          "face": 33,
+          "normal": [
+            0.0,
+            -1.0,
+            0.0
+          ],
+          "vertices": 4
+        },
+        {
+          "area": 83600.0,
+          "face": 39,
+          "normal": [
+            0.0,
+            1.0,
+            0.0
+          ],
+          "vertices": 4
+        }
+      ],
+      "host": 3,
+      "level": 1,
+      "volume": 73568000.0
+    }
+  },
+  "settings": {}
+}

@@ -50,6 +50,39 @@ would force rewrites of every exporter, tool and renderer.
    parameters): key, spec, group, instance / type, description, Revit and
    IFC Pset mapping. Round-trips match by `Uid`, not by name.
 
+**Amendment (M5-3, 2026-11-23).** How §2 is built:
+
+- The table is `QuantitySpec` (`ferro_core::math`); its stable ids are the
+  snake_case names above plus `moment`, `pressure`, `number`. Each has a
+  storage unit, a Revit `SpecTypeId` name, an IFC measure and display units
+  (`DisplayUnit`, `storage = value × factor + offset`; only temperature has
+  an offset). Temperature is stored in K. Revit has no carbon or ratio spec
+  (they map to `Mass` / `Number`); IFC has no stress or carbon measure
+  (`IfcPressureMeasure` / `IfcMassMeasure`). Reverse lookups take the first
+  spec in table order.
+- Text input is read by one function, `QuantitySpec::parse(text, expected)`.
+  A bare number is in the spec's default display unit (mm, degrees, °C …),
+  as with `Length::parse` / `Angle::parse`. When a unit belongs to several
+  specs (`Pa`, `kPa`) and none is expected, the first in table order wins
+  (pressure before stress).
+- `ParamValue::Length / Angle / Area / Volume / Number` stay so older files
+  load; `ParamValue::spec()` / `as_quantity()` report their spec. New keys
+  use `ParamValue::Quantity`.
+- Non-length, non-angle quantities compare with the relative tolerance
+  `tol::QUANTITY_REL_TOL` (1e-9).
+- `ParameterDefinition` origins follow §3.5: **built-in** definitions
+  (`ferro.*` keys) come from a fixed registry with `Uid =
+  Uid::from_name("ferro.parameter_definition:" + key)` (name-based UUID v8,
+  128-bit FNV-1a; never changes); **project** definitions are stored in
+  `ProjectInfo.parameter_definitions` (omitted when empty, so older files
+  load unchanged). A Revit shared parameter keeps its GUID as `Uid`.
+- New command / MCP tool `set_parameter_definition` (adds or replaces a
+  project definition). `set_parameter` checks values against the key's
+  definition. New failure codes: `ferro.model.invalid_parameter_value`,
+  `ferro.model.parameter_type_mismatch`,
+  `ferro.model.builtin_parameter_definition`,
+  `ferro.model.invalid_parameter_definition`, `ferro.model.duplicate_uid`.
+
 ### 3. Materials with assets (F3)
 
 `Material` holds optional assets: `appearance` (OpenPBR parameters, texture
@@ -76,6 +109,36 @@ A typed relationship table in the document, with `Uid`s, part of
 regeneration: `Join`, `Cut` (non-destructive void), `Host`, `Attach`,
 `Bounds` (room bounding), `Connect`, `Aggregate`. Inside a Form editing
 stays direct (D-38); between elements cuts are relationships.
+
+*Implementation note (M5-5.1, 2026-11-24):* the table is a field of
+`Document` keyed by `Uid`, not elements of a category: categories map to a
+Revit category and an IFC product, and relationships are neither. Rows are
+validated on every write and on load, removed with their elements, carried
+by the change format (`/relationships/<uid>`) and stored in files with uid
+references (format 4). `host_id` stays the source of truth for openings
+until M5-5.4 moves it into the table.
+
+*Implementation note (M5-5.3, 2026-11-24):* a `cut` row is regenerated
+through the injected kernel (walls / floors: generated geometry; Forms: a
+derived `cut_body`); a Form of category `Forms` that cuts is a *void*,
+derived from the table (drawn faint, not exported), with no new flag or
+category. Details in Foundation §3.8.
+
+*Implementation note (M5-5.2, 2026-11-24):* wall-end joins stay inferred
+(Revit's automatic joins, ADR 0001 / 0002 rules unchanged, so files keep
+their geometry); a wall end has a join state `auto | disallow` (Revit
+`DisallowWallJoinAtEnd`). A `join` row is the one explicit join: between
+corner walls it means a butt corner whose join order is the row order
+(first runs through, no separate "join type" field); otherwise it is a
+geometry join (Revit Join Geometry: `second` − `first` through the kernel,
+before cuts, same no-fail rule as cuts). Switch Join Order is a new command
+`set_relationship` (`reverse: true`) so the row keeps its uid (IFC GlobalId,
+change lists) instead of a delete + create. Freezing turns inferred joins
+into rows with the frozen wall first; a wall end touching a frozen wall it
+is joined to extends to the Form's far side and is trimmed by the row, so
+neighbours keep their shape. IFC: `IfcRelConnectsPathElements`; Revit:
+`DisallowWallJoinAtEnd`, `JoinGeometry` + `SwitchJoinOrder`. Details in
+Foundation §3.8.
 
 ### 6. Scene derived from the document (F6)
 
