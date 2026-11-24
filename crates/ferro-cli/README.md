@@ -84,6 +84,15 @@ Opens the model and runs, in this order:
 
 Prints `{"file", "ok", "elements", "checks": [{"check", "ok", "problems"}]}`.
 
+## Benchmarks
+
+`ferro-cli bench tests/scripts/cuts-bench.json --repeat 3` times the cut
+cache (M5-5.7): 50 walls each cut by its own box, then an edit of an
+unrelated wall (every wall regenerates, no cut row is recomputed), then
+moving one cutter and moving it back (one row recomputed, then a cache
+hit). Compare the `set_wall_height` / `move_elements` lines with a
+`create_relationship` line (one kernel call).
+
 ## `fingerprint` and the model corpus (M5-17)
 
 `ferro-cli fingerprint m.fro` prints a canonical description of the model:

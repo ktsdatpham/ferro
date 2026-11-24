@@ -1,0 +1,286 @@
+{
+  "elements": {
+    "1": {
+      "body": "wall_type",
+      "category": "walls",
+      "name": "Generic - 200mm"
+    },
+    "2": {
+      "body": "wall",
+      "bounding_box": [
+        [
+          0.0,
+          -100.0,
+          0.0
+        ],
+        [
+          4000.0,
+          100.0,
+          3000.0
+        ]
+      ],
+      "category": "walls",
+      "closed": true,
+      "counts": {
+        "edges": 24,
+        "faces": 10,
+        "vertices": 16
+      },
+      "faces": [
+        {
+          "area": 10560000.0,
+          "face": 9,
+          "normal": [
+            0.0,
+            1.0,
+            0.0
+          ],
+          "vertices": 4
+        },
+        {
+          "area": 10560000.0,
+          "face": 15,
+          "normal": [
+            0.0,
+            -1.0,
+            0.0
+          ],
+          "vertices": 4
+        },
+        {
+          "area": 800000.0,
+          "face": 21,
+          "normal": [
+            0.0,
+            0.0,
+            1.0
+          ],
+          "vertices": 4
+        },
+        {
+          "area": 800000.0,
+          "face": 27,
+          "normal": [
+            0.0,
+            0.0,
+            -1.0
+          ],
+          "vertices": 4
+        },
+        {
+          "area": 600000.0,
+          "face": 33,
+          "normal": [
+            -1.0,
+            0.0,
+            0.0
+          ],
+          "vertices": 4
+        },
+        {
+          "area": 600000.0,
+          "face": 39,
+          "normal": [
+            1.0,
+            0.0,
+            0.0
+          ],
+          "vertices": 4
+        },
+        {
+          "area": 240000.0,
+          "face": 75,
+          "normal": [
+            -1.0,
+            0.0,
+            0.0
+          ],
+          "vertices": 4
+        },
+        {
+          "area": 240000.0,
+          "face": 81,
+          "normal": [
+            0.0,
+            0.0,
+            1.0
+          ],
+          "vertices": 4
+        },
+        {
+          "area": 240000.0,
+          "face": 87,
+          "normal": [
+            1.0,
+            0.0,
+            0.0
+          ],
+          "vertices": 4
+        },
+        {
+          "area": 240000.0,
+          "face": 93,
+          "normal": [
+            0.0,
+            0.0,
+            -1.0
+          ],
+          "vertices": 4
+        }
+      ],
+      "name": "Cut wall",
+      "relationships": [
+        {
+          "elements": [
+            3,
+            2
+          ],
+          "kind": "cut"
+        }
+      ],
+      "type": 1,
+      "volume": 2112000000.0
+    },
+    "3": {
+      "body": "form",
+      "bounding_box": [
+        [
+          1000.0,
+          -300.0,
+          900.0
+        ],
+        [
+          2200.0,
+          300.0,
+          2100.0
+        ]
+      ],
+      "category": "forms",
+      "closed": true,
+      "counts": {
+        "edges": 12,
+        "faces": 6,
+        "vertices": 8
+      },
+      "faces": [
+        {
+          "area": 720000.0,
+          "face": 5,
+          "normal": [
+            0.0,
+            0.0,
+            1.0
+          ],
+          "vertices": 4
+        },
+        {
+          "area": 720000.0,
+          "face": 23,
+          "normal": [
+            0.0,
+            0.0,
+            -1.0
+          ],
+          "vertices": 4
+        },
+        {
+          "area": 1440000.0,
+          "face": 29,
+          "normal": [
+            0.0,
+            -1.0,
+            0.0
+          ],
+          "vertices": 4
+        },
+        {
+          "area": 720000.0,
+          "face": 34,
+          "normal": [
+            1.0,
+            0.0,
+            0.0
+          ],
+          "vertices": 4
+        },
+        {
+          "area": 1440000.0,
+          "face": 39,
+          "normal": [
+            0.0,
+            1.0,
+            0.0
+          ],
+          "vertices": 4
+        },
+        {
+          "area": 720000.0,
+          "face": 44,
+          "normal": [
+            -1.0,
+            0.0,
+            0.0
+          ],
+          "vertices": 4
+        }
+      ],
+      "name": "Window void",
+      "relationships": [
+        {
+          "elements": [
+            3,
+            2
+          ],
+          "kind": "cut"
+        }
+      ],
+      "volume": 864000000.0
+    },
+    "4": {
+      "body": "option_set",
+      "category": "design_options",
+      "name": "Wall height"
+    },
+    "5": {
+      "body": "design_option",
+      "category": "design_options",
+      "host": 4,
+      "name": "Option 1",
+      "option": {
+        "changes": [
+          "/elements/*/body/top/height"
+        ],
+        "primary": true,
+        "status": "open"
+      }
+    },
+    "6": {
+      "body": "design_option",
+      "category": "design_options",
+      "host": 4,
+      "name": "Low wall, window moved",
+      "option": {
+        "changes": [
+          "/elements/*/body/top/height",
+          "/elements/*/body/body/faces/23/surface/origin/x",
+          "/elements/*/body/body/faces/29/surface/origin/x",
+          "/elements/*/body/body/faces/34/surface/origin/x",
+          "/elements/*/body/body/faces/39/surface/origin/x",
+          "/elements/*/body/body/faces/44/surface/origin/x",
+          "/elements/*/body/body/faces/5/surface/origin/x",
+          "/elements/*/body/body/vertices/1/point/x",
+          "/elements/*/body/body/vertices/15/point/x",
+          "/elements/*/body/body/vertices/16/point/x",
+          "/elements/*/body/body/vertices/17/point/x",
+          "/elements/*/body/body/vertices/18/point/x",
+          "/elements/*/body/body/vertices/2/point/x",
+          "/elements/*/body/body/vertices/3/point/x",
+          "/elements/*/body/body/vertices/4/point/x"
+        ],
+        "primary": false,
+        "status": "open"
+      }
+    }
+  },
+  "settings": {}
+}
