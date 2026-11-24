@@ -116,8 +116,8 @@ impl AccountState {
         self.config.home().map(Path::to_path_buf)
     }
 
-    /// Check the cached tokens again (at start, after a refresh, once an
-    /// hour so grace periods end on time).
+    /// Check the cached tokens again (at start and after each refresh or
+    /// activation).
     fn recheck(&mut self) -> LicenseCheck {
         let check = license::Entitlements::check(&self.tokens, &self.keys, now_s());
         self.entitlements = check.entitlements.clone();

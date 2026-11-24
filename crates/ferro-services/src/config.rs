@@ -43,12 +43,13 @@ pub struct ServiceConfig {
 
 /// Check a URL the client would call or open: `https://<host>...`, or
 /// `http://` only to `localhost`, `127.0.0.1` or `[::1]` (TLS always for
-/// any other host). No spaces, control characters or `user@` part.
+/// any other host). ASCII only (so no hidden or bidirectional characters
+/// when it is shown), no spaces, control characters or `user@` part.
 /// Fails with `ferro.service.protocol`.
 pub fn check_url(url: &str) -> Result<(), ServiceError> {
     let refuse = |why: &str| Err(ServiceError::protocol(format!("refused URL: {why}")));
-    if url.chars().any(|c| c.is_whitespace() || c.is_control()) {
-        return refuse("it contains spaces or control characters");
+    if !url.is_ascii() || url.chars().any(|c| c.is_whitespace() || c.is_control()) {
+        return refuse("it contains spaces, control or non-ASCII characters");
     }
     let (secure, rest) = if let Some(r) = url.strip_prefix("https://") {
         (true, r)
@@ -259,6 +260,7 @@ mod tests {
             "javascript:alert(1)",
             "https://",
             "https://a b",
+            "https://pay.example/\u{202E}gpj.exe",
             "",
         ] {
             let e = check_url(bad).unwrap_err();
