@@ -138,6 +138,22 @@ first failure; failures of the script's last failed tool call follow:
 | `ferro.python.not_allowed` | The caller may not cancel this run (`cancel_python`: only the user and the client that started it) |
 | `ferro.python.cancelled` | The script was stopped (`cancel_python`, the app's Stop button or Esc twice); its process tree was killed, nothing changed, output so far in `stdout` / `stderr` |
 
+Services codes (ADR 0010, contract `docs/services/README.md` §7). The
+services client (`ferro-services`) and the app report these; a paid
+plugin's command refused for lack of its entitlement gives
+`ferro.license.missing` with the plugin id:
+
+| Code | Meaning |
+|---|---|
+| `ferro.service.offline` | Services are switched off (`services.json`); no network was touched |
+| `ferro.service.unavailable` | The server did not answer (connection, DNS, timeout) or answered 5xx |
+| `ferro.service.unauthorized` | Not signed in, or the token expired and could not be refreshed |
+| `ferro.service.protocol` | The answer did not follow the contract, a URL was refused (https only, except localhost), or the sign-in was refused / expired |
+| `ferro.license.invalid` | A licence token failed verification (format, `v`, `kid`, signature) |
+| `ferro.license.expired` | A licence token is past its 14-day grace period |
+| `ferro.license.missing` | The entitlement for this plugin or feature is not owned |
+| `ferro.market.checksum` | A downloaded plugin does not match its `sha256`; it was deleted, nothing installed |
+
 A script's changes are one `TransactionGroup` (§4.3, `Session` groups):
 commit = one undo step and one journal entry naming the script; failure =
 the whole group rolls back. When a group is already open (an agent's

@@ -36,7 +36,8 @@ math     Point3, Vec3, UnitVec3, Transform, BoundingBox3, Length, Angle, tol
 | `ferro-revit` | `ferro-core` | Revit edge: Ferro → Revit operations (feet), Revit → Ferro import (ADR 0002) |
 | `ferro-ffi` | `ferro-core`, `ferro-io`, `ferro-revit` | C ABI for the Revit add-in and native shells |
 | `ferro-render` (M1) | `ferro-core`, `wgpu` | Turns elements into GPU meshes, camera-relative |
-| `ferro-app` | all above (incl. `ferro-mcp` for `run_python`), `eframe` / `wgpu`, `ureq` | Tools, selection, UI, input, Ferro Link server, AI chat |
+| `ferro-services` | `ferro-tools` (for the Ferro folder), `ureq` (rustls), `ed25519-dalek`, `sha2` | Client of the open services contract (ADR 0010, `docs/services/`): `services.json` / offline mode, device-flow sign-in, licence tokens and `Entitlements`, marketplace catalog, download and checkout; the in-memory mock server. The only crate doing network I/O for services; blocking (worker threads); not built for wasm. `ferro-core` never depends on it |
+| `ferro-app` | all above (incl. `ferro-mcp` for `run_python`, `ferro-services`), `eframe` / `wgpu`, `ureq` | Tools, selection, UI, input, Ferro Link server, AI chat, account and Marketplace windows |
 
 Rules:
 

@@ -54,6 +54,13 @@ for the same concept.
 | `Plugin` | A folder in `~/.ferro/plugins/` with a `PluginManifest` and Python code on the SDK; runs with the user's rights (ADR 0009) | Add-in, Addon, Extension, Package (for this) |
 | `PluginManifest` | A plugin's `plugin.json`: id, name, version, author, description and its `PluginCommand`s | Descriptor, Plugin config, Package file |
 | `PluginCommand` | An entry a plugin adds to the palette, the Plugins menu, the left panel and the keymap; runs Python as one script run (it is not a `Command`: the tools the script calls are) | Plugin action, Button (as a type), Macro |
+| Services | The paid, closed services around the open core, reached only through the open contract (`docs/services/`, ADR 0010); `ServiceConfig` says where they are or that they are off (offline mode) | Cloud (alone), Backend, Platform (for this) |
+| `Entitlement` / `Entitlements` | An id of something owned (`plugin:<id>`, `cloud.sync`, ...) / the set the app owns: the union of the valid `LicenseToken`s' entitlements | Permission, Feature flag, Right (for this) |
+| `LicenseToken` | A signed statement of entitlements for an account: `base64url(payload).base64url(sig)`, Ed25519, checked offline against a `KeyRing` by `kid`, 14-day grace after `exp` | License key, Serial, Activation key (for this) |
+| `KeyRing` | The built-in public keys licence tokens are checked against, by `kid` (production keys plus the DEVELOPMENT key for local services) | Keystore, Key list, Trust store |
+| `Listing` | A plugin in the marketplace catalog: id, name, `Publisher`, summary, version, `Price`, entitlement, download URL and `sha256` | Product, Store item, Catalog entry |
+| `Price` | What a plugin costs, in đồng: free, one-time or subscription (month / year) | Cost (for this), Fee, Tariff |
+| `Publisher` | Who sells a plugin in the marketplace (id, name, verified) | Vendor, Seller, Merchant (for this) |
 | Proposal | Agent changes awaiting the user's accept / reject | Draft, Suggestion (for this) |
 | Pin / `pinned` | An element's flag that keeps it in place (Revit `Element.Pinned`, ADR 0008): a pinned element cannot be moved or deleted (`ferro.model.pinned`), every other edit stays allowed; verbs *pin* / *unpin*, command `set_pinned` | Lock (as a type, field or command), Freeze, Protect (for this) |
 | `Phase` | A construction stage (Revit `Phase`), an element of category `Phases`; ordered | Stage, Period (for this) |

@@ -91,6 +91,14 @@ template and opens it. Then:
 - `group` (optional): `panel` (default; also a button in the left panel)
   or `menu` (menu and palette only). `timeout_s` (optional): time limit,
   30 s by default, 300 s at most.
+- Marketplace fields (optional, ADR 0010; leave them out for a free or
+  personal plugin): `"publisher": "your-publisher-id"`,
+  `"price": {"kind": "one_time", "amount": 490000}` (đồng; or
+  `{"kind": "free"}`, or `{"kind": "subscription", "amount": 99000,
+  "period": "month"}`) and `"entitlement": "plugin:my-tools"` (default for a
+  paid plugin: `plugin:<id>`). A paid plugin installs and lists its
+  commands, but they show "(Buy)" and refuse to run
+  (`ferro.license.missing`) until the licence is owned.
 
 `main.py`:
 

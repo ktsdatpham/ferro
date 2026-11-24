@@ -36,6 +36,17 @@ The Ferro window: menus, workspaces, toolbar, viewport, levels and properties pa
 - struct `FerroApp`
 - fn `FerroApp::new`
 
+### `ferro_app::app::account`
+
+Account, licences and the services seam in the app (ADR 0010, M6-20.3 / M6-20.4): File > Sign in… / Account… / Sign out, the sign-in window (device flow: the user code, the browser opened on the verification page), activation codes, the licence refresh at start and after a purchase, and the [`Entitlements`] the plugin commands are checked against.
+
+- fn `AccountState::load_from` — Load the configuration, the stored sign-in and the cached licence
+- fn `AccountState::account_name` — The signed-in account's name, if signed in.
+- fn `AccountState::refresh_licenses` — Fetch the signed-in account's licences in the background (at start
+- fn `AccountState::start_sign_in` — Start a sign-in: ask for a device code on a worker thread, then
+- fn `AccountState::cancel_sign_in` — Cancel the sign-in in progress.
+- fn `AccountState::sign_out` — Sign out: revoke on the server in the background (best effort) and
+
 ### `ferro_app::app::design_options`
 
 Design options in the app (ADR 0006, M5-23.9): the combination the view shows (app state until views become elements, M5-22), "edit in option", and the Design options panel.
@@ -47,6 +58,11 @@ Design options in the app (ADR 0006, M5-23.9): the combination the view shows (a
 ### `ferro_app::app::joins`
 
 Wall end joins in the app (M5-5.2): the ends of selected walls get small square handles, labelled "no join" when disallowed, and the viewport's context menu offers "Disallow join" / "Allow join" per end (Revit's wall end context menu). Join Geometry, Unjoin Geometry and Switch Join Order are solid tools (`tools::join_command`). Plain-text labels only (the app font has no symbol glyphs).
+
+
+### `ferro_app::app::marketplace`
+
+The Marketplace window (ADR 0010, M6-20.5): search the catalog, read a listing, Install (download, SHA-256 check, then the plugin install screen of ADR 0009) and Buy (checkout page in the browser, order polling, licence refresh when paid).
 
 
 ### `ferro_app::app::phases`
@@ -73,6 +89,7 @@ Plugins in the app (ADR 0009, M5-28): the loaded plugins' commands in the comman
 
 - fn `PluginState::script_ended` — The running script ended: a pending `ferro.ask` has no one to answer.
 - fn `PluginState::slot` — The command in `slot`.
+- fn `PluginState::installed` — The manifest of the installed (valid) plugin with this id, enabled
 - fn `PluginState::targets` — Commands of the active plugins (palette entries), with their slots.
 
 ### `ferro_app::app::python`
@@ -188,7 +205,7 @@ Problem reports (ADR 0003 §4, M5-12.5).
 - fn `dismiss` — Mark a crash report as handled (renamed so it is not offered again).
 - fn `install_panic_hook` — Install a panic hook that writes a crash report, then runs the default
 - fn `issue_url` — A prefilled "new issue" URL. Long bodies are cut (at a character
-- fn `open_url` — Open a URL in the user's browser.
+- fn `open_url` — Open a URL in the user's browser. No shell parses the URL (on Windows
 
 ### `ferro_app::scene`
 
@@ -1440,11 +1457,15 @@ Plugins (ADR 0009, D-80): a folder with a small manifest and Python code on the 
 - fn `PluginEntry::spelling` — The manifest spelling (`main:box_at_origin`, `scripts/box.py`).
 - struct `PluginCommand` — One entry a plugin adds to the app: the command palette, the Plugins
 - struct `PluginManifest` — A plugin's `plugin.json`, validated.
+- const `LICENSE_MISSING` — Failure code of a paid plugin's command run without its entitlement
 - fn `parse_entry` — Parse a command's `run` field. `dir` (the plugin folder) is used to check
 - fn `PluginManifest::parse` — Parse and validate `plugin.json` text. `dir` (the plugin folder)
+- fn `PluginManifest::is_paid` — True when the manifest's price is not free (a one-time or
+- fn `PluginManifest::required_entitlement` — The entitlement its commands need: `entitlement` when given, else
 - fn `PluginManifest::read` — Read and validate `dir/plugin.json` ([`Self::parse`] with entry
 - fn `PluginManifest::command` — The command with this id.
 - fn `PluginManifest::to_json` — The manifest as `plugin.json` text (pretty JSON).
+- fn `check_entitlement` — May a command of this plugin run? `owns(entitlement)` says whether an
 - struct `Plugin` — One folder in the plugins folder, loaded or broken.
 - fn `Plugin::id` — The manifest's id, else the folder name (broken plugins).
 - fn `Plugin::name` — The manifest's name, else the folder name.
@@ -1649,6 +1670,190 @@ Edges to draw for a body.
 Section cut of a mesh by a plane.
 
 - fn `section_segments` — Segments (mm) where the plane through `p` with normal `n` crosses the
+
+## `ferro-services`
+
+### `ferro_services`
+
+Client of the open Ferro services contract (ADR 0010, `docs/services/README.md`). This is the only crate that does network I/O for services; `ferro-core` never depends on it and an open build works fully offline without it ever touching the network.
+
+- struct `ServiceError` — A failure of a service call or check: a stable `code` from [`codes`]
+- fn `ServiceError::new` — A failure with this code and message.
+- fn `ServiceError::offline` — `ferro.service.offline`.
+- fn `ServiceError::protocol` — `ferro.service.protocol` with this message.
+- fn `ferro_dir` — The Ferro folder (`$FERRO_HOME`, else `~/.ferro`), where
+
+### `ferro_services::account`
+
+Account sign-in (contract §2): the OAuth 2.0 device authorization grant (RFC 8628). The app never shows a password field: it shows a short user code, opens the verification page in the browser and polls until the user has signed in there.
+
+- const `ACCOUNT_FILE` — File name of the stored sign-in in the Ferro folder.
+- const `DEFAULT_INTERVAL_S` — Polling interval when the server gives none (RFC 8628 §3.2).
+- const `SLOW_DOWN_S` — Seconds added to the interval on `slow_down` (RFC 8628 §3.5).
+- const `MAX_INTERVAL_S` — Longest polling interval accepted from the server.
+- const `MAX_EXPIRES_IN_S` — Longest device-code lifetime accepted from the server (seconds).
+- const `REFRESH_MARGIN_S` — An access token this close to its expiry is refreshed before use.
+- struct `Secret` — A token or code. `Debug` prints `Secret(..)`, there is no `Display`;
+- fn `Secret::new` — Wrap a token.
+- fn `Secret::expose` — The token text, for an HTTP request or the token file only.
+- struct `Account` — The signed-in account, as the server describes it (sanitised).
+- struct `AccountTokens` — The tokens of a sign-in.
+- struct `SignedIn` — A sign-in: who, and the tokens.
+- struct `DeviceStart` — The answer of `POST /v1/auth/device`: what to show the user and how
+- enum `PollStep` — What one poll of `POST /v1/auth/token` said.
+- fn `start_device_flow` — Start a sign-in: `POST /v1/auth/device`. Fails with
+- fn `poll_token` — Poll once: `POST /v1/auth/token {device_code}`. Fails with
+- fn `wait_for_sign_in` — Poll until the user has signed in, honouring `interval` and
+- fn `refresh` — New tokens: `POST /v1/auth/refresh {refresh_token}`. The account is
+- fn `revoke` — Sign out on the server: `POST /v1/auth/revoke {refresh_token}` with the
+- fn `call_signed_in` — Run a signed-in call with a fresh access token: refresh first when the
+- fn `save` — Write `signed` to `<home>/account.json` (0600 on unix, written to a
+- fn `write_private` — Write `bytes` to `path` readable by the owner only (0600 on unix),
+- fn `load` — The stored sign-in, if any (a broken file counts as signed out).
+- fn `clear` — Forget the stored sign-in (remove `account.json`).
+
+### `ferro_services::bin::ferro-services-mock`
+
+`ferro-services-mock`: the in-memory services server (`ferro_services::mock`) for local development. Listens on 127.0.0.1 only; payments are fake.
+
+
+### `ferro_services::config`
+
+Service configuration (contract §1): where the services are, or that they are switched off.
+
+- const `SERVICES_FILE` — File name of the configuration in the Ferro folder.
+- const `ENV_URL` — Environment variable overriding `base_url`.
+- const `OFFICIAL_BASE_URL` — The official endpoint, used when there is no `services.json`. The owner
+- struct `ServiceConfig` — Where the services are, or that they are off.
+- fn `check_url` — Check a URL the client would call or open: `https://<host>...`, or
+- fn `is_loopback_url` — True when `url` points at the local machine (`localhost`, `127.0.0.1`,
+- fn `ServiceConfig::load` — The configuration of this machine: `services.json` in the Ferro
+- fn `ServiceConfig::load_from` — [`Self::load`] with the Ferro folder and the `FERRO_SERVICES_URL`
+- fn `ServiceConfig::offline` — Offline, with `home` as the Ferro folder (or none).
+- fn `ServiceConfig::online` — Services at `base_url`, with `home` as the Ferro folder. Fails with
+- fn `ServiceConfig::base_url` — The base URL without a trailing `/`; `None` when offline.
+- fn `ServiceConfig::is_offline` — True when services are off: no call touches the network.
+- fn `ServiceConfig::is_loopback` — True when the services run on this machine (a mock or a self-hosted
+- fn `ServiceConfig::home` — The Ferro folder, where `account.json` and `licenses.json` live.
+- fn `ServiceConfig::problem` — Why the configuration fell back to offline mode (a broken
+- fn `ServiceConfig::url` — The full URL of an endpoint path (`/v1/...`). Fails with
+
+### `ferro_services::http`
+
+A small blocking HTTP client for the services contract: JSON bodies, timeouts, `User-Agent: Ferro/<version>`, `Authorization: Bearer` when a token is given, and the `ferro.service.*` failure codes.
+
+- const `CALL_TIMEOUT` — Time limit of one API call (connect + answer).
+- const `DOWNLOAD_TIMEOUT` — Time limit of one download.
+- const `MAX_JSON_BYTES` — Largest JSON answer read (bytes).
+- struct `Reply` — An answer of the server with a 2xx or 4xx status (401 excepted).
+- fn `Reply::is_success` — True for a 2xx status.
+- fn `Reply::error` — The `error` string of an error body (`authorization_pending`, ...).
+- fn `Reply::into_success` — The body of a 2xx answer; a 4xx fails with `ferro.service.protocol`
+- struct `ServiceClient` — The blocking client of one [`ServiceConfig`].
+- fn `ServiceClient::new` — A client of `config`. Offline, it holds no HTTP agent.
+- fn `ServiceClient::config` — Its configuration.
+- fn `ServiceClient::is_offline` — True when services are off.
+- fn `ServiceClient::get` — `GET <base><path>` (path starts with `/v1/`). Fails with
+- fn `ServiceClient::post` — `POST <base><path>` with a JSON body. Fails like [`Self::get`].
+- fn `ServiceClient::download` — Download `url` (absolute; [`check_url`] applies, and redirects never
+
+### `ferro_services::license`
+
+Licence tokens and entitlements (contract §3).
+
+- const `GRACE_S` — Grace period after `exp` (seconds): 14 days.
+- const `LICENSES_FILE` — File name of the token cache in the Ferro folder.
+- const `DEV_KEY_ENV` — Environment variable with the DEVELOPMENT public key (base64url, 32
+- const `DEVELOPMENT_KID` — `kid` of the DEVELOPMENT key.
+- const `MAX_TOKEN_BYTES` — Largest token accepted (bytes).
+- const `MAX_TOKENS` — Most tokens kept in the cache.
+- const `PRODUCTION_KEYS` — The official public keys (`kid`, Ed25519 public key bytes). Empty in
+- struct `KeyRing` — Public keys by `kid`.
+- fn `KeyRing::empty` — No keys: every token is refused.
+- fn `KeyRing::builtin` — The built-in list for `config`: [`PRODUCTION_KEYS`], plus the
+- fn `KeyRing::builtin_with` — [`Self::builtin`] with the `FERRO_DEV_LICENSE_KEY` value given.
+- fn `KeyRing::with_key` — Add a key (ignored when the bytes are not a valid Ed25519 public
+- fn `KeyRing::key` — The key with this `kid`.
+- fn `KeyRing::is_empty` — True when the ring holds no key.
+- fn `KeyRing::is_development` — True when the key with this `kid` is a development key.
+- struct `LicensePayload` — A verified licence token's payload.
+- enum `TokenState` — Where a valid token stands in time.
+- struct `LicenseToken` — A licence token that passed verification.
+- fn `LicenseToken::verify` — Verify `raw` against `keys` at `now_s` (Unix seconds): two
+- struct `Entitlements` — What the app owns: the union of the valid tokens' entitlements.
+- struct `LicenseCheck` — The result of checking a set of tokens.
+- fn `LicenseCheck::warnings` — Warnings for the user: tokens in grace (days left) and refused ones.
+- fn `Entitlements::none` — None owned.
+- fn `Entitlements::check` — Check every token in `raws` at `now_s` and add up the entitlements
+- fn `Entitlements::has` — True when `id` (`plugin:acme.stairs`, `cloud.sync`) is owned.
+- fn `Entitlements::ids` — The owned ids, sorted.
+- fn `Entitlements::is_empty` — True when nothing is owned.
+- fn `fetch_licenses` — The signed-in account's tokens: `GET /v1/licenses`. Fails with the
+- fn `activate` — Redeem an activation code bought on the web:
+- fn `load_cache` — The cached tokens (`licenses.json`); empty when missing or broken.
+- fn `save_cache` — Write the token cache (deduplicated, at most [`MAX_TOKENS`]).
+- fn `merge_fetched` — Merge tokens fetched for `account_id` into the cache: cached tokens of
+
+### `ferro_services::market`
+
+Marketplace client (contract §4): catalog search, a [`Listing`], plugin download with a SHA-256 check, checkout and orders.
+
+- const `MAX_DOWNLOAD_BYTES` — Largest plugin download (bytes), like the installer's limit.
+- struct `Publisher` — Who publishes a plugin.
+- enum `Price` — A plugin's price, in đồng (VND, no decimals).
+- fn `Price::from_json` — Parse the contract's price object. `None` when malformed.
+- fn `Price::is_free` — True for [`Price::Free`] (or an amount of 0).
+- fn `Price::label` — Text for the user: `Free`, `490,000 VND`, `99,000 VND / month`.
+- struct `Listing` — A plugin in the marketplace catalog (contract §4), checked and
+- fn `Listing::from_json` — Parse and check a listing. Fails with `ferro.service.protocol` when
+- fn `Listing::is_free` — True when it costs nothing.
+- struct `CatalogPage` — One page of catalog results.
+- fn `search` — Search the catalog: `GET /v1/market/plugins?query=&page=`.
+- fn `listing` — One listing: `GET /v1/market/plugins/{id}`. Fails with
+- fn `download` — Download a listing's zip into `dir` (as `<id>.zip`) and check its
+- struct `Checkout` — A started purchase.
+- fn `checkout` — Start buying a plugin: `POST /v1/market/checkout {plugin_id}` (signed
+- enum `OrderStatus` — Where an order stands.
+- fn `OrderStatus::as_str` — The contract spelling.
+- fn `OrderStatus::is_final` — True once the order will not change any more.
+- fn `order_status` — An order's status: `GET /v1/market/orders/{order_id}` (signed in).
+
+### `ferro_services::mock`
+
+An in-memory server implementing the services contract, for tests and local development. Open, fake payments, `127.0.0.1` only.
+
+- const `FREE_PLUGIN` — Id of the free plugin in the mock catalog.
+- const `PAID_PLUGIN` — Id of the paid plugin in the mock catalog.
+- const `ACTIVATION_CODE` — The activation code the mock accepts (gives `cloud.sync`).
+- const `MOCK_ACCOUNT_ID` — The account the mock signs everybody in as.
+- const `PAID_PRICE_VND` — Price of the paid plugin (đồng).
+- struct `MockOptions` — How the mock behaves.
+- struct `MockServer` — A running mock server; stops when dropped.
+- fn `zip_stored` — A zip (stored, no compression) of `files` (`path`, contents).
+- fn `MockServer::start` — Start on `127.0.0.1` with `opts`. Fails when the port cannot be
+- fn `MockServer::url` — Base URL (`http://127.0.0.1:<port>`).
+- fn `MockServer::addr` — The address it listens on.
+- fn `MockServer::public_key` — The public half of its licence signing key.
+- fn `MockServer::public_key_b64` — [`Self::public_key`] as base64url (the `FERRO_DEV_LICENSE_KEY` value).
+- fn `MockServer::sign_license` — A licence token signed by this server for `sub` with `ent`, valid
+- fn `MockServer::corrupt_download` — Serve a corrupted zip for this plugin from now on (its listing keeps
+- fn `MockServer::expire_access_tokens` — Make every access token expired (the next signed-in call refreshes).
+- fn `MockServer::requests` — Requests served so far.
+- fn `MockServer::polls` — Token polls answered so far.
+
+### `ferro_services::text`
+
+Small text helpers for the services client: sanitising what the server sends before it is shown, base64url, RFC 3339 UTC times, hex and URL query encoding. No dependencies.
+
+- fn `sanitize` — Clean text from the server before it is shown: whitespace (newlines,
+- fn `is_safe_id` — True for an id the server may give for a plugin, publisher or order:
+- fn `b64url_encode` — base64url without padding (RFC 4648 §5).
+- fn `b64url_decode` — Decode base64url (padding `=` accepted and ignored). `None` on any
+- fn `hex` — Lower-case hex of bytes.
+- fn `query_encode` — Percent-encode a URL query value (unreserved characters kept).
+- fn `parse_rfc3339` — Parse an RFC 3339 time (`2026-11-24T06:00:00Z`, optional fraction,
+- fn `format_rfc3339` — Format Unix seconds as RFC 3339 UTC (`2026-11-24T06:00:00Z`).
+- fn `now_s` — Now in Unix seconds (0 if the clock is before 1970).
 
 ## `ferro-snap`
 
