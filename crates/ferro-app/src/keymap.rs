@@ -46,10 +46,14 @@ pub enum Target {
     UnhideAll,
     ZoomExtents,
     Delete,
+    /// Pin the selection (ADR 0008; Revit `PN`).
+    Pin,
+    /// Unpin the selection (Revit `UP`).
+    Unpin,
 }
 
 impl Target {
-    pub const ALL: [Target; 23] = [
+    pub const ALL: [Target; 25] = [
         Target::Select,
         Target::Line,
         Target::Rectangle,
@@ -73,6 +77,8 @@ impl Target {
         Target::UnhideAll,
         Target::ZoomExtents,
         Target::Delete,
+        Target::Pin,
+        Target::Unpin,
     ];
 
     /// The tool this target activates, if it is a tool.
@@ -97,7 +103,12 @@ impl Target {
             Target::Floor => ToolKind::Floor,
             Target::Door => ToolKind::Door,
             Target::Window => ToolKind::Window,
-            Target::Hide | Target::UnhideAll | Target::ZoomExtents | Target::Delete => return None,
+            Target::Hide
+            | Target::UnhideAll
+            | Target::ZoomExtents
+            | Target::Delete
+            | Target::Pin
+            | Target::Unpin => return None,
         })
     }
 
@@ -117,6 +128,8 @@ impl Target {
                 Target::Hide => "Hide",
                 Target::UnhideAll => "Unhide all",
                 Target::ZoomExtents => "Zoom extents",
+                Target::Pin => "Pin",
+                Target::Unpin => "Unpin",
                 _ => "Delete",
             },
         }
@@ -187,6 +200,8 @@ const REVIT: &[(&str, Target)] = &[
     ("ZE", Target::ZoomExtents),
     ("ZF", Target::ZoomExtents),
     ("ZX", Target::ZoomExtents),
+    ("PN", Target::Pin),
+    ("UP", Target::Unpin),
     ("DELETE", Target::Delete),
 ];
 
@@ -400,6 +415,24 @@ mod tests {
         assert_eq!(k.label_for(Target::Select), "Space");
         assert_eq!(k.label_for(Target::Wall), "WA");
         assert_eq!(k.label_for(Target::Line), "L");
+        assert_eq!(k.label_for(Target::Pin), "PN");
+        assert_eq!(k.label_for(Target::Unpin), "UP");
+    }
+
+    #[test]
+    fn pin_codes_win_over_their_first_letter() {
+        let k = Keymap::scheme(KeyScheme::Ferro);
+        // P = Push/Pull at once, P N = Pin; U is unbound, U P = Unpin.
+        assert_eq!(
+            feed(&k, &[('p', 0.0), ('n', 0.3)]),
+            [Some(Target::PushPull), Some(Target::Pin)]
+        );
+        assert_eq!(
+            feed(&k, &[('u', 0.0), ('p', 0.3)]),
+            [None, Some(Target::Unpin)]
+        );
+        assert_eq!(Target::Pin.label(), "Pin");
+        assert_eq!(Target::Unpin.tool(), None);
     }
 
     #[test]

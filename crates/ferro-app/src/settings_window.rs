@@ -1,14 +1,16 @@
 //! The *Project settings…* window (M5-24.2): display units and decimals per
-//! quantity, site location and currency.
+//! quantity, site location, currency and auto-pinning of new levels
+//! (ADR 0008).
 //!
 //! The window never changes the document itself: every edit becomes a
-//! `set_project_units`, `set_site_location` or `set_project_currency`
-//! command that the app runs (one undo step each).
+//! `set_project_units`, `set_site_location`, `set_project_currency` or
+//! `set_project_name` command that the app runs (one undo step each).
 
 use crate::units;
 use eframe::egui::{self, Color32, RichText};
 use ferro_core::math::{Angle, QuantitySpec};
 use ferro_core::model::project_settings::ProjectSettings;
+use ferro_core::ops::commands::SetProjectName;
 use ferro_core::ops::project_commands::{SetProjectCurrency, SetProjectUnits, SetSiteLocation};
 use ferro_core::{AnyCommand, Document, Length};
 
@@ -212,6 +214,25 @@ impl ProjectSettingsDraft {
                 .small()
                 .weak(),
         );
+
+        ui.separator();
+        ui.heading("Pins");
+        let mut auto_pin = settings.auto_pin_datums;
+        if ui
+            .checkbox(&mut auto_pin, "Pin new levels")
+            .on_hover_text(
+                "New levels are created pinned: they cannot be moved or deleted until unpinned",
+            )
+            .changed()
+        {
+            out.push(
+                SetProjectName {
+                    name: None,
+                    auto_pin_datums: Some(auto_pin),
+                }
+                .into(),
+            );
+        }
         if let Some(e) = &self.error {
             ui.colored_label(Color32::from_rgb(200, 40, 40), e);
         }
