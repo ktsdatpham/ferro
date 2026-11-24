@@ -408,6 +408,10 @@ fn site_location_op(doc: &Document) -> Option<RevitOp> {
 /// phases, types, walls, floors, openings, direct shapes. Elements whose
 /// signature is unchanged are skipped.
 ///
+/// Cuts (M5-5.3): Forms send their cut body; voids are not sent; native
+/// walls and floors with cut rows are sent uncut with one `warning`
+/// (`ferro.revit.cut_not_sent`).
+///
 /// Design options (ADR 0006): Revit gets the primary combination. When
 /// other open options exist, a `warning` (`ferro.revit.design_options`)
 /// says they are not sent; when the primary combination cannot be resolved
@@ -665,8 +669,13 @@ fn plan_resolved(doc: &Document, state: &RevitState) -> Vec<RevitOp> {
                     order: doc.phase_index(e.id).map(|i| i as u32).unwrap_or(p.order),
                 },
             ),
+            // A void (a Form that only cuts, M5-5.3) is not an element in
+            // Revit: its cuts are already in the cut elements' bodies.
+            ElementBody::Form(_) if ferro_core::model::cut::is_void(doc, e) => continue,
             ElementBody::Form(f) => {
-                let Ok(m) = body_mesh(&f.body) else { continue };
+                // The cut body when cut (M5-5.3).
+                let g = f.cut_body.as_ref().unwrap_or(&f.body);
+                let Ok(m) = body_mesh(g) else { continue };
                 if m.indices.is_empty() {
                     continue;
                 }
@@ -718,6 +727,24 @@ fn plan_resolved(doc: &Document, state: &RevitState) -> Vec<RevitOp> {
         }
     }
     out.extend(upserts);
+    // Native walls and floors are rebuilt by Revit from their parameters:
+    // a cut on them (M5-5.3) is not sent, and the user is told.
+    let natively_cut = doc
+        .elements()
+        .filter(|e| matches!(e.body, ElementBody::Wall(_) | ElementBody::Floor(_)))
+        .filter(|e| !ferro_core::model::cut::cuts_of(doc, e.id).is_empty())
+        .count();
+    if natively_cut > 0 {
+        out.insert(
+            0,
+            RevitOp::Warning {
+                code: "ferro.revit.cut_not_sent".into(),
+                message: format!(
+                    "{natively_cut} wall(s) / floor(s) have cut relationships that Revit walls and floors do not receive; freeze them (Edit freely) to send the cut body as a direct shape"
+                ),
+            },
+        );
+    }
     out
 }
 
@@ -781,6 +808,53 @@ mod tests {
     use ferro_core::ops::{AnyCommand, ExecContext, SequentialIds};
     use ferro_core::Session;
     use serde_json::json;
+
+    #[test]
+    fn cuts_send_no_void_and_warn_for_native_walls() {
+        let mut s = house();
+        let wall = s
+            .doc()
+            .elements()
+            .find(|e| e.as_wall().is_some())
+            .unwrap()
+            .id;
+        let bx = s
+            .doc()
+            .elements()
+            .find(|e| e.as_form().is_some())
+            .unwrap()
+            .id;
+        let shapes = |ops: &[RevitOp]| {
+            ops.iter()
+                .filter(|o| matches!(o, RevitOp::DirectShape { .. }))
+                .count()
+        };
+        let before = plan(s.doc(), &RevitState::default());
+        assert_eq!(shapes(&before), 1);
+        let void = s.doc().next_element_id();
+        for (t, a) in [
+            (
+                "create_box",
+                json!({"origin": {"x": -500, "y": 500, "z": 500}, "width": 1000, "depth": 1000, "height": 1000}),
+            ),
+            (
+                "create_relationship",
+                json!({"kind": "cut", "elements": [void, wall]}),
+            ),
+            (
+                "create_relationship",
+                json!({"kind": "cut", "elements": [void, bx]}),
+            ),
+        ] {
+            s.execute(AnyCommand::from_tool(t, &a).unwrap(), &ExecContext::user())
+                .unwrap();
+        }
+        let ops = plan(s.doc(), &RevitState::default());
+        assert_eq!(shapes(&ops), 1, "the void is not sent");
+        assert!(
+            matches!(&ops[0], RevitOp::Warning { code, .. } if code == "ferro.revit.cut_not_sent")
+        );
+    }
 
     #[test]
     fn primary_design_options_are_planned_with_a_warning_for_the_others() {

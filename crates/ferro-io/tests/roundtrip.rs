@@ -633,3 +633,81 @@ fn corrupt_and_foreign_files_are_clean_errors() {
         "ferro.io.file"
     );
 }
+
+/// A stand-in kernel whose difference is the cutter itself: enough to give
+/// a Form a `cut_body` that differs from its source (M5-5.3).
+struct CutterKernel;
+
+impl ferro_core::algo::Kernel for CutterKernel {
+    fn name(&self) -> &'static str {
+        "cutter-test"
+    }
+    fn boolean(
+        &self,
+        _op: ferro_core::algo::BooleanOp,
+        _a: &ferro_core::topo::Body,
+        b: &ferro_core::topo::Body,
+    ) -> Result<ferro_core::algo::KernelResult, ferro_core::algo::KernelError> {
+        Ok(ferro_core::algo::KernelResult {
+            body: b.clone(),
+            faces: Default::default(),
+            lineage: Default::default(),
+        })
+    }
+}
+
+#[test]
+fn cut_rows_and_cut_bodies_survive_json_and_fro() {
+    let mut s = Session::new(
+        Document::new("Cuts"),
+        Box::new(SequentialIds::new(1_800_000_000_000)),
+    )
+    .with_kernel(std::sync::Arc::new(CutterKernel));
+    let a = el(&run(
+        &mut s,
+        "create_box",
+        json!({"origin": p(0.0, 0.0, 0.0), "width": 1000, "depth": 1000, "height": 1000}),
+    ));
+    let c = el(&run(
+        &mut s,
+        "create_box",
+        json!({"origin": p(200.0, 200.0, 600.0), "width": 300, "depth": 300, "height": 600}),
+    ));
+    let w = el(&run(
+        &mut s,
+        "create_wall",
+        json!({"start": p(0.0, 3000.0, 0.0), "end": p(4000.0, 3000.0, 0.0)}),
+    ));
+    run(
+        &mut s,
+        "create_relationship",
+        json!({"kind": "cut", "elements": [c, a]}),
+    );
+    run(
+        &mut s,
+        "create_relationship",
+        json!({"kind": "cut", "elements": [c, w]}),
+    );
+    let form = s
+        .doc()
+        .get(ElementId(a))
+        .unwrap()
+        .as_form()
+        .unwrap()
+        .clone();
+    assert!(form.cut_body.is_some());
+    let back = document_from_json(&document_to_json(s.doc()).expect("save")).expect("load");
+    assert_same(s.doc(), &back, "json with cuts");
+    assert_eq!(back.relationships().count(), 2);
+    let dir = tempfile::tempdir().expect("tempdir");
+    let path = dir.path().join("cuts.fro");
+    save_fro(&path, s.doc(), s.journal()).expect("save");
+    let (fro, _) = load_fro(&path).expect("load");
+    assert_same(s.doc(), &fro, "fro with cuts");
+    let uid = s.doc().get(ElementId(a)).unwrap().uid;
+    let b = fro.find_uid(uid).unwrap();
+    assert_eq!(b.as_form().unwrap().cut_body, form.cut_body);
+    // Regenerating with the same kernel changes nothing.
+    let regen = generate::regenerate_with(&fro, Some(&CutterKernel));
+    assert!(regen.updates.is_empty() && regen.cut_updates.is_empty());
+}

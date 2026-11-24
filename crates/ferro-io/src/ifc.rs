@@ -367,7 +367,9 @@ fn material_psets(w: &mut Writer, mat: usize, m: &ferro_core::model::bim::Materi
 }
 
 /// Serialise a document as an IFC4 file (primary combination of its design
-/// options, last phase).
+/// options, last phase). A `cut` row on a wall or slab becomes an
+/// `IfcOpeningElement` (the cutter's body) with an `IfcRelVoidsElement`;
+/// voids (Forms that only cut) are not exported as products (M5-5.3).
 pub fn export_ifc(doc: &Document) -> Result<String, IoError> {
     export_ifc_phase(doc, None)
 }
@@ -611,8 +613,14 @@ fn export_resolved(doc: &Document, phase: Option<ElementId>) -> Result<String, I
     let mut by_type: std::collections::BTreeMap<ElementId, Vec<usize>> = Default::default();
     let mut ifc_of: HashMap<ElementId, usize> = HashMap::new();
     let mut styles: HashMap<[u16; 3], usize> = HashMap::new();
+    let mut class_of: HashMap<ElementId, String> = HashMap::new();
     for e in doc.elements() {
         let Some(g) = e.geometry() else { continue };
+        // A void (a Form that only cuts, M5-5.3) is not a product: its
+        // cuts are in the cut elements (and their openings, below).
+        if ferro_core::model::cut::is_void(doc, e) {
+            continue;
+        }
         let status = export_phase.map(|p| doc.phase_status(e, p));
         if status.is_some_and(|st| !st.is_shown()) {
             continue;
@@ -705,6 +713,7 @@ fn export_resolved(doc: &Document, phase: Option<ElementId>) -> Result<String, I
         let entity_class = entity.split('(').next().unwrap_or_default().to_string();
         let id = w.add(entity);
         ifc_of.insert(e.id, id);
+        class_of.insert(e.id, entity_class.clone());
         let host_container = match &e.body {
             ElementBody::Opening(_) => e.host_id.and_then(|h| doc.get(h)).and_then(container),
             _ => container(e),
@@ -860,6 +869,70 @@ fn export_resolved(doc: &Document, phase: Option<ElementId>) -> Result<String, I
         w.add(format!(
             "IFCRELFILLSELEMENT({},$,$,$,#{opening},#{fill})",
             s(&derived(&format!("fills:{}", e.uid)))
+        ));
+    }
+
+    // Cut relationships (M5-5.3): a cut wall or slab is voided by an
+    // `IfcOpeningElement` with the cutter's (uncut) body; the element's own
+    // body is already cut. Other cut elements carry only their cut body.
+    // Rows made after the export phase are left out.
+    let cut_rows: Vec<&ferro_core::model::Relationship> = doc
+        .relationships()
+        .filter(|r| r.kind == ferro_core::model::RelationshipKind::Cut)
+        .filter(|r| match (r.phase, export_phase) {
+            (Some(rp), Some(ep)) => doc.phase_index(rp) <= doc.phase_index(ep),
+            _ => true,
+        })
+        .collect();
+    let uncut = if cut_rows.is_empty() {
+        Default::default()
+    } else {
+        generate::uncut_bodies(doc)
+    };
+    for r in cut_rows {
+        let (Some(&cutter), Some(&target)) = (r.elements.first(), r.elements.get(1)) else {
+            continue;
+        };
+        let (Some(&host), Some(class)) = (ifc_of.get(&target), class_of.get(&target)) else {
+            continue;
+        };
+        if class != "IFCWALL" && class != "IFCSLAB" {
+            continue;
+        }
+        let Some(body) = uncut.get(&cutter) else {
+            continue;
+        };
+        let mesh = body_mesh(body).map_err(|err| IoError::new("ferro.io.mesh", err.to_string()))?;
+        if mesh.indices.is_empty() {
+            continue;
+        }
+        let pts: Vec<String> = mesh
+            .positions
+            .iter()
+            .map(|p| format!("({},{},{})", f(p.x), f(p.y), f(p.z)))
+            .collect();
+        let tris: Vec<String> = mesh
+            .indices
+            .iter()
+            .map(|t| format!("({},{},{})", t[0] + 1, t[1] + 1, t[2] + 1))
+            .collect();
+        let list = w.add(format!("IFCCARTESIANPOINTLIST3D(({}),$)", pts.join(",")));
+        let faces = w.add(format!(
+            "IFCTRIANGULATEDFACESET(#{list},$,.T.,({}),$)",
+            tris.join(",")
+        ));
+        let rep = w.add(format!(
+            "IFCSHAPEREPRESENTATION(#{body_ctx},'Body','Tessellation',(#{faces}))"
+        ));
+        let shape = w.add(format!("IFCPRODUCTDEFINITIONSHAPE($,$,(#{rep}))"));
+        let pl = w.placement(None, 0.0);
+        let opening = w.add(format!(
+            "IFCOPENINGELEMENT({},$,'Cut',$,$,#{pl},#{shape},$,.OPENING.)",
+            s(&ifc_guid(r.uid.0))
+        ));
+        w.add(format!(
+            "IFCRELVOIDSELEMENT({},$,$,$,#{host},#{opening})",
+            s(&derived(&format!("cutvoids:{}", r.uid)))
         ));
     }
 
@@ -1117,6 +1190,68 @@ mod tests {
             assert!(site_line(&ifc).ends_with(want), "{}", site_line(&ifc));
             assert_eq!(ifc, export_ifc(s.doc()).unwrap(), "deterministic");
         }
+    }
+
+    #[test]
+    fn cut_rows_on_walls_become_openings_and_voids_are_not_products() {
+        let plain = export_ifc(house().doc()).unwrap();
+        let mut s = house();
+        let wall = s
+            .doc()
+            .elements()
+            .find(|e| e.as_wall().is_some())
+            .unwrap()
+            .id;
+        let bx = s
+            .doc()
+            .elements()
+            .find(|e| e.as_form().is_some())
+            .unwrap()
+            .id;
+        let void = s.doc().next_element_id();
+        for (name, args) in [
+            // A void box through the first wall (x = 0), cutting it and the
+            // box Form.
+            (
+                "create_box",
+                json!({"origin": {"x": -500, "y": 1000, "z": 500}, "width": 1000, "depth": 1000, "height": 1000}),
+            ),
+            (
+                "create_relationship",
+                json!({"kind": "cut", "elements": [void, wall]}),
+            ),
+            (
+                "create_relationship",
+                json!({"kind": "cut", "elements": [void, bx]}),
+            ),
+        ] {
+            // No kernel here: the bodies stay uncut (with a warning), the
+            // rows are exported all the same.
+            s.execute(
+                AnyCommand::from_tool(name, &args).unwrap(),
+                &ExecContext::user(),
+            )
+            .unwrap_or_else(|f| panic!("{name}: {f:?}"));
+        }
+        let ifc = export_ifc(s.doc()).unwrap();
+        let count = |t: &str, x: &str| t.matches(x).count();
+        assert_eq!(
+            count(&ifc, "=IFCOPENINGELEMENT("),
+            count(&plain, "=IFCOPENINGELEMENT(") + 1,
+            "one opening, for the wall only"
+        );
+        assert_eq!(
+            count(&ifc, "=IFCRELVOIDSELEMENT("),
+            count(&plain, "=IFCRELVOIDSELEMENT(") + 1
+        );
+        assert_eq!(
+            count(&ifc, "=IFCBUILDINGELEMENTPROXY("),
+            count(&plain, "=IFCBUILDINGELEMENTPROXY("),
+            "the void is not a product"
+        );
+        let row = s.doc().relationships().next().unwrap().uid;
+        assert!(ifc.contains(&format!("IFCOPENINGELEMENT('{}'", ifc_guid(row.0))));
+        assert_eq!(ifc, export_ifc(s.doc()).unwrap(), "deterministic");
     }
 
     #[test]
