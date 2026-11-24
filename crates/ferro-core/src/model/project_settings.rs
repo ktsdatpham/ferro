@@ -138,7 +138,7 @@ impl SiteLocation {
 
 /// Project settings carried by `ProjectInfo`. All parts are optional in
 /// files (omitted when default).
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct ProjectSettings {
     #[serde(default, skip_serializing_if = "is_default_units")]
     pub units: ProjectUnits,
@@ -153,17 +153,6 @@ pub struct ProjectSettings {
     /// pinned regardless, once links exist.
     #[serde(default, skip_serializing_if = "is_false")]
     pub auto_pin_datums: bool,
-}
-
-impl Default for ProjectSettings {
-    fn default() -> Self {
-        ProjectSettings {
-            units: ProjectUnits::default(),
-            location: None,
-            currency: None,
-            auto_pin_datums: false,
-        }
-    }
 }
 
 fn is_false(b: &bool) -> bool {
