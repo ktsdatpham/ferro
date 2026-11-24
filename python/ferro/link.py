@@ -78,8 +78,12 @@ def error_from_body(body: Any) -> FerroError:
     first = failures[0] if failures and isinstance(failures[0], dict) else None
     if first is not None:
         code = str(first.get("code") or TOOL_FAILED)
-        if first.get("message"):
-            message = f"{message}: {first['message']}"
+        m = str(first.get("message") or "")
+        # Hosts often put the same text in `error` and the first failure.
+        if m and m not in message and message not in m:
+            message = f"{message}: {m}"
+        elif m and message in m:
+            message = m
     elif message == "invalid token":
         code = INVALID_TOKEN
     else:

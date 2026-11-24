@@ -121,8 +121,9 @@ impl FerroApp {
         } else {
             names.join(", ")
         };
+        // Second line: the first holds the workspace / view label.
         painter.text(
-            rect.right_top() + Vec2::new(-10.0, 10.0),
+            rect.right_top() + Vec2::new(-10.0, 28.0),
             egui::Align2::RIGHT_TOP,
             format!("Pinned (locked): {shown}"),
             egui::FontId::proportional(13.0),

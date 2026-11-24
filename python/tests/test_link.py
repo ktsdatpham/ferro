@@ -97,6 +97,14 @@ class SdkTest(unittest.TestCase):
         self.addCleanup(f.close)
         return f
 
+    def test_error_text_is_not_repeated(self):
+        from ferro.link import error_from_body
+        same = "the script was stopped by the user; nothing was changed"
+        e = error_from_body({"error": same, "failures": [{"code": "ferro.python.cancelled", "message": same}]})
+        self.assertEqual((e.code, e.message), ("ferro.python.cancelled", same))
+        e = error_from_body({"error": "refused", "failures": [{"code": "x.y", "message": "wall #3 is pinned"}]})
+        self.assertEqual(e.message, "refused: wall #3 is pinned")
+
     def test_connect_success(self):
         f = self.fake()
         doc = ferro.connect(home=f.home, agent="test-agent")
