@@ -13,19 +13,23 @@
 //! | 4 | M5 | the relationship table (M5-5) |
 //! | 5 | M5 | views (D-33, M5-22): elements of category `views` with a `{"kind":"view"}` body (camera, cut, display style, hidden elements / tags as uids, phase, phase filter) |
 //! | 6 | M5 | design options (ADR 0006): elements of category `design_options` with `{"kind":"option_set"}` / `{"kind":"design_option"}` bodies (layers in the change format); `design_option` stays `null` in files |
+//! | 7 | M5 | pins (ADR 0008): `"pinned": true` on pinned elements (omitted when false), `auto_pin_datums: true` in the project settings (omitted when false) |
 //!
-//! Versions 2 to 6 only add data, so older files need no rewriting; the
+//! Versions 2 to 7 only add data, so older files need no rewriting; the
 //! steps are still listed so every version has one and the chain is tested.
 //! Version 3 is needed because a format 2 reader refuses the new `phases`
 //! category and `phase` body (unknown enum variants), even though the
 //! element fields existed (always `null`) before. Versions 5 and 6 likewise: a
 //! format 4 reader refuses the `views` category and `view` body, a format 5 reader the `design_options` category.
+//! Version 7 is needed for the opposite reason: a format 6 reader ignores
+//! unknown fields, so it would open a file with pins and silently drop
+//! them on its next save, a loss of protection; the bump makes it refuse.
 
 use crate::IoError;
 use serde_json::Value;
 
 /// Current file format version.
-pub const FORMAT_VERSION: u32 = 6;
+pub const FORMAT_VERSION: u32 = 7;
 
 /// One migration: from version `n` to `n + 1`, on the raw JSON of the project
 /// and the elements (before they are parsed).
@@ -33,7 +37,7 @@ type Step = fn(&mut Value, &mut [Value]) -> Result<(), IoError>;
 
 /// `STEPS[i]` migrates version `i + 1` to `i + 2`.
 const STEPS: [Step; (FORMAT_VERSION - 1) as usize] =
-    [v1_to_v2, v2_to_v3, v3_to_v4, v4_to_v5, v5_to_v6];
+    [v1_to_v2, v2_to_v3, v3_to_v4, v4_to_v5, v5_to_v6, v6_to_v7];
 
 /// 1 → 2: additive (new optional fields and parameter types); nothing to rewrite.
 fn v1_to_v2(_project: &mut Value, _elements: &mut [Value]) -> Result<(), IoError> {
@@ -58,6 +62,11 @@ fn v4_to_v5(_project: &mut Value, _elements: &mut [Value]) -> Result<(), IoError
 
 /// 5 → 6: additive (design options, ADR 0006); nothing to rewrite.
 fn v5_to_v6(_project: &mut Value, _elements: &mut [Value]) -> Result<(), IoError> {
+    Ok(())
+}
+
+/// 6 → 7: additive (pins, ADR 0008); older files have nothing pinned.
+fn v6_to_v7(_project: &mut Value, _elements: &mut [Value]) -> Result<(), IoError> {
     Ok(())
 }
 
@@ -100,6 +109,7 @@ mod tests {
         migrate(2, &mut p, &mut e).unwrap();
         migrate(3, &mut p, &mut e).unwrap();
         migrate(4, &mut p, &mut e).unwrap();
+        migrate(6, &mut p, &mut e).unwrap();
         assert_eq!(p, json!({"name": "x"}));
     }
 
@@ -157,6 +167,76 @@ mod file_tests {
             )
             .unwrap();
         assert_eq!(v, super::FORMAT_VERSION.to_string());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// Pins round-trip in JSON and `.fro`; a format 6 file (written before
+    /// pins existed) loads with nothing pinned and auto-pin on.
+    #[test]
+    fn pinned_elements_round_trip_and_old_files_load_unpinned() {
+        let doc = document_from_json(M4_HOUSE).unwrap();
+        assert!(
+            doc.elements().all(|e| !e.pinned),
+            "format 1: nothing pinned"
+        );
+        assert!(!doc.project().settings.auto_pin_datums);
+        use ferro_core::ops::commands::SetProjectName;
+        use ferro_core::ops::pin_commands::SetPinned;
+        use ferro_core::ops::{ExecContext, SequentialIds, Session};
+        let lvl = doc
+            .elements()
+            .find(|e| e.as_level().is_some())
+            .map(|e| e.id)
+            .expect("a level");
+        let mut s = Session::new(doc.clone(), Box::new(SequentialIds::new(1)));
+        let user = ExecContext::user();
+        s.execute(
+            SetPinned {
+                elements: vec![lvl],
+                pinned: true,
+            }
+            .into(),
+            &user,
+        )
+        .unwrap();
+        s.execute(
+            SetProjectName {
+                name: None,
+                auto_pin_datums: Some(true),
+            }
+            .into(),
+            &user,
+        )
+        .unwrap();
+        let pinned = s.doc().clone();
+        let text = document_to_json(&pinned).unwrap();
+        assert_eq!(
+            text.matches("\"pinned\": true").count(),
+            1,
+            "only pinned ones carry it"
+        );
+        assert!(text.contains("\"auto_pin_datums\": true"));
+        assert!(!text.contains("\"pinned\": false"));
+        let same = |a: &ferro_core::Document, b: &ferro_core::Document| {
+            a.project() == b.project() && a.elements().eq(b.elements())
+        };
+        assert!(same(&document_from_json(&text).unwrap(), &pinned));
+        let dir = std::env::temp_dir().join(format!("ferro-pinned-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("pinned.fro");
+        save_fro(&path, &pinned, &[]).unwrap();
+        let (loaded, _) = load_fro(&path).unwrap();
+        assert!(same(&loaded, &pinned));
+        assert!(loaded.get(lvl).unwrap().pinned);
+        // The same document as a format 6 writer saved it: no pins.
+        let v6 = document_to_json(&doc).unwrap().replace(
+            &format!("\"format_version\": {}", super::FORMAT_VERSION),
+            "\"format_version\": 6",
+        );
+        assert!(v6.contains("\"format_version\": 6"));
+        let old = document_from_json(&v6).expect("format 6 opens");
+        assert!(old.elements().all(|e| !e.pinned));
+        assert!(!old.project().settings.auto_pin_datums);
         let _ = std::fs::remove_dir_all(&dir);
     }
 }
