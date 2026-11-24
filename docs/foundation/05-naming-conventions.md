@@ -68,6 +68,8 @@ for the same concept.
 | `OptionStatus` | `open` / `accepted` (merged into the shared model) / `archived` (another option of the set was accepted; kept) | Option state, Lifecycle |
 | `Combination` | One design option per option set, primary by default (ArchiCAD design option combination); what a view shows | Configuration, Scenario, Variant |
 | `Change` | One edit in the change format (M5-26): set or remove the value at a uid-keyed JSON-pointer path | Patch, Delta, Diff (for one edit) |
+| `Kernel` | The B-rep library behind Ferro's seam (booleans, later blends and curved geometry): a trait in `ferro_core::algo`, implemented by `ferro-kernel` on solidcore (ADR 0007) | Engine, Backend, Modeler, CAD core |
+| `BooleanOp` | Which boolean a `Kernel` computes: `union`, `difference`, `intersection`; a value, not a `Command` | BooleanType, CsgOp, Operation |
 | `DisplayScene` / `DrawRecord` | Display data derived from a `Document` snapshot (`ferro-scene`, ADR 0004 §6) / what to draw for one element; never saved | Scene (alone, as a type), Render model, Node |
 
 Adding a term requires adding it here first.
@@ -119,7 +121,8 @@ an edge (FFI, MCP JSON, file), the name carries the unit: `height_mm`,
 - Standard verbs only: `create`, `delete`, `move`, `rotate`, `copy`, `mirror`,
   `array`, `set`, `get`, `list`, `join`, `unjoin`, `host`, `classify`, `convert`,
   `import`, `export`, plus geometric verbs (`push_pull`, `offset`, `split`,
-  `extrude`). New verbs need a glossary entry.
+  `extrude`, `subtract`: a solid boolean difference, ADR 0007). New verbs
+  need a glossary entry.
 - Verbs of the change format and design options (ADR 0006): `accept`
   (merge a proposal or a design option into the shared model:
   `accept_design_option`), `apply` (replay a change list: `apply_changes`),

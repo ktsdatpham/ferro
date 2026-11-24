@@ -11,6 +11,7 @@ members = [
     "crates/ferro-cli",
     "crates/ferro-ffi",
     "crates/ferro-app",
+    "crates/ferro-kernel",
 ]
 
 [workspace.package]
@@ -22,3 +23,8 @@ repository = "https://github.com/ktsdatpham/ferro"
 [workspace.dependencies]
 serde = { version = "1", features = ["derive", "rc"] }
 serde_json = { version = "1", features = ["float_roundtrip"] }
+
+# solidcore's kernel crate is ~1.1 M lines (ADR 0007): without debug info its dev build
+# needs far less memory (rustc peaked at ~5 GB with it on the spike machine).
+[profile.dev.package.solidcore]
+debug = false

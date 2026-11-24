@@ -56,3 +56,11 @@ port of SMLib, Apache-2.0):
   link it, core tests do not.
 - `Cut` relationships (M5-5.3), phased cuts (ADR 0006 §5) and curved Forms
   become possible.
+
+## Notes
+
+- 2026-11-24 (M5-16): `subtract` joins the standard geometric verbs (§5.5)
+  for the first kernel command, `subtract_forms` (a solid boolean
+  difference); `cut` stays the `RelationshipKind`.
+- 2026-11-24 (M5-16): the session holds `Option<Arc<dyn Kernel>>` (shared
+  with each transaction and the preview), not `Box<dyn Kernel>`.

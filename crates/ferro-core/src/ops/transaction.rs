@@ -1,4 +1,5 @@
 use super::{CommandError, DocumentChanged, Failure};
+use crate::algo::{Kernel, KernelError};
 use crate::math::{tol, Vec3};
 use crate::model::bim::WallTop;
 use crate::model::generate;
@@ -7,6 +8,7 @@ use crate::model::{
     RelationshipKind, Uid, ViewType, EXTENT_LIMIT_MM,
 };
 use std::collections::BTreeMap;
+use std::sync::Arc;
 
 /// Supplies new `Uid`s. The kernel never reads clocks or randomness itself
 /// (D-19): the app passes a time/random-based source, tests a sequential one.
@@ -44,6 +46,7 @@ pub struct Transaction<'a> {
     base: Document,
     work: Document,
     ids: &'a mut dyn IdSource,
+    kernel: Option<Arc<dyn Kernel>>,
     warnings: Vec<Failure>,
 }
 
@@ -54,8 +57,27 @@ impl<'a> Transaction<'a> {
             base: base.clone(),
             work: base.clone(),
             ids,
+            kernel: None,
             warnings: Vec::new(),
         }
+    }
+
+    /// The same transaction with a geometry kernel (ADR 0007), injected like
+    /// the id source: the session passes its own.
+    pub fn with_kernel(mut self, kernel: Option<Arc<dyn Kernel>>) -> Self {
+        self.kernel = kernel;
+        self
+    }
+
+    /// The session's geometry kernel, for commands that need booleans.
+    ///
+    /// # Errors
+    /// `ferro.kernel.unavailable` when the session has none (tests, minimal
+    /// builds).
+    pub fn kernel(&self) -> Result<&dyn Kernel, CommandError> {
+        self.kernel
+            .as_deref()
+            .ok_or_else(|| CommandError::from(KernelError::unavailable()))
     }
 
     pub fn name(&self) -> &str {

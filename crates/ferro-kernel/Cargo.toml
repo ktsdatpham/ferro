@@ -1,0 +1,17 @@
+[package]
+name = "ferro-kernel"
+description = "Ferro's B-rep kernel seam: implements ferro-core's Kernel trait on solidcore (ADR 0007). The only crate that depends on solidcore."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+ferro-core = { path = "../ferro-core" }
+# Pinned git revision (ADR 0007): solidcore-ops / -record are not on crates.io.
+solidcore = { git = "https://github.com/tangency-labs/solidcore", rev = "3d86b62" }
+solidcore-ops = { git = "https://github.com/tangency-labs/solidcore", rev = "3d86b62" }
+solidcore-record = { git = "https://github.com/tangency-labs/solidcore", rev = "3d86b62" }
+
+[dev-dependencies]
+serde_json.workspace = true

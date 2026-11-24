@@ -706,6 +706,7 @@ any_command!(
     ScaleElements,
     EraseEdges,
     EraseFaces,
+    SubtractForms,
     SetGeometrySource,
     SetProjectUnits,
     SetSiteLocation,

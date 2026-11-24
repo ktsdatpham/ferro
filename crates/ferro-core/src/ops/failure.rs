@@ -1,4 +1,4 @@
-use crate::algo::AlgoError;
+use crate::algo::{AlgoError, KernelError};
 use crate::geom::GeomError;
 use crate::model::ElementId;
 use crate::topo::TopoError;
@@ -92,5 +92,10 @@ impl From<GeomError> for CommandError {
 impl From<TopoError> for CommandError {
     fn from(e: TopoError) -> Self {
         CommandError::new(e.code(), e.to_string())
+    }
+}
+impl From<KernelError> for CommandError {
+    fn from(e: KernelError) -> Self {
+        CommandError::new(e.code, e.message)
     }
 }

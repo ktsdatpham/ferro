@@ -42,11 +42,13 @@ struct Fx {
     opt_set: ElementId,
     opt_a: ElementId,
     opt_b: ElementId,
+    /// 500 mm cube at (30 m, 0, 0), apart from everything (a boolean cutter).
+    cut: ElementId,
 }
 
 impl Fx {
     fn new() -> Fx {
-        let mut s = session();
+        let mut s = kernel_session();
         let l1 = id(&run(
             &mut s,
             "create_level",
@@ -152,6 +154,7 @@ impl Fx {
             "set_design_option",
             json!({"option": opt_b, "changes": [{"op": "set", "path": format!("/elements/{wall_uid}/name"), "value": "South B"}]}),
         );
+        let cut = boxed(&mut s, [30_000.0, 0.0, 0.0], 500.0, 500.0, 500.0);
         check_document(s.doc()).expect("fixture is valid");
         Fx {
             s,
@@ -176,6 +179,7 @@ impl Fx {
             opt_set,
             opt_a,
             opt_b,
+            cut,
         }
     }
 
@@ -1067,6 +1071,27 @@ fn every_command_rejects_degenerate_and_wrong_inputs_with_rollback() {
             json!({"changes": [{"op": "remove", "path": "elements"}]}),
             "ferro.change.bad_path",
         ),
+        // booleans (M5-16); the fixture's kernel answers only apart operands
+        (
+            "subtract_forms",
+            json!({"target": bx, "cutter": bx}),
+            "ferro.ops.same_element",
+        ),
+        (
+            "subtract_forms",
+            json!({"target": bx, "cutter": wall}),
+            "ferro.model.not_a_form",
+        ),
+        (
+            "subtract_forms",
+            json!({"target": bx, "cutter": sheet}),
+            "ferro.kernel.not_solid",
+        ),
+        (
+            "subtract_forms",
+            json!({"target": bx, "cutter": 9999}),
+            "ferro.model.not_found",
+        ),
     ];
     let mut failures = Vec::new();
     for (tool, args, code) in cases {
@@ -1523,6 +1548,7 @@ fn valid_calls(f: &Fx) -> Vec<(&'static str, Value)> {
             "erase_faces",
             json!({"element": f.sheet, "faces": [f.sheet_face]}),
         ),
+        ("subtract_forms", json!({"target": f.bx, "cutter": f.cut})),
         (
             "set_geometry_source",
             json!({"element": f.wall, "source": "direct"}),
@@ -1644,6 +1670,8 @@ fn every_id_argument_accepts_any_element_kind_without_panicking() {
         "set",
         "option",
         "copy_from",
+        "target",
+        "cutter",
     ];
     let base = Fx::new();
     let all = base.all_ids();

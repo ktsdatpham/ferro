@@ -6,9 +6,11 @@
 
 use ferro_core::ops::{Actor, ExecContext};
 use ferro_core::{Document, Session};
+use ferro_kernel::SolidcoreKernel;
 use ferro_tools::link::{self, AgentInfo, LinkRequest};
 use serde_json::{json, Value};
 use std::path::PathBuf;
+use std::sync::Arc;
 use std::time::Duration;
 
 /// All tools offered over MCP.
@@ -47,7 +49,8 @@ impl Server {
     /// unless `FERRO_LINK=off`.
     pub fn new() -> Server {
         Server {
-            session: Session::new(Document::new("Untitled"), Box::new(ferro_io::SystemIds)),
+            session: Session::new(Document::new("Untitled"), Box::new(ferro_io::SystemIds))
+                .with_kernel(Arc::new(SolidcoreKernel::new())),
             path: None,
             agent: Actor::agent("mcp-client", "unknown"),
             use_link: std::env::var("FERRO_LINK")
