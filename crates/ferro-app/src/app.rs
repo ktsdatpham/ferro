@@ -30,6 +30,7 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 mod design_options;
+mod joins;
 mod phases;
 mod pins;
 mod plugins;
@@ -2747,7 +2748,11 @@ impl FerroApp {
             }
         }
         self.pinned_markers(&painter, rect, &fc);
-        resp.context_menu(|ui| self.pin_menu(ui));
+        self.wall_end_handles(&painter, &fc);
+        resp.context_menu(|ui| {
+            self.pin_menu(ui);
+            self.join_menu(ui);
+        });
         if let Some(e) = preview_err {
             painter.text(
                 rect.left_bottom() + Vec2::new(10.0, -10.0),

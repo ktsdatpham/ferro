@@ -45,10 +45,16 @@ pub enum ToolKind {
     Intersect,
     /// Cut (keep cutter): a `cut` relationship row; the cutter stays.
     CutGeometry,
+    /// Join Geometry (M5-5.2): a `join` row; the first pick wins.
+    JoinGeometry,
+    /// Unjoin Geometry: delete the `join` row of the two picks.
+    UnjoinGeometry,
+    /// Switch Join Order: reverse the `join` row of the two picks.
+    SwitchJoinOrder,
 }
 
 impl ToolKind {
-    pub const ALL: [ToolKind; 23] = [
+    pub const ALL: [ToolKind; 26] = [
         ToolKind::Select,
         ToolKind::Line,
         ToolKind::Rectangle,
@@ -72,6 +78,9 @@ impl ToolKind {
         ToolKind::Unite,
         ToolKind::Intersect,
         ToolKind::CutGeometry,
+        ToolKind::JoinGeometry,
+        ToolKind::UnjoinGeometry,
+        ToolKind::SwitchJoinOrder,
     ];
     /// Tools that draw a chain of clicked points.
     pub fn is_chain(self) -> bool {
@@ -84,7 +93,13 @@ impl ToolKind {
     pub fn is_solid(self) -> bool {
         matches!(
             self,
-            ToolKind::Subtract | ToolKind::Unite | ToolKind::Intersect | ToolKind::CutGeometry
+            ToolKind::Subtract
+                | ToolKind::Unite
+                | ToolKind::Intersect
+                | ToolKind::CutGeometry
+                | ToolKind::JoinGeometry
+                | ToolKind::UnjoinGeometry
+                | ToolKind::SwitchJoinOrder
         )
     }
     pub fn is_bim(self) -> bool {
@@ -118,8 +133,47 @@ impl ToolKind {
             ToolKind::Unite => "Unite",
             ToolKind::Intersect => "Intersect",
             ToolKind::CutGeometry => "Cut (keep cutter)",
+            ToolKind::JoinGeometry => "Join Geometry",
+            ToolKind::UnjoinGeometry => "Unjoin Geometry",
+            ToolKind::SwitchJoinOrder => "Switch Join Order",
         }
     }
+}
+
+/// The command of a join tool (M5-5.2) on two picks: Join Geometry makes a
+/// `join [first, second]` row (the first pick wins, as in Revit); Unjoin
+/// deletes the pair's row; Switch Join Order reverses it in place. `Err`
+/// is the status-line text when the picks have no join to undo or switch.
+pub fn join_command(
+    kind: ToolKind,
+    first: ElementId,
+    second: ElementId,
+    doc: &Document,
+) -> Result<AnyCommand, String> {
+    use ferro_core::model::{join, RelationshipKind};
+    use ferro_core::ops::relationship_commands::{
+        CreateRelationship, DeleteRelationship, SetRelationship,
+    };
+    if kind == ToolKind::JoinGeometry {
+        return Ok(CreateRelationship {
+            kind: RelationshipKind::Join,
+            elements: vec![first, second],
+            phase: None,
+        }
+        .into());
+    }
+    let row = join::join_between(doc, first, second)
+        .ok_or_else(|| "These two elements are not joined.".to_string())?;
+    let relationship = row.uid.to_string();
+    Ok(match kind {
+        ToolKind::UnjoinGeometry => DeleteRelationship { relationship }.into(),
+        _ => SetRelationship {
+            relationship,
+            elements: None,
+            reverse: true,
+        }
+        .into(),
+    })
 }
 
 /// The command of a solid tool: `target` picked first, then `other`.
@@ -1055,6 +1109,12 @@ impl ToolState {
             ToolKind::Intersect => "Click the other Form: the target keeps what both share; the other is deleted.",
             ToolKind::CutGeometry if self.solid_target.is_none() => "Click the element to cut (a wall, floor or Form).",
             ToolKind::CutGeometry => "Click the cutter: it stays (a Form becomes a hidden void) and the cut follows it when it moves.",
+            ToolKind::JoinGeometry if self.solid_target.is_none() => "Click the element that wins where they overlap (a wall, floor or Form).",
+            ToolKind::JoinGeometry => "Click the element to join: it loses the overlap, the first keeps its shape.",
+            ToolKind::UnjoinGeometry if self.solid_target.is_none() => "Click the first of two joined elements.",
+            ToolKind::UnjoinGeometry => "Click the other element: their join is removed.",
+            ToolKind::SwitchJoinOrder if self.solid_target.is_none() => "Click the first of two joined elements.",
+            ToolKind::SwitchJoinOrder => "Click the other element: the other one now wins the overlap.",
         }
     }
 
@@ -1108,6 +1168,20 @@ impl ToolState {
                 };
                 self.solid_target = None;
                 ToolEvent::Commit(solid_command(k, target, e))
+            }
+            k @ (ToolKind::JoinGeometry | ToolKind::UnjoinGeometry | ToolKind::SwitchJoinOrder) => {
+                let Some(e) = s.element else {
+                    return ToolEvent::None;
+                };
+                let Some(first) = self.solid_target.filter(|t| *t != e) else {
+                    self.solid_target = Some(e);
+                    return ToolEvent::None;
+                };
+                self.solid_target = None;
+                match join_command(k, first, e, ctx.doc) {
+                    Ok(c) => ToolEvent::Commit(c),
+                    Err(m) => ToolEvent::Message(m),
+                }
             }
             ToolKind::Paint => match (s.element, ctx.material) {
                 (Some(e), Some(m)) => ToolEvent::Commit(
@@ -1760,10 +1834,47 @@ mod tests {
                 ..
             })
         ));
-        assert!(ToolKind::ALL.iter().filter(|k| k.is_solid()).count() == 4);
+        assert!(ToolKind::ALL.iter().filter(|k| k.is_solid()).count() == 7);
         let t = ToolState::new(ToolKind::Unite);
         assert!(!t.is_active());
         assert!(t.hint().contains("keep"));
+    }
+
+    #[test]
+    fn join_tools_create_unjoin_and_switch_the_pair_row() {
+        use ferro_core::model::RelationshipKind;
+        use ferro_core::ops::{ExecContext, SequentialIds};
+        let mut s =
+            ferro_core::Session::new(Document::new("Joins"), Box::new(SequentialIds::new(1)));
+        let mut boxed = |x: f64| {
+            let args = serde_json::json!({"origin": [x, 0, 0], "width": 1000, "depth": 1000, "height": 1000});
+            let cmd = AnyCommand::from_tool("create_box", &args).unwrap();
+            let o = s.execute(cmd, &ExecContext::user()).unwrap();
+            serde_json::from_value::<ElementId>(o.output["element"].clone()).unwrap()
+        };
+        let (a, b) = (boxed(0.0), boxed(500.0));
+        // Nothing joined yet: unjoin / switch explain instead of failing.
+        assert!(join_command(ToolKind::UnjoinGeometry, a, b, s.doc()).is_err());
+        let join = join_command(ToolKind::JoinGeometry, a, b, s.doc()).unwrap();
+        match &join {
+            AnyCommand::CreateRelationship(c) => {
+                assert_eq!(c.kind, RelationshipKind::Join);
+                assert_eq!(c.elements, [a, b], "the first pick wins");
+            }
+            other => panic!("{other:?}"),
+        }
+        s.execute(join, &ExecContext::user()).unwrap();
+        // Picked in either order, the pair's row is found.
+        assert!(matches!(
+            join_command(ToolKind::SwitchJoinOrder, b, a, s.doc()).unwrap(),
+            AnyCommand::SetRelationship(r) if r.reverse
+        ));
+        assert!(matches!(
+            join_command(ToolKind::UnjoinGeometry, a, b, s.doc()).unwrap(),
+            AnyCommand::DeleteRelationship(_)
+        ));
+        let t = ToolState::new(ToolKind::JoinGeometry);
+        assert!(t.hint().contains("wins"));
     }
 
     #[test]

@@ -55,6 +55,11 @@ pub enum Target {
     Unite,
     Intersect,
     CutGeometry,
+    /// Join tools (M5-5.2): Revit's `JG` / `UJ`, and `SJ` (free) for
+    /// Switch Join Order.
+    JoinGeometry,
+    UnjoinGeometry,
+    SwitchJoinOrder,
     /// A plugin command (ADR 0009), by its slot in the app's list of loaded
     /// plugin commands. Bound only by [`Keymap::bind_plugin`], never read
     /// from or written to `keymap.json` (slots change on every reload).
@@ -63,7 +68,7 @@ pub enum Target {
 }
 
 impl Target {
-    pub const ALL: [Target; 29] = [
+    pub const ALL: [Target; 32] = [
         Target::Select,
         Target::Line,
         Target::Rectangle,
@@ -93,6 +98,9 @@ impl Target {
         Target::Unite,
         Target::Intersect,
         Target::CutGeometry,
+        Target::JoinGeometry,
+        Target::UnjoinGeometry,
+        Target::SwitchJoinOrder,
     ];
 
     /// The tool this target activates, if it is a tool.
@@ -121,6 +129,9 @@ impl Target {
             Target::Unite => ToolKind::Unite,
             Target::Intersect => ToolKind::Intersect,
             Target::CutGeometry => ToolKind::CutGeometry,
+            Target::JoinGeometry => ToolKind::JoinGeometry,
+            Target::UnjoinGeometry => ToolKind::UnjoinGeometry,
+            Target::SwitchJoinOrder => ToolKind::SwitchJoinOrder,
             Target::Hide
             | Target::UnhideAll
             | Target::ZoomExtents
@@ -228,6 +239,11 @@ const REVIT: &[(&str, Target)] = &[
     ("SU", Target::Subtract),
     ("UN", Target::Unite),
     ("IN", Target::Intersect),
+    // Revit's Join / Unjoin Geometry codes; Switch Join Order has no Revit
+    // code, SJ is free.
+    ("JG", Target::JoinGeometry),
+    ("UJ", Target::UnjoinGeometry),
+    ("SJ", Target::SwitchJoinOrder),
     ("DELETE", Target::Delete),
 ];
 
@@ -464,6 +480,9 @@ mod tests {
         assert_eq!(k.label_for(Target::Subtract), "SU");
         assert_eq!(k.label_for(Target::Unite), "UN");
         assert_eq!(k.label_for(Target::Intersect), "IN");
+        assert_eq!(k.label_for(Target::JoinGeometry), "JG");
+        assert_eq!(k.label_for(Target::UnjoinGeometry), "UJ");
+        assert_eq!(k.label_for(Target::SwitchJoinOrder), "SJ");
     }
 
     #[test]
