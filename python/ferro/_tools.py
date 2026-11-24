@@ -37,7 +37,7 @@ def create_level(
     *,
     name: str,
     elevation: Length,
-    in_design_option: Optional[int] = None,
+    in_design_option: Optional[Any] = None,
     is_building_storey: Optional[bool] = None,
 ) -> Dict[str, Any]:
     """Create a level (named elevation, e.g. a storey). Elements placed on a level move
@@ -46,8 +46,10 @@ def create_level(
     Args:
         name: Text.
         elevation: Length: number = millimetres, or a string with units ("3m", "300cm").
-        in_design_option: Optional design option id: make this change inside that option
-            (its layer), not in the shared model. Optional.
+        in_design_option: Where the change lands: a design option id (the change goes
+            into that option's layer), or "shared" for the shared model. Omitted (or
+            null): the option the user is editing in the Ferro app, else the shared
+            model. Optional.
         is_building_storey: Default true. Optional.
 
     Returns:
@@ -65,15 +67,17 @@ def set_level_elevation(
     *,
     level: ElementId,
     elevation: Length,
-    in_design_option: Optional[int] = None,
+    in_design_option: Optional[Any] = None,
 ) -> Dict[str, Any]:
     """Change a level's elevation. Elements on that level move with it.
 
     Args:
         level: Level element id.
         elevation: Length: number = millimetres, or a string with units ("3m", "300cm").
-        in_design_option: Optional design option id: make this change inside that option
-            (its layer), not in the shared model. Optional.
+        in_design_option: Where the change lands: a design option id (the change goes
+            into that option's layer), or "shared" for the shared model. Omitted (or
+            null): the option the user is editing in the Ferro app, else the shared
+            model. Optional.
 
     Returns:
         The tool's JSON body. Raises FerroError on failure.
@@ -89,7 +93,7 @@ def create_rectangle(
     origin: Point,
     width: Length,
     depth: Length,
-    in_design_option: Optional[int] = None,
+    in_design_option: Optional[Any] = None,
     level: Optional[ElementId] = None,
     name: Optional[str] = None,
 ) -> Dict[str, Any]:
@@ -101,8 +105,10 @@ def create_rectangle(
             units); Z is up.
         width: Length: number = millimetres, or a string with units ("3m", "300cm").
         depth: Length: number = millimetres, or a string with units ("3m", "300cm").
-        in_design_option: Optional design option id: make this change inside that option
-            (its layer), not in the shared model. Optional.
+        in_design_option: Where the change lands: a design option id (the change goes
+            into that option's layer), or "shared" for the shared model. Omitted (or
+            null): the option the user is editing in the Ferro app, else the shared
+            model. Optional.
         level: Optional level id. Optional.
         name: Text. Optional.
 
@@ -122,7 +128,7 @@ def create_rectangle(
 def create_polygon(
     *,
     points: Sequence[Point],
-    in_design_option: Optional[int] = None,
+    in_design_option: Optional[Any] = None,
     level: Optional[ElementId] = None,
     name: Optional[str] = None,
     relative_to_level: Optional[bool] = None,
@@ -131,8 +137,10 @@ def create_polygon(
 
     Args:
         points: List of points [x, y, z] in millimetres. Each: Vertex. minItems=3.
-        in_design_option: Optional design option id: make this change inside that option
-            (its layer), not in the shared model. Optional.
+        in_design_option: Where the change lands: a design option id (the change goes
+            into that option's layer), or "shared" for the shared model. Omitted (or
+            null): the option the user is editing in the Ferro app, else the shared
+            model. Optional.
         level: Optional level id. Optional.
         name: Text. Optional.
         relative_to_level: True or False. Optional.
@@ -158,7 +166,7 @@ def create_box(
     width: Length,
     depth: Length,
     height: Length,
-    in_design_option: Optional[int] = None,
+    in_design_option: Optional[Any] = None,
     level: Optional[ElementId] = None,
     name: Optional[str] = None,
 ) -> Dict[str, Any]:
@@ -171,8 +179,10 @@ def create_box(
         width: Length: number = millimetres, or a string with units ("3m", "300cm").
         depth: Length: number = millimetres, or a string with units ("3m", "300cm").
         height: Length: number = millimetres, or a string with units ("3m", "300cm").
-        in_design_option: Optional design option id: make this change inside that option
-            (its layer), not in the shared model. Optional.
+        in_design_option: Where the change lands: a design option id (the change goes
+            into that option's layer), or "shared" for the shared model. Omitted (or
+            null): the option the user is editing in the Ferro app, else the shared
+            model. Optional.
         level: Optional level id. Optional.
         name: Text. Optional.
 
@@ -194,7 +204,7 @@ def push_pull_face(
     element: ElementId,
     face: int,
     distance: Length,
-    in_design_option: Optional[int] = None,
+    in_design_option: Optional[Any] = None,
 ) -> Dict[str, Any]:
     """Push / pull a face along its normal (SketchUp Push/Pull). Negative distance
     pushes inward. On a Form it edits geometry; on a wall, floor, door or window it
@@ -205,8 +215,10 @@ def push_pull_face(
         element: Form element id.
         face: Face id within the Form.
         distance: Length: number = millimetres, or a string with units ("3m", "300cm").
-        in_design_option: Optional design option id: make this change inside that option
-            (its layer), not in the shared model. Optional.
+        in_design_option: Where the change lands: a design option id (the change goes
+            into that option's layer), or "shared" for the shared model. Omitted (or
+            null): the option the user is editing in the Ferro app, else the shared
+            model. Optional.
 
     Returns:
         The tool's JSON body. Raises FerroError on failure.
@@ -221,7 +233,7 @@ def move_elements(
     *,
     elements: Sequence[ElementId],
     vector: Point,
-    in_design_option: Optional[int] = None,
+    in_design_option: Optional[Any] = None,
 ) -> Dict[str, Any]:
     """Move elements by a vector.
 
@@ -229,8 +241,10 @@ def move_elements(
         elements: Element ids.
         vector: Displacement. Point [x, y] or [x, y, z] in millimetres (or strings with
             units); Z is up.
-        in_design_option: Optional design option id: make this change inside that option
-            (its layer), not in the shared model. Optional.
+        in_design_option: Where the change lands: a design option id (the change goes
+            into that option's layer), or "shared" for the shared model. Omitted (or
+            null): the option the user is editing in the Ferro app, else the shared
+            model. Optional.
 
     Returns:
         The tool's JSON body. Raises FerroError on failure.
@@ -246,7 +260,7 @@ def rotate_elements(
     elements: Sequence[ElementId],
     center: Point,
     angle: float,
-    in_design_option: Optional[int] = None,
+    in_design_option: Optional[Any] = None,
 ) -> Dict[str, Any]:
     """Rotate elements about a vertical axis through `center`. Angle in degrees,
     counter-clockwise positive.
@@ -256,8 +270,10 @@ def rotate_elements(
         center: Axis point. Point [x, y] or [x, y, z] in millimetres (or strings with
             units); Z is up.
         angle: Degrees.
-        in_design_option: Optional design option id: make this change inside that option
-            (its layer), not in the shared model. Optional.
+        in_design_option: Where the change lands: a design option id (the change goes
+            into that option's layer), or "shared" for the shared model. Omitted (or
+            null): the option the user is editing in the Ferro app, else the shared
+            model. Optional.
 
     Returns:
         The tool's JSON body. Raises FerroError on failure.
@@ -273,7 +289,7 @@ def copy_elements(
     elements: Sequence[ElementId],
     vector: Point,
     count: Optional[int] = None,
-    in_design_option: Optional[int] = None,
+    in_design_option: Optional[Any] = None,
 ) -> Dict[str, Any]:
     """Copy elements offset by a vector; count > 1 makes a linear array. Returns new
     ids.
@@ -283,8 +299,10 @@ def copy_elements(
         vector: Offset per copy. Point [x, y] or [x, y, z] in millimetres (or strings
             with units); Z is up.
         count: minimum=1. maximum=1000. Optional.
-        in_design_option: Optional design option id: make this change inside that option
-            (its layer), not in the shared model. Optional.
+        in_design_option: Where the change lands: a design option id (the change goes
+            into that option's layer), or "shared" for the shared model. Omitted (or
+            null): the option the user is editing in the Ferro app, else the shared
+            model. Optional.
 
     Returns:
         The tool's JSON body. Raises FerroError on failure.
@@ -300,14 +318,16 @@ def copy_elements(
 def delete_elements(
     *,
     elements: Sequence[ElementId],
-    in_design_option: Optional[int] = None,
+    in_design_option: Optional[Any] = None,
 ) -> Dict[str, Any]:
     """Delete elements. References from other elements are cleared with a warning.
 
     Args:
         elements: Element ids.
-        in_design_option: Optional design option id: make this change inside that option
-            (its layer), not in the shared model. Optional.
+        in_design_option: Where the change lands: a design option id (the change goes
+            into that option's layer), or "shared" for the shared model. Omitted (or
+            null): the option the user is editing in the Ferro app, else the shared
+            model. Optional.
 
     Returns:
         The tool's JSON body. Raises FerroError on failure.
@@ -322,15 +342,17 @@ def set_name(
     *,
     element: ElementId,
     name: Optional[str],
-    in_design_option: Optional[int] = None,
+    in_design_option: Optional[Any] = None,
 ) -> Dict[str, Any]:
     """Rename an element (null clears).
 
     Args:
         element: Element id.
         name: Text (None clears).
-        in_design_option: Optional design option id: make this change inside that option
-            (its layer), not in the shared model. Optional.
+        in_design_option: Where the change lands: a design option id (the change goes
+            into that option's layer), or "shared" for the shared model. Omitted (or
+            null): the option the user is editing in the Ferro app, else the shared
+            model. Optional.
 
     Returns:
         The tool's JSON body. Raises FerroError on failure.
@@ -346,7 +368,7 @@ def set_parameter(
     element: ElementId,
     key: str,
     value: Any,
-    in_design_option: Optional[int] = None,
+    in_design_option: Optional[Any] = None,
 ) -> Dict[str, Any]:
     """Set a typed parameter. Key format namespace.group.name (e.g.
     ferro.common.comments, acme.energy.conductivity). Value forms: (1) a quantity with a
@@ -365,8 +387,10 @@ def set_parameter(
         element: Element id.
         key: Text.
         value: JSON object.
-        in_design_option: Optional design option id: make this change inside that option
-            (its layer), not in the shared model. Optional.
+        in_design_option: Where the change lands: a design option id (the change goes
+            into that option's layer), or "shared" for the shared model. Omitted (or
+            null): the option the user is editing in the Ferro app, else the shared
+            model. Optional.
 
     Returns:
         The tool's JSON body. Raises FerroError on failure.
@@ -385,7 +409,7 @@ def set_parameter_definition(
     description: Optional[str] = None,
     group: Optional[Literal["constraints", "dimensions", "identity_data", "materials", "analysis", "structural", "data"]] = None,
     ifc: Optional[Dict[str, Any]] = None,
-    in_design_option: Optional[int] = None,
+    in_design_option: Optional[Any] = None,
     uid: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Define a project parameter key (like a Revit shared parameter): data type, group,
@@ -406,8 +430,10 @@ def set_parameter_definition(
         group: One of: constraints, dimensions, identity_data, materials, analysis,
             structural, data. Optional.
         ifc: JSON object. Optional.
-        in_design_option: Optional design option id: make this change inside that option
-            (its layer), not in the shared model. Optional.
+        in_design_option: Where the change lands: a design option id (the change goes
+            into that option's layer), or "shared" for the shared model. Omitted (or
+            null): the option the user is editing in the Ferro app, else the shared
+            model. Optional.
         uid: Optional UUID (8-4-4-4-12). Optional.
 
     Returns:
@@ -433,7 +459,7 @@ def set_category(
     *,
     element: int,
     category: Literal["forms", "walls", "floors", "roofs", "ceilings", "columns", "doors", "windows", "stairs", "railings", "furniture", "generic_models"],
-    in_design_option: Optional[int] = None,
+    in_design_option: Optional[Any] = None,
 ) -> Dict[str, Any]:
     """Classify directly edited geometry (a Form, or a frozen wall / floor) as a BIM
     category: a free-form wall keeps its shape and becomes a Wall with type, materials
@@ -444,8 +470,10 @@ def set_category(
         element: Element with direct geometry.
         category: One of: forms, walls, floors, roofs, ceilings, columns, doors,
             windows, stairs, railings, furniture, generic_models.
-        in_design_option: Optional design option id: make this change inside that option
-            (its layer), not in the shared model. Optional.
+        in_design_option: Where the change lands: a design option id (the change goes
+            into that option's layer), or "shared" for the shared model. Omitted (or
+            null): the option the user is editing in the Ferro app, else the shared
+            model. Optional.
 
     Returns:
         The tool's JSON body. Raises FerroError on failure.
@@ -460,7 +488,7 @@ def set_geometry_source(
     *,
     element: ElementId,
     source: Literal["direct", "parametric"],
-    in_design_option: Optional[int] = None,
+    in_design_option: Optional[Any] = None,
 ) -> Dict[str, Any]:
     """Switch where an element's geometry comes from. 'direct': freeze a parametric wall
     / floor so it can be edited freely like a SketchUp group (keeps category, type,
@@ -473,8 +501,10 @@ def set_geometry_source(
     Args:
         element: Element id.
         source: One of: direct, parametric.
-        in_design_option: Optional design option id: make this change inside that option
-            (its layer), not in the shared model. Optional.
+        in_design_option: Where the change lands: a design option id (the change goes
+            into that option's layer), or "shared" for the shared model. Omitted (or
+            null): the option the user is editing in the Ferro app, else the shared
+            model. Optional.
 
     Returns:
         The tool's JSON body. Raises FerroError on failure.
@@ -489,7 +519,7 @@ def set_project_units(
     *,
     spec: Literal["length", "area", "volume", "angle", "mass", "density", "force", "moment", "pressure", "stress", "thermal_conductivity", "thermal_resistance", "u_value", "heat_capacity", "temperature", "power", "illuminance", "flow", "currency", "carbon_mass", "time", "ratio", "number"],
     decimals: Optional[int] = None,
-    in_design_option: Optional[int] = None,
+    in_design_option: Optional[Any] = None,
     unit: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Choose how a quantity is shown and typed in this project, e.g. {spec: length,
@@ -502,8 +532,10 @@ def set_project_units(
             heat_capacity, temperature, power, illuminance, flow, currency, carbon_mass,
             time, ratio, number.
         decimals: minimum=0. maximum=9. Optional.
-        in_design_option: Optional design option id: make this change inside that option
-            (its layer), not in the shared model. Optional.
+        in_design_option: Where the change lands: a design option id (the change goes
+            into that option's layer), or "shared" for the shared model. Omitted (or
+            null): the option the user is editing in the Ferro app, else the shared
+            model. Optional.
         unit: A unit of that quantity, e.g. mm, m, ft, W/(m·K). Optional.
 
     Returns:
@@ -523,7 +555,7 @@ def set_site_location(
     *,
     clear: Optional[bool] = None,
     elevation: Optional[Length] = None,
-    in_design_option: Optional[int] = None,
+    in_design_option: Optional[Any] = None,
     latitude: Optional[float] = None,
     longitude: Optional[float] = None,
     place: Optional[str] = None,
@@ -539,8 +571,10 @@ def set_site_location(
         clear: True or False. Optional.
         elevation: Length: number = millimetres, or a string with units ("3m", "300cm").
             Optional.
-        in_design_option: Optional design option id: make this change inside that option
-            (its layer), not in the shared model. Optional.
+        in_design_option: Where the change lands: a design option id (the change goes
+            into that option's layer), or "shared" for the shared model. Omitted (or
+            null): the option the user is editing in the Ferro app, else the shared
+            model. Optional.
         latitude: Degrees, -90..90. Optional.
         longitude: Degrees, -180..180. Optional.
         place: Text. Optional.
@@ -573,14 +607,16 @@ def set_site_location(
 def set_project_currency(
     *,
     currency: Optional[str] = None,
-    in_design_option: Optional[int] = None,
+    in_design_option: Optional[Any] = None,
 ) -> Dict[str, Any]:
     """Set the currency for costs (ISO 4217, e.g. VND, USD); null clears it.
 
     Args:
         currency: Text (None clears). Optional.
-        in_design_option: Optional design option id: make this change inside that option
-            (its layer), not in the shared model. Optional.
+        in_design_option: Where the change lands: a design option id (the change goes
+            into that option's layer), or "shared" for the shared model. Omitted (or
+            null): the option the user is editing in the Ferro app, else the shared
+            model. Optional.
 
     Returns:
         The tool's JSON body. Raises FerroError on failure.
@@ -593,13 +629,15 @@ def set_project_currency(
     return _call("set_project_currency", args)
 
 
-def set_project_name(*, name: str, in_design_option: Optional[int] = None) -> Dict[str, Any]:
+def set_project_name(*, name: str, in_design_option: Optional[Any] = None) -> Dict[str, Any]:
     """Rename the project.
 
     Args:
         name: Text.
-        in_design_option: Optional design option id: make this change inside that option
-            (its layer), not in the shared model. Optional.
+        in_design_option: Where the change lands: a design option id (the change goes
+            into that option's layer), or "shared" for the shared model. Omitted (or
+            null): the option the user is editing in the Ferro app, else the shared
+            model. Optional.
 
     Returns:
         The tool's JSON body. Raises FerroError on failure.
@@ -617,7 +655,7 @@ def create_material(
     appearance: Optional[Dict[str, Any]] = None,
     cost: Optional[Dict[str, Any]] = None,
     environmental: Optional[Dict[str, Any]] = None,
-    in_design_option: Optional[int] = None,
+    in_design_option: Optional[Any] = None,
     physical: Optional[Dict[str, Any]] = None,
     roughness: Optional[float] = None,
     thermal: Optional[Dict[str, Any]] = None,
@@ -635,8 +673,10 @@ def create_material(
         cost: Unit price. Optional.
         environmental: Embodied carbon (GWP-total, EN 15804 stages) in kg CO2e per
             declared unit. Optional.
-        in_design_option: Optional design option id: make this change inside that option
-            (its layer), not in the shared model. Optional.
+        in_design_option: Where the change lands: a design option id (the change goes
+            into that option's layer), or "shared" for the shared model. Omitted (or
+            null): the option the user is editing in the Ferro app, else the shared
+            model. Optional.
         physical: Mechanical data, SI units. Optional.
         roughness: OpenPBR specular_roughness, default 0.8. minimum=0. maximum=1.
             Optional.
@@ -672,7 +712,7 @@ def set_material(
     color: Optional[str] = None,
     cost: Optional[Dict[str, Any]] = None,
     environmental: Optional[Dict[str, Any]] = None,
-    in_design_option: Optional[int] = None,
+    in_design_option: Optional[Any] = None,
     physical: Optional[Dict[str, Any]] = None,
     roughness: Optional[float] = None,
     thermal: Optional[Dict[str, Any]] = None,
@@ -691,8 +731,10 @@ def set_material(
         cost: Unit price. Optional.
         environmental: Embodied carbon (GWP-total, EN 15804 stages) in kg CO2e per
             declared unit. Optional.
-        in_design_option: Optional design option id: make this change inside that option
-            (its layer), not in the shared model. Optional.
+        in_design_option: Where the change lands: a design option id (the change goes
+            into that option's layer), or "shared" for the shared model. Omitted (or
+            null): the option the user is editing in the Ferro app, else the shared
+            model. Optional.
         physical: Mechanical data, SI units. Optional.
         roughness: minimum=0. maximum=1. Optional.
         thermal: Thermal data, SI units; conductivity gives wall / floor U-values.
@@ -726,7 +768,7 @@ def set_material(
 def create_wall_type(
     *,
     name: str,
-    in_design_option: Optional[int] = None,
+    in_design_option: Optional[Any] = None,
     layers: Optional[Sequence[Dict[str, Any]]] = None,
     material: Optional[ElementId] = None,
     thickness: Optional[Length] = None,
@@ -737,8 +779,10 @@ def create_wall_type(
 
     Args:
         name: Text.
-        in_design_option: Optional design option id: make this change inside that option
-            (its layer), not in the shared model. Optional.
+        in_design_option: Where the change lands: a design option id (the change goes
+            into that option's layer), or "shared" for the shared model. Omitted (or
+            null): the option the user is editing in the Ferro app, else the shared
+            model. Optional.
         layers: Each item: {function: Literal["structure", "substrate", "insulation",
             "finish", "membrane"], material?: ElementId, thickness: length mm}.
             Optional.
@@ -764,7 +808,7 @@ def create_wall_type(
 def create_floor_type(
     *,
     name: str,
-    in_design_option: Optional[int] = None,
+    in_design_option: Optional[Any] = None,
     layers: Optional[Sequence[Dict[str, Any]]] = None,
     material: Optional[ElementId] = None,
     thickness: Optional[Length] = None,
@@ -773,8 +817,10 @@ def create_floor_type(
 
     Args:
         name: Text.
-        in_design_option: Optional design option id: make this change inside that option
-            (its layer), not in the shared model. Optional.
+        in_design_option: Where the change lands: a design option id (the change goes
+            into that option's layer), or "shared" for the shared model. Omitted (or
+            null): the option the user is editing in the Ferro app, else the shared
+            model. Optional.
         layers: Each item: {function: Literal["structure", "substrate", "insulation",
             "finish", "membrane"], material?: ElementId, thickness: length mm}.
             Optional.
@@ -803,7 +849,7 @@ def create_wall(
     end: Point,
     base_offset: Optional[Length] = None,
     height: Optional[Length] = None,
-    in_design_option: Optional[int] = None,
+    in_design_option: Optional[Any] = None,
     level: Optional[ElementId] = None,
     location_line: Optional[Literal["wall_centerline", "core_centerline", "finish_exterior", "finish_interior"]] = None,
     name: Optional[str] = None,
@@ -826,8 +872,10 @@ def create_wall(
             "300cm"). Optional.
         height: Length: number = millimetres, or a string with units ("3m", "300cm").
             Optional.
-        in_design_option: Optional design option id: make this change inside that option
-            (its layer), not in the shared model. Optional.
+        in_design_option: Where the change lands: a design option id (the change goes
+            into that option's layer), or "shared" for the shared model. Omitted (or
+            null): the option the user is editing in the Ferro app, else the shared
+            model. Optional.
         level: Base level id. Optional.
         location_line: One of: wall_centerline, core_centerline, finish_exterior,
             finish_interior. Optional.
@@ -868,7 +916,7 @@ def create_walls(
     base_offset: Optional[Length] = None,
     closed: Optional[bool] = None,
     height: Optional[Length] = None,
-    in_design_option: Optional[int] = None,
+    in_design_option: Optional[Any] = None,
     level: Optional[ElementId] = None,
     location_line: Optional[Literal["wall_centerline", "core_centerline", "finish_exterior", "finish_interior"]] = None,
     name: Optional[str] = None,
@@ -886,8 +934,10 @@ def create_walls(
         closed: True or False. Optional.
         height: Length: number = millimetres, or a string with units ("3m", "300cm").
             Optional.
-        in_design_option: Optional design option id: make this change inside that option
-            (its layer), not in the shared model. Optional.
+        in_design_option: Where the change lands: a design option id (the change goes
+            into that option's layer), or "shared" for the shared model. Omitted (or
+            null): the option the user is editing in the Ferro app, else the shared
+            model. Optional.
         level: Base level id. Optional.
         location_line: One of: wall_centerline, core_centerline, finish_exterior,
             finish_interior. Optional.
@@ -931,7 +981,7 @@ def create_arc_wall(
     end: Point,
     base_offset: Optional[Length] = None,
     height: Optional[Length] = None,
-    in_design_option: Optional[int] = None,
+    in_design_option: Optional[Any] = None,
     level: Optional[ElementId] = None,
     location_line: Optional[Literal["wall_centerline", "core_centerline", "finish_exterior", "finish_interior"]] = None,
     name: Optional[str] = None,
@@ -953,8 +1003,10 @@ def create_arc_wall(
             "300cm"). Optional.
         height: Length: number = millimetres, or a string with units ("3m", "300cm").
             Optional.
-        in_design_option: Optional design option id: make this change inside that option
-            (its layer), not in the shared model. Optional.
+        in_design_option: Where the change lands: a design option id (the change goes
+            into that option's layer), or "shared" for the shared model. Omitted (or
+            null): the option the user is editing in the Ferro app, else the shared
+            model. Optional.
         level: Base level id. Optional.
         location_line: One of: wall_centerline, core_centerline, finish_exterior,
             finish_interior. Optional.
@@ -993,15 +1045,17 @@ def set_wall_height(
     *,
     wall: ElementId,
     height: Length,
-    in_design_option: Optional[int] = None,
+    in_design_option: Optional[Any] = None,
 ) -> Dict[str, Any]:
     """Give a wall a fixed (unconnected) height.
 
     Args:
         wall: Wall id.
         height: Length: number = millimetres, or a string with units ("3m", "300cm").
-        in_design_option: Optional design option id: make this change inside that option
-            (its layer), not in the shared model. Optional.
+        in_design_option: Where the change lands: a design option id (the change goes
+            into that option's layer), or "shared" for the shared model. Omitted (or
+            null): the option the user is editing in the Ferro app, else the shared
+            model. Optional.
 
     Returns:
         The tool's JSON body. Raises FerroError on failure.
@@ -1016,15 +1070,17 @@ def set_element_type(
     *,
     element: ElementId,
     element_type: ElementId,
-    in_design_option: Optional[int] = None,
+    in_design_option: Optional[Any] = None,
 ) -> Dict[str, Any]:
     """Change the type of a wall (wall type) or floor (floor type).
 
     Args:
         element: Wall or floor id.
         element_type: Type id.
-        in_design_option: Optional design option id: make this change inside that option
-            (its layer), not in the shared model. Optional.
+        in_design_option: Where the change lands: a design option id (the change goes
+            into that option's layer), or "shared" for the shared model. Omitted (or
+            null): the option the user is editing in the Ferro app, else the shared
+            model. Optional.
 
     Returns:
         The tool's JSON body. Raises FerroError on failure.
@@ -1040,7 +1096,7 @@ def create_floor(
     points: Sequence[Point],
     floor_type: Optional[ElementId] = None,
     holes: Optional[Sequence[Sequence[Point]]] = None,
-    in_design_option: Optional[int] = None,
+    in_design_option: Optional[Any] = None,
     level: Optional[ElementId] = None,
     name: Optional[str] = None,
     offset: Optional[Length] = None,
@@ -1054,8 +1110,10 @@ def create_floor(
             minItems=3.
         floor_type: Optional floor type id. Optional.
         holes: List of point lists [x, y, z] in millimetres. Optional.
-        in_design_option: Optional design option id: make this change inside that option
-            (its layer), not in the shared model. Optional.
+        in_design_option: Where the change lands: a design option id (the change goes
+            into that option's layer), or "shared" for the shared model. Omitted (or
+            null): the option the user is editing in the Ferro app, else the shared
+            model. Optional.
         level: Optional level id. Optional.
         name: Text. Optional.
         offset: Length: number = millimetres, or a string with units ("3m", "300cm").
@@ -1086,7 +1144,7 @@ def create_opening(
     kind: Literal["door", "window"],
     position: Length,
     height: Optional[Length] = None,
-    in_design_option: Optional[int] = None,
+    in_design_option: Optional[Any] = None,
     name: Optional[str] = None,
     sill: Optional[Length] = None,
     width: Optional[Length] = None,
@@ -1101,8 +1159,10 @@ def create_opening(
         position: Length: number = millimetres, or a string with units ("3m", "300cm").
         height: Length: number = millimetres, or a string with units ("3m", "300cm").
             Optional.
-        in_design_option: Optional design option id: make this change inside that option
-            (its layer), not in the shared model. Optional.
+        in_design_option: Where the change lands: a design option id (the change goes
+            into that option's layer), or "shared" for the shared model. Omitted (or
+            null): the option the user is editing in the Ferro app, else the shared
+            model. Optional.
         name: Text. Optional.
         sill: Length: number = millimetres, or a string with units ("3m", "300cm").
             Optional.
@@ -1130,7 +1190,7 @@ def set_opening(
     *,
     opening: ElementId,
     height: Optional[Length] = None,
-    in_design_option: Optional[int] = None,
+    in_design_option: Optional[Any] = None,
     position: Optional[Length] = None,
     sill: Optional[Length] = None,
     width: Optional[Length] = None,
@@ -1142,8 +1202,10 @@ def set_opening(
         opening: Door or window id.
         height: Length: number = millimetres, or a string with units ("3m", "300cm").
             Optional.
-        in_design_option: Optional design option id: make this change inside that option
-            (its layer), not in the shared model. Optional.
+        in_design_option: Where the change lands: a design option id (the change goes
+            into that option's layer), or "shared" for the shared model. Omitted (or
+            null): the option the user is editing in the Ferro app, else the shared
+            model. Optional.
         position: Length: number = millimetres, or a string with units ("3m", "300cm").
             Optional.
         sill: Length: number = millimetres, or a string with units ("3m", "300cm").
@@ -1174,7 +1236,7 @@ def set_wall(
     base_offset: Optional[Length] = None,
     end: Optional[Point] = None,
     height: Optional[Length] = None,
-    in_design_option: Optional[int] = None,
+    in_design_option: Optional[Any] = None,
     location_line: Optional[Literal["wall_centerline", "core_centerline", "finish_exterior", "finish_interior"]] = None,
     mid: Optional[Point] = None,
     start: Optional[Point] = None,
@@ -1192,8 +1254,10 @@ def set_wall(
             up. Optional.
         height: Length: number = millimetres, or a string with units ("3m", "300cm").
             Optional.
-        in_design_option: Optional design option id: make this change inside that option
-            (its layer), not in the shared model. Optional.
+        in_design_option: Where the change lands: a design option id (the change goes
+            into that option's layer), or "shared" for the shared model. Omitted (or
+            null): the option the user is editing in the Ferro app, else the shared
+            model. Optional.
         location_line: One of: wall_centerline, core_centerline, finish_exterior,
             finish_interior. Optional.
         mid: Point on the arc (curved walls). Point [x, y] or [x, y, z] in millimetres
@@ -1233,7 +1297,7 @@ def set_floor(
     *,
     floor: ElementId,
     holes: Optional[Sequence[Sequence[Point]]] = None,
-    in_design_option: Optional[int] = None,
+    in_design_option: Optional[Any] = None,
     offset: Optional[Length] = None,
     points: Optional[Sequence[Point]] = None,
 ) -> Dict[str, Any]:
@@ -1243,8 +1307,10 @@ def set_floor(
     Args:
         floor: Floor id.
         holes: List of point lists [x, y, z] in millimetres. Optional.
-        in_design_option: Optional design option id: make this change inside that option
-            (its layer), not in the shared model. Optional.
+        in_design_option: Where the change lands: a design option id (the change goes
+            into that option's layer), or "shared" for the shared model. Omitted (or
+            null): the option the user is editing in the Ferro app, else the shared
+            model. Optional.
         offset: Length: number = millimetres, or a string with units ("3m", "300cm").
             Optional.
         points: List of points [x, y, z] in millimetres. Each: Vertex. minItems=3.
@@ -1271,7 +1337,7 @@ def imprint_face(
     face: ElementId,
     points: Sequence[Point],
     closed: Optional[bool] = None,
-    in_design_option: Optional[int] = None,
+    in_design_option: Optional[Any] = None,
 ) -> Dict[str, Any]:
     """Draw on a face of a Form (lines or a closed shape, points on the face plane): the
     face splits, like drawing on a face in SketchUp. Returns new_faces, ready for
@@ -1283,8 +1349,10 @@ def imprint_face(
         points: List of points [x, y, z] in millimetres. Each: Point on the face.
             minItems=2.
         closed: True or False. Optional.
-        in_design_option: Optional design option id: make this change inside that option
-            (its layer), not in the shared model. Optional.
+        in_design_option: Where the change lands: a design option id (the change goes
+            into that option's layer), or "shared" for the shared model. Omitted (or
+            null): the option the user is editing in the Ferro app, else the shared
+            model. Optional.
 
     Returns:
         The tool's JSON body. Raises FerroError on failure.
@@ -1303,7 +1371,7 @@ def create_circle(
     radius: Length,
     element: Optional[ElementId] = None,
     face: Optional[ElementId] = None,
-    in_design_option: Optional[int] = None,
+    in_design_option: Optional[Any] = None,
     level: Optional[ElementId] = None,
     name: Optional[str] = None,
     normal: Optional[Point] = None,
@@ -1319,8 +1387,10 @@ def create_circle(
         radius: Length: number = millimetres, or a string with units ("3m", "300cm").
         element: Form id. Optional.
         face: Face id. Optional.
-        in_design_option: Optional design option id: make this change inside that option
-            (its layer), not in the shared model. Optional.
+        in_design_option: Where the change lands: a design option id (the change goes
+            into that option's layer), or "shared" for the shared model. Omitted (or
+            null): the option the user is editing in the Ferro app, else the shared
+            model. Optional.
         level: Optional level id. Optional.
         name: Text. Optional.
         normal: Normal direction. Point [x, y] or [x, y, z] in millimetres (or strings
@@ -1353,7 +1423,7 @@ def offset_face(
     element: ElementId,
     face: ElementId,
     distance: Length,
-    in_design_option: Optional[int] = None,
+    in_design_option: Optional[Any] = None,
 ) -> Dict[str, Any]:
     """Offset a face's outline inwards by a distance (SketchUp Offset); the inner copy
     splits the face.
@@ -1362,8 +1432,10 @@ def offset_face(
         element: Form id.
         face: Face id.
         distance: Length: number = millimetres, or a string with units ("3m", "300cm").
-        in_design_option: Optional design option id: make this change inside that option
-            (its layer), not in the shared model. Optional.
+        in_design_option: Where the change lands: a design option id (the change goes
+            into that option's layer), or "shared" for the shared model. Omitted (or
+            null): the option the user is editing in the Ferro app, else the shared
+            model. Optional.
 
     Returns:
         The tool's JSON body. Raises FerroError on failure.
@@ -1380,7 +1452,7 @@ def move_geometry(
     vector: Point,
     edges: Optional[Sequence[int]] = None,
     faces: Optional[Sequence[int]] = None,
-    in_design_option: Optional[int] = None,
+    in_design_option: Optional[Any] = None,
     vertices: Optional[Sequence[int]] = None,
 ) -> Dict[str, Any]:
     """Move vertices, edges or faces of a Form (connected faces stretch), e.g. move a
@@ -1392,8 +1464,10 @@ def move_geometry(
             units); Z is up.
         edges: Edge ids. Optional.
         faces: Face ids. Optional.
-        in_design_option: Optional design option id: make this change inside that option
-            (its layer), not in the shared model. Optional.
+        in_design_option: Where the change lands: a design option id (the change goes
+            into that option's layer), or "shared" for the shared model. Omitted (or
+            null): the option the user is editing in the Ferro app, else the shared
+            model. Optional.
         vertices: Vertex ids. Optional.
 
     Returns:
@@ -1417,7 +1491,7 @@ def scale_elements(
     center: Point,
     factor: Optional[float] = None,
     factors: Optional[Sequence[float]] = None,
-    in_design_option: Optional[int] = None,
+    in_design_option: Optional[Any] = None,
 ) -> Dict[str, Any]:
     """Scale Forms about a centre: factor (uniform) or factors [x, y, z].
 
@@ -1427,8 +1501,10 @@ def scale_elements(
             units); Z is up.
         factor: Number. Optional.
         factors: minItems=3. maxItems=3. Optional.
-        in_design_option: Optional design option id: make this change inside that option
-            (its layer), not in the shared model. Optional.
+        in_design_option: Where the change lands: a design option id (the change goes
+            into that option's layer), or "shared" for the shared model. Omitted (or
+            null): the option the user is editing in the Ferro app, else the shared
+            model. Optional.
 
     Returns:
         The tool's JSON body. Raises FerroError on failure.
@@ -1447,7 +1523,7 @@ def erase_edges(
     *,
     element: ElementId,
     edges: Sequence[int],
-    in_design_option: Optional[int] = None,
+    in_design_option: Optional[Any] = None,
 ) -> Dict[str, Any]:
     """Erase edges of a Form: an edge between faces in one plane merges them; other
     edges remove their faces.
@@ -1455,8 +1531,10 @@ def erase_edges(
     Args:
         element: Form id.
         edges: Edge ids.
-        in_design_option: Optional design option id: make this change inside that option
-            (its layer), not in the shared model. Optional.
+        in_design_option: Where the change lands: a design option id (the change goes
+            into that option's layer), or "shared" for the shared model. Omitted (or
+            null): the option the user is editing in the Ferro app, else the shared
+            model. Optional.
 
     Returns:
         The tool's JSON body. Raises FerroError on failure.
@@ -1471,15 +1549,17 @@ def erase_faces(
     *,
     element: ElementId,
     faces: Sequence[int],
-    in_design_option: Optional[int] = None,
+    in_design_option: Optional[Any] = None,
 ) -> Dict[str, Any]:
     """Erase faces of a Form (it becomes open); erasing all faces deletes it.
 
     Args:
         element: Form id.
         faces: Face ids.
-        in_design_option: Optional design option id: make this change inside that option
-            (its layer), not in the shared model. Optional.
+        in_design_option: Where the change lands: a design option id (the change goes
+            into that option's layer), or "shared" for the shared model. Omitted (or
+            null): the option the user is editing in the Ferro app, else the shared
+            model. Optional.
 
     Returns:
         The tool's JSON body. Raises FerroError on failure.
@@ -1494,7 +1574,7 @@ def subtract_forms(
     *,
     target: int,
     cutter: int,
-    in_design_option: Optional[int] = None,
+    in_design_option: Optional[Any] = None,
     keep_cutter: Optional[bool] = None,
 ) -> Dict[str, Any]:
     """Cut one Form out of another (solid boolean difference): the target becomes target
@@ -1508,8 +1588,10 @@ def subtract_forms(
     Args:
         target: Form to cut.
         cutter: Form to cut away.
-        in_design_option: Optional design option id: make this change inside that option
-            (its layer), not in the shared model. Optional.
+        in_design_option: Where the change lands: a design option id (the change goes
+            into that option's layer), or "shared" for the shared model. Omitted (or
+            null): the option the user is editing in the Ferro app, else the shared
+            model. Optional.
         keep_cutter: Keep the cutter Form (default false: it is deleted). Optional.
 
     Returns:
@@ -1528,7 +1610,7 @@ def create_phase(
     name: str,
     before: Optional[int] = None,
     end_date: Optional[str] = None,
-    in_design_option: Optional[int] = None,
+    in_design_option: Optional[Any] = None,
     start_date: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Create a construction phase (Revit Phase), appended at the end or inserted before
@@ -1539,8 +1621,10 @@ def create_phase(
         name: Text.
         before: Optional phase to insert before. Optional.
         end_date: YYYY-MM-DD. Optional.
-        in_design_option: Optional design option id: make this change inside that option
-            (its layer), not in the shared model. Optional.
+        in_design_option: Where the change lands: a design option id (the change goes
+            into that option's layer), or "shared" for the shared model. Omitted (or
+            null): the option the user is editing in the Ferro app, else the shared
+            model. Optional.
         start_date: YYYY-MM-DD. Optional.
 
     Returns:
@@ -1562,7 +1646,7 @@ def set_phase(
     *,
     phase: ElementId,
     end_date: Optional[str] = None,
-    in_design_option: Optional[int] = None,
+    in_design_option: Optional[Any] = None,
     name: Optional[str] = None,
     position: Optional[int] = None,
     start_date: Optional[str] = None,
@@ -1574,8 +1658,10 @@ def set_phase(
     Args:
         phase: Phase id.
         end_date: Text. Optional.
-        in_design_option: Optional design option id: make this change inside that option
-            (its layer), not in the shared model. Optional.
+        in_design_option: Where the change lands: a design option id (the change goes
+            into that option's layer), or "shared" for the shared model. Omitted (or
+            null): the option the user is editing in the Ferro app, else the shared
+            model. Optional.
         name: Text. Optional.
         position: minimum=0. Optional.
         start_date: Text. Optional.
@@ -1600,7 +1686,7 @@ def set_phase(
 def delete_phase(
     *,
     phase: ElementId,
-    in_design_option: Optional[int] = None,
+    in_design_option: Optional[Any] = None,
     merge_into: Optional[int] = None,
 ) -> Dict[str, Any]:
     """Delete a phase. A phase used by elements needs `merge_into`: the phase just
@@ -1609,8 +1695,10 @@ def delete_phase(
 
     Args:
         phase: Phase id.
-        in_design_option: Optional design option id: make this change inside that option
-            (its layer), not in the shared model. Optional.
+        in_design_option: Where the change lands: a design option id (the change goes
+            into that option's layer), or "shared" for the shared model. Omitted (or
+            null): the option the user is editing in the Ferro app, else the shared
+            model. Optional.
         merge_into: Neighbouring phase that takes over its elements. Optional.
 
     Returns:
@@ -1629,7 +1717,7 @@ def set_element_phase(
     elements: Sequence[ElementId],
     created: Optional[ElementId] = None,
     demolished: Optional[ElementId] = None,
-    in_design_option: Optional[int] = None,
+    in_design_option: Optional[Any] = None,
 ) -> Dict[str, Any]:
     """Set the phase elements are created in and / or demolished in (Revit Phase Created
     / Phase Demolished). Omit a field to keep it, null clears it. Demolished must be the
@@ -1640,8 +1728,10 @@ def set_element_phase(
         elements: Element ids (walls, floors, doors, windows, Forms).
         created: Phase id. Optional.
         demolished: Phase id. Optional.
-        in_design_option: Optional design option id: make this change inside that option
-            (its layer), not in the shared model. Optional.
+        in_design_option: Where the change lands: a design option id (the change goes
+            into that option's layer), or "shared" for the shared model. Omitted (or
+            null): the option the user is editing in the Ferro app, else the shared
+            model. Optional.
 
     Returns:
         The tool's JSON body. Raises FerroError on failure.
@@ -1660,7 +1750,7 @@ def set_renovation_status(
     *,
     elements: Sequence[ElementId],
     status: Literal["existing", "demolish", "new"],
-    in_design_option: Optional[int] = None,
+    in_design_option: Optional[Any] = None,
 ) -> Dict[str, Any]:
     """Simple renovation mode (ArchiCAD-like): mark elements existing, to be demolished,
     or new. Uses the first and last phase; creates "Existing" and "New Construction" if
@@ -1669,8 +1759,10 @@ def set_renovation_status(
     Args:
         elements: Element ids.
         status: One of: existing, demolish, new.
-        in_design_option: Optional design option id: make this change inside that option
-            (its layer), not in the shared model. Optional.
+        in_design_option: Where the change lands: a design option id (the change goes
+            into that option's layer), or "shared" for the shared model. Omitted (or
+            null): the option the user is editing in the Ferro app, else the shared
+            model. Optional.
 
     Returns:
         The tool's JSON body. Raises FerroError on failure.
@@ -1703,7 +1795,7 @@ def create_relationship(
     *,
     kind: Literal["join", "cut", "host", "attach", "bounds", "connect", "aggregate"],
     elements: Sequence[ElementId],
-    in_design_option: Optional[int] = None,
+    in_design_option: Optional[Any] = None,
     phase: Optional[ElementId] = None,
 ) -> Dict[str, Any]:
     """Link elements with a relationship row (stored as data, saved, undoable). Order of
@@ -1716,8 +1808,10 @@ def create_relationship(
     Args:
         kind: One of: join, cut, host, attach, bounds, connect, aggregate.
         elements: Element ids, ordered as the kind says.
-        in_design_option: Optional design option id: make this change inside that option
-            (its layer), not in the shared model. Optional.
+        in_design_option: Where the change lands: a design option id (the change goes
+            into that option's layer), or "shared" for the shared model. Omitted (or
+            null): the option the user is editing in the Ferro app, else the shared
+            model. Optional.
         phase: Optional phase id. Optional.
 
     Returns:
@@ -1734,15 +1828,17 @@ def create_relationship(
 def delete_relationship(
     *,
     relationship: str,
-    in_design_option: Optional[int] = None,
+    in_design_option: Optional[Any] = None,
 ) -> Dict[str, Any]:
     """Remove a relationship row by uid; the elements stay. Deleting an element removes
     its rows automatically.
 
     Args:
         relationship: Relationship uid (from create_relationship or list_relationships).
-        in_design_option: Optional design option id: make this change inside that option
-            (its layer), not in the shared model. Optional.
+        in_design_option: Where the change lands: a design option id (the change goes
+            into that option's layer), or "shared" for the shared model. Omitted (or
+            null): the option the user is editing in the Ferro app, else the shared
+            model. Optional.
 
     Returns:
         The tool's JSON body. Raises FerroError on failure.
@@ -1971,7 +2067,7 @@ def create_view(
     camera: Optional[Dict[str, Any]] = None,
     depth: Optional[Length] = None,
     display_style: Optional[Literal["shaded", "x_ray", "wireframe", "hidden_line"]] = None,
-    in_design_option: Optional[int] = None,
+    in_design_option: Optional[Any] = None,
     level: Optional[int] = None,
     phase: Optional[int] = None,
     phase_filter: Optional[Literal["show_all", "show_complete", "show_new", "show_previous_and_demo", "show_previous_and_new", "show_demo_and_new", "no_overrides"]] = None,
@@ -1992,8 +2088,10 @@ def create_view(
         depth: Length: number = millimetres, or a string with units ("3m", "300cm").
             Optional.
         display_style: One of: shaded, x_ray, wireframe, hidden_line. Optional.
-        in_design_option: Optional design option id: make this change inside that option
-            (its layer), not in the shared model. Optional.
+        in_design_option: Where the change lands: a design option id (the change goes
+            into that option's layer), or "shared" for the shared model. Omitted (or
+            null): the option the user is editing in the Ferro app, else the shared
+            model. Optional.
         level: Level of a plan view. Optional.
         phase: Phase shown by the view (null = the last phase). Optional.
         phase_filter: Revit phase filter: which statuses are shown and with status
@@ -2042,7 +2140,7 @@ def set_view(
     display_style: Optional[Literal["shaded", "x_ray", "wireframe", "hidden_line"]] = None,
     hidden_tags: Optional[Sequence[str]] = None,
     hide: Optional[Sequence[int]] = None,
-    in_design_option: Optional[int] = None,
+    in_design_option: Optional[Any] = None,
     name: Optional[str] = None,
     phase: Optional[int] = None,
     phase_filter: Optional[Literal["show_all", "show_complete", "show_new", "show_previous_and_demo", "show_previous_and_new", "show_demo_and_new", "no_overrides"]] = None,
@@ -2066,8 +2164,10 @@ def set_view(
         display_style: One of: shaded, x_ray, wireframe, hidden_line. Optional.
         hidden_tags: Tags whose elements are not shown. Optional.
         hide: Elements to hide in the view. Optional.
-        in_design_option: Optional design option id: make this change inside that option
-            (its layer), not in the shared model. Optional.
+        in_design_option: Where the change lands: a design option id (the change goes
+            into that option's layer), or "shared" for the shared model. Omitted (or
+            null): the option the user is editing in the Ferro app, else the shared
+            model. Optional.
         name: Text. Optional.
         phase: Phase shown by the view (null = the last phase). Optional.
         phase_filter: Revit phase filter: which statuses are shown and with status
@@ -2118,13 +2218,15 @@ def set_view(
     return _call("set_view", args)
 
 
-def delete_view(*, view: ElementId, in_design_option: Optional[int] = None) -> Dict[str, Any]:
+def delete_view(*, view: ElementId, in_design_option: Optional[Any] = None) -> Dict[str, Any]:
     """Delete a view (deleting a level also deletes its plan views).
 
     Args:
         view: View id.
-        in_design_option: Optional design option id: make this change inside that option
-            (its layer), not in the shared model. Optional.
+        in_design_option: Where the change lands: a design option id (the change goes
+            into that option's layer), or "shared" for the shared model. Omitted (or
+            null): the option the user is editing in the Ferro app, else the shared
+            model. Optional.
 
     Returns:
         The tool's JSON body. Raises FerroError on failure.
@@ -2351,7 +2453,7 @@ def export_ifc(*, path: str) -> Dict[str, Any]:
 def run_python(
     *,
     code: str,
-    in_design_option: Optional[int] = None,
+    in_design_option: Optional[Any] = None,
     timeout_s: Optional[float] = None,
 ) -> Dict[str, Any]:
     """Run a Python script against the open document in ONE step: all its changes are
@@ -2364,16 +2466,19 @@ def run_python(
     a non-zero exit rolls everything back (ferro.python.failed, traceback in stderr);
     running past timeout_s kills it and rolls back (ferro.python.timeout). `with
     doc.transaction("name"):` makes a block all or nothing inside the script. With
-    in_design_option the changes go into that design option, not the shared model.
-    Returns {ok, stdout, stderr (64 KB each at most), result, changed: [element ids],
-    failures}.
+    in_design_option the changes go into that design option, not the shared model. The
+    user, or you, can stop a running script with cancel_python (ferro.python.cancelled,
+    rolled back). Returns {ok, stdout, stderr (64 KB each at most), result, changed:
+    [element ids], failures}.
 
     Args:
         code: Python 3 source. `doc`, `tools` and `ferro` are predefined; lengths in mm
             or strings with units ("3m").
-        in_design_option: Optional design option id: every change the script makes goes
-            into that option's layer (a call may still name its own in_design_option).
-            In the app, defaults to the option the user is editing. Optional.
+        in_design_option: Where the script's changes land: a design option id (every
+            change goes into that option's layer; a call may still name its own
+            in_design_option), or "shared" for the shared model. Omitted (or null): the
+            option the user is editing in the Ferro app, else the shared model.
+            Optional.
         timeout_s: Time limit in seconds (default 30, at most 300). Optional.
 
     Returns:
@@ -2385,6 +2490,20 @@ def run_python(
     if timeout_s is not None:
         args["timeout_s"] = timeout_s
     return _call("run_python", args)
+
+
+def cancel_python() -> Dict[str, Any]:
+    """Stop the Python script running now (started with run_python): its process is
+    killed and everything it did is rolled back; its run_python call answers
+    ferro.python.cancelled with the output so far. Only the client that started the
+    script (or the user, in the Ferro app) may stop it; others get
+    ferro.python.not_allowed. Returns {cancelled: true}, or {cancelled: false} when no
+    script is running.
+
+    Returns:
+        The tool's JSON body. Raises FerroError on failure.
+    """
+    return _call("cancel_python", {})
 
 
 def link_status() -> Dict[str, Any]:
@@ -2480,5 +2599,6 @@ TOOL_NAMES = (
     "export_glb",
     "export_ifc",
     "run_python",
+    "cancel_python",
     "link_status",
 )

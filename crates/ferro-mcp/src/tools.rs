@@ -18,6 +18,7 @@ pub fn list() -> Vec<Value> {
     let mut v = ferro_tools::list();
     v.extend(ferro_tools::file_tools());
     v.push(crate::python::tool());
+    v.push(crate::python::cancel_tool());
     v.push(json!({"name": "link_status", "description": "Whether the Ferro app is open and linked. When linked, every tool acts on the model open in the app; changes appear there as a proposal the user accepts or rejects.", "inputSchema": {"type": "object", "properties": {}, "required": []}}));
     v
 }
@@ -42,6 +43,9 @@ pub struct Server {
     pub use_link: bool,
     /// Interpreter and SDK for `run_python`.
     pub python: crate::python::PythonConfig,
+    /// The headless run, for `cancel_python` from another thread (clone it
+    /// before a call that runs a script).
+    pub runs: crate::python::RunControl,
 }
 
 impl Server {
@@ -57,6 +61,7 @@ impl Server {
                 .map(|v| v != "off")
                 .unwrap_or(true),
             python: crate::python::PythonConfig::from_env(),
+            runs: crate::python::RunControl::new(),
         }
     }
 
@@ -81,36 +86,12 @@ impl Server {
         }
     }
 
-    fn agent_info(&self) -> AgentInfo {
-        let version = match &self.agent.kind {
-            ferro_core::ops::ActorKind::Agent { model } => model.clone(),
-            _ => String::new(),
-        };
-        AgentInfo {
-            name: self.agent.name.clone(),
-            version,
-        }
-    }
-
     /// Forward to the linked app. `None` when no app is reachable.
     fn forward(&self, name: &str, args: &Value) -> Option<Result<Value, Value>> {
         if !self.use_link {
             return None;
         }
-        let info = link::read_info()?;
-        let req = LinkRequest {
-            token: info.token.clone(),
-            tool: name.into(),
-            args: args.clone(),
-            agent: Some(self.agent_info()),
-            prompt: None,
-        };
-        let timeout = crate::python::answer_timeout(name, args);
-        match link::send(&info, &req, timeout) {
-            Ok(r) if r.ok => Some(Ok(r.body)),
-            Ok(r) => Some(Err(r.body)),
-            Err(_) => None, // stale link file: fall back to the local session
-        }
+        forward_as(&self.agent, name, args)
     }
 
     /// Run a tool. Ok = JSON result, Err = (message, failures JSON).
@@ -134,7 +115,17 @@ impl Server {
         let ctx = self.ctx();
         if name == crate::python::TOOL {
             // Headless: no Proposals here, agents edit this session directly.
-            return crate::python::run_blocking(&mut self.session, &self.python, args, ctx, false);
+            return crate::python::run_blocking(
+                &mut self.session,
+                &self.python,
+                args,
+                ctx,
+                false,
+                &self.runs,
+            );
+        }
+        if name == crate::python::CANCEL_TOOL {
+            return self.runs.cancel(&self.agent);
         }
         if let Some(r) = ferro_tools::call(&mut self.session, &ctx, name, args) {
             return r;
@@ -209,6 +200,55 @@ impl Server {
             other => err(format!("unknown tool: {other}")),
         }
     }
+}
+
+/// The Ferro Link identity of `actor` (agents send their model as version).
+fn agent_info(actor: &Actor) -> AgentInfo {
+    let version = match &actor.kind {
+        ferro_core::ops::ActorKind::Agent { model } => model.clone(),
+        _ => String::new(),
+    };
+    AgentInfo {
+        name: actor.name.clone(),
+        version,
+    }
+}
+
+/// Send one tool call to the linked app as `actor`. `None` when no app is
+/// reachable (no link file, or a stale one). Used by [`Server`] and by
+/// `ferro-mcp`'s stdin thread, which forwards `cancel_python` while the main
+/// thread waits for a script.
+pub fn forward_as(actor: &Actor, name: &str, args: &Value) -> Option<Result<Value, Value>> {
+    let info = link::read_info()?;
+    let req = LinkRequest {
+        token: info.token.clone(),
+        tool: name.into(),
+        args: args.clone(),
+        agent: Some(agent_info(actor)),
+        prompt: None,
+    };
+    let timeout = crate::python::answer_timeout(name, args);
+    match link::send(&info, &req, timeout) {
+        Ok(r) if r.ok => Some(Ok(r.body)),
+        Ok(r) => Some(Err(r.body)),
+        Err(_) => None, // stale link file: fall back to the local session
+    }
+}
+
+/// `cancel_python` from `actor` without the [`Server`] (it may be busy
+/// running the script): to the linked app when `use_link` and one answers,
+/// else to the headless run behind `runs`.
+pub fn cancel_python(
+    runs: &crate::python::RunControl,
+    use_link: bool,
+    actor: &Actor,
+) -> Result<Value, Value> {
+    if use_link {
+        if let Some(r) = forward_as(actor, crate::python::CANCEL_TOOL, &json!({})) {
+            return r;
+        }
+    }
+    runs.cancel(actor)
 }
 
 /// A file error as a tool error: `{"error", "failures": [{code: "ferro.io.*"}]}`.

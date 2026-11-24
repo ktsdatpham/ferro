@@ -266,6 +266,33 @@ class SdkTest(unittest.TestCase):
             lk.call("list_elements")
         self.assertEqual(cm.exception.code, link.TIMEOUT)
 
+    def test_ctrl_c_while_waiting_for_run_python_cancels_it(self):
+        f = self.fake(answers={"cancel_python": {"cancelled": True}})
+        lk = link.Link(f.port, "secret", agent="me", timeout=2)
+        real = lk.request
+
+        def request(tool, args=None):
+            if tool in ("run_python", "list_elements"):
+                raise KeyboardInterrupt  # as if Ctrl+C hit while waiting
+            return real(tool, args)
+
+        lk.request = request
+        with self.assertRaises(KeyboardInterrupt):
+            lk.call("run_python", {"code": "while True: pass"})
+        self.assertEqual(f.requests[-1]["tool"], "cancel_python")
+        self.assertEqual(f.requests[-1]["agent"]["name"], "me")
+        self.assertEqual(lk.timeout, 2, "timeout restored")
+        # Other tools are not cancelled; cancel_python reports the outcome.
+        with self.assertRaises(KeyboardInterrupt):
+            lk.call("list_elements")
+        self.assertEqual(len(f.requests), 1)
+        self.assertTrue(lk.cancel_python())
+        f.answers["cancel_python"] = {"cancelled": False}
+        self.assertFalse(lk.cancel_python())
+        f.answers["cancel_python"] = ("error", {"error": "x", "failures": [
+            {"severity": "error", "code": "ferro.python.not_allowed", "message": "x", "elements": []}]})
+        self.assertFalse(lk.cancel_python())
+
     def test_bad_answer_is_protocol_error(self):
         srv = socket.socket()
         srv.bind(("127.0.0.1", 0))

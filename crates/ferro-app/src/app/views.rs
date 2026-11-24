@@ -216,7 +216,11 @@ impl FerroApp {
 
     /// Execute a view command without touching the selection; errors are
     /// shown in the status bar. Autosaves outside groups.
-    fn exec_view(&mut self, cmd: AnyCommand) -> Option<Outcome> {
+    pub(super) fn exec_view(&mut self, cmd: AnyCommand) -> Option<Outcome> {
+        if self.python.is_some() {
+            self.hold_for_script(super::python::UserAction::ExecView(cmd));
+            return None;
+        }
         if self.proposal.is_some() {
             self.accept_proposal();
         }

@@ -168,12 +168,38 @@ class Link:
         return resp
 
     def call(self, tool: str, args: Optional[Dict[str, Any]] = None) -> Any:
-        """Call a tool. Returns its body; raises FerroError when ``ok`` is false."""
-        resp = self.request(tool, args)
+        """Call a tool. Returns its body; raises FerroError when ``ok`` is false.
+
+        Pressing Ctrl+C (KeyboardInterrupt) while waiting for ``run_python``
+        also stops that script in Ferro (``cancel_python``: it is rolled back),
+        then the KeyboardInterrupt goes on as usual.
+        """
+        try:
+            resp = self.request(tool, args)
+        except KeyboardInterrupt:
+            if tool == "run_python":
+                self.cancel_python()
+            raise
         body = resp.get("body", {})
         if resp.get("ok") is not True:
             raise error_from_body(body)
         return body
+
+    def cancel_python(self) -> bool:
+        """Stop the script this client started with ``run_python`` (Ferro
+        rolls it back; its ``run_python`` call fails with
+        ``ferro.python.cancelled``). Returns True when a script was stopped,
+        False when none was running or Ferro could not be reached. Waits at
+        most 5 s."""
+        saved = self.timeout
+        self.timeout = min(saved, 5.0)
+        try:
+            body = self.call("cancel_python", {})
+        except FerroError:
+            return False
+        finally:
+            self.timeout = saved
+        return bool(isinstance(body, dict) and body.get("cancelled"))
 
     def __repr__(self) -> str:
         return f"Link(port={self.port}, project={self.project!r})"

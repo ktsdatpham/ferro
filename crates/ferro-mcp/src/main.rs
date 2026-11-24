@@ -5,11 +5,76 @@
 //!   cargo run -p ferro-mcp -- --tools-json   # print the tool list and exit
 //!
 //! Every kernel command is a tool (D-17). Logs go to stderr.
+//!
+//! Requests are read on their own thread, so `cancel_python` (and the MCP
+//! `notifications/cancelled` of a waiting `run_python`) is acted on while
+//! the main thread waits for a script.
 
+use ferro_core::ops::Actor;
+use ferro_mcp::python::{RunControl, CANCEL_TOOL, TOOL as RUN_TOOL};
 use ferro_mcp::tools;
 use serde_json::{json, Value};
 use std::io::{self, BufRead, Write};
+use std::sync::{mpsc, Arc, Mutex};
 use tools::Server;
+
+/// The `tools/call` result for a tool's answer.
+fn tool_result(r: Result<Value, Value>) -> Value {
+    let (body, is_error) = match r {
+        Ok(v) => (v, false),
+        Err(v) => (v, true),
+    };
+    json!({ "content": [{ "type": "text", "text": body.to_string() }], "isError": is_error })
+}
+
+/// The `tools/call` the main thread is answering now: its JSON-RPC id and
+/// tool name.
+type InFlight = Arc<Mutex<Option<(Value, String)>>>;
+
+/// What the stdin thread does with one request.
+#[derive(Debug, PartialEq)]
+enum Route {
+    /// Hand it to the main thread.
+    Main,
+    /// Answered here (`None`: a notification, no reply).
+    Done(Option<Value>),
+}
+
+/// Requests that must not wait for the main thread: `cancel_python`, and
+/// `notifications/cancelled` naming the `run_python` call in flight (an MCP
+/// client cancelling it, e.g. its user pressed Esc). Both cancel through the
+/// linked app or the headless run, as `actor`.
+fn route(
+    req: &Value,
+    actor: &Actor,
+    runs: &RunControl,
+    use_link: bool,
+    in_flight: &InFlight,
+) -> Route {
+    let method = req.get("method").and_then(Value::as_str).unwrap_or("");
+    let params = req.get("params").cloned().unwrap_or(Value::Null);
+    match method {
+        "tools/call" if params.get("name").and_then(Value::as_str) == Some(CANCEL_TOOL) => {
+            let Some(id) = req.get("id").cloned() else {
+                return Route::Done(None);
+            };
+            let r = tools::cancel_python(runs, use_link, actor);
+            Route::Done(Some(
+                json!({ "jsonrpc": "2.0", "id": id, "result": tool_result(r) }),
+            ))
+        }
+        "notifications/cancelled" => {
+            let running = in_flight.lock().ok().and_then(|f| f.clone());
+            if let Some((id, tool)) = running {
+                if tool == RUN_TOOL && params.get("requestId") == Some(&id) {
+                    let _ = tools::cancel_python(runs, use_link, actor);
+                }
+            }
+            Route::Done(None)
+        }
+        _ => Route::Main,
+    }
+}
 
 const PROTOCOL_VERSION: &str = "2025-06-18";
 
@@ -49,13 +114,7 @@ fn handle(server: &mut Server, req: &Value) -> Option<Value> {
                 .get("arguments")
                 .cloned()
                 .unwrap_or_else(|| json!({}));
-            let (body, is_error) = match server.call(name, &args) {
-                Ok(v) => (v, false),
-                Err(v) => (v, true),
-            };
-            Ok(
-                json!({ "content": [{ "type": "text", "text": body.to_string() }], "isError": is_error }),
-            )
+            Ok(tool_result(server.call(name, &args)))
         }
         _ => Err(json!({ "code": -32601, "message": format!("method not found: {method}") })),
     };
@@ -79,25 +138,74 @@ fn main() {
         return;
     }
     let mut server = Server::new();
-    let stdin = io::stdin();
-    let mut out = io::stdout().lock();
     eprintln!("ferro-mcp {} ready on stdio", env!("CARGO_PKG_VERSION"));
-    for line in stdin.lock().lines() {
-        let Ok(line) = line else { break };
-        if line.trim().is_empty() {
-            continue;
+    let write = |r: &Value| {
+        let mut out = io::stdout().lock();
+        let _ = writeln!(out, "{r}");
+        let _ = out.flush();
+    };
+    let in_flight: InFlight = Arc::new(Mutex::new(None));
+    let (tx, rx) = mpsc::channel::<Value>();
+    {
+        let (runs, use_link, in_flight) =
+            (server.runs.clone(), server.use_link, Arc::clone(&in_flight));
+        std::thread::spawn(move || {
+            let mut actor = server_actor_default();
+            for line in io::stdin().lock().lines() {
+                let Ok(line) = line else { break };
+                if line.trim().is_empty() {
+                    continue;
+                }
+                let req = match serde_json::from_str::<Value>(&line) {
+                    Ok(req) => req,
+                    Err(e) => {
+                        write(
+                            &json!({"jsonrpc":"2.0","id":null,"error":{"code":-32700,"message":format!("parse error: {e}")}}),
+                        );
+                        continue;
+                    }
+                };
+                if req.get("method").and_then(Value::as_str) == Some("initialize") {
+                    if let Some(name) = req["params"]["clientInfo"]["name"].as_str() {
+                        let version = req["params"]["clientInfo"]["version"]
+                            .as_str()
+                            .unwrap_or("unknown");
+                        actor = Actor::agent(name, version);
+                    }
+                }
+                match route(&req, &actor, &runs, use_link, &in_flight) {
+                    Route::Done(Some(r)) => write(&r),
+                    Route::Done(None) => {}
+                    Route::Main => {
+                        if tx.send(req).is_err() {
+                            break;
+                        }
+                    }
+                }
+            }
+        });
+    }
+    for req in rx {
+        let call = (req.get("method").and_then(Value::as_str) == Some("tools/call"))
+            .then(|| req.get("id").cloned())
+            .flatten()
+            .map(|id| (id, req["params"]["name"].as_str().unwrap_or("").to_string()));
+        if let Ok(mut f) = in_flight.lock() {
+            *f = call;
         }
-        let reply = match serde_json::from_str::<Value>(&line) {
-            Ok(req) => handle(&mut server, &req),
-            Err(e) => Some(
-                json!({"jsonrpc":"2.0","id":null,"error":{"code":-32700,"message":format!("parse error: {e}")}}),
-            ),
-        };
+        let reply = handle(&mut server, &req);
+        if let Ok(mut f) = in_flight.lock() {
+            *f = None;
+        }
         if let Some(r) = reply {
-            let _ = writeln!(out, "{r}");
-            let _ = out.flush();
+            write(&r);
         }
     }
+}
+
+/// The actor before `initialize` names the client (as `Server::new`).
+fn server_actor_default() -> Actor {
+    Actor::agent("mcp-client", "unknown")
 }
 
 #[cfg(test)]
@@ -352,6 +460,31 @@ mod tests {
             tools_json(),
             "python/ferro/tools.json is stale: run `python3 scripts/gen_python.py --refresh`"
         );
+    }
+
+    #[test]
+    fn cancel_requests_do_not_wait_for_the_main_thread() {
+        let runs = RunControl::new();
+        let actor = Actor::agent("a", "1");
+        let flight: InFlight = Arc::new(Mutex::new(None));
+        let cancel = json!({"jsonrpc":"2.0","id":7,"method":"tools/call","params":{"name":"cancel_python","arguments":{}}});
+        let Route::Done(Some(r)) = route(&cancel, &actor, &runs, false, &flight) else {
+            panic!("cancel_python is answered on the stdin thread");
+        };
+        assert_eq!(r["id"], 7);
+        let body: Value =
+            serde_json::from_str(r["result"]["content"][0]["text"].as_str().unwrap()).unwrap();
+        assert_eq!(body["cancelled"], false, "no script is running");
+        let other = json!({"jsonrpc":"2.0","id":8,"method":"tools/call","params":{"name":"create_box","arguments":{}}});
+        assert_eq!(route(&other, &actor, &runs, false, &flight), Route::Main);
+        *flight.lock().unwrap() = Some((json!(8), RUN_TOOL.to_string()));
+        let note =
+            json!({"jsonrpc":"2.0","method":"notifications/cancelled","params":{"requestId":8}});
+        assert_eq!(
+            route(&note, &actor, &runs, false, &flight),
+            Route::Done(None)
+        );
+        assert!(tools::list().iter().any(|t| t["name"] == CANCEL_TOOL));
     }
 
     #[test]

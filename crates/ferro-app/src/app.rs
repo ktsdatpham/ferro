@@ -47,6 +47,8 @@ enum Autonomy {
 struct Proposal {
     agent: String,
     steps: usize,
+    /// Where its changes land (`None` = the shared model), shown on the bar.
+    targets: Vec<Option<ElementId>>,
 }
 
 #[derive(Debug, Clone)]
@@ -187,6 +189,8 @@ pub struct FerroApp {
     proposal: Option<Proposal>,
     /// The `run_python` script running now, if any (ADR 0005 §5).
     python: Option<python::ScriptRun>,
+    /// User actions held while a script runs, and the priority dialog.
+    script_wait: python::ScriptWait,
     /// Interpreter and SDK for `run_python` (`FERRO_PYTHON`, `FERRO_PYTHON_SDK`).
     python_config: ferro_mcp::python::PythonConfig,
     chat: Chat,
@@ -266,6 +270,7 @@ impl FerroApp {
             autonomy: Autonomy::Propose,
             proposal: None,
             python: None,
+            script_wait: Default::default(),
             python_config: ferro_mcp::python::PythonConfig::from_env(),
             chat: Chat {
                 open: false,
@@ -315,7 +320,8 @@ impl FerroApp {
     }
 
     fn run(&mut self, cmd: AnyCommand) -> bool {
-        if self.script_running() {
+        if self.python.is_some() {
+            self.hold_for_script(python::UserAction::Run(cmd));
             return false;
         }
         // Editing while a proposal is open accepts it first.
@@ -398,7 +404,7 @@ impl FerroApp {
 
     fn undo(&mut self) {
         self.tool.cancel();
-        if self.script_running() {
+        if self.hold_for_script(python::UserAction::Undo) {
             return;
         }
         if self.proposal.is_some() {
@@ -418,7 +424,7 @@ impl FerroApp {
 
     fn redo(&mut self) {
         self.tool.cancel();
-        if self.script_running() {
+        if self.hold_for_script(python::UserAction::Redo) {
             return;
         }
         if self.proposal.is_some() {
@@ -639,7 +645,7 @@ impl FerroApp {
     }
 
     fn new_document(&mut self) {
-        if self.script_running() || !self.confirm_discard() {
+        if self.hold_for_script(python::UserAction::NewDocument) || !self.confirm_discard() {
             return;
         }
         let doc = Document::new("Untitled");
@@ -668,7 +674,8 @@ impl FerroApp {
     }
 
     fn open_path(&mut self, p: PathBuf) {
-        if self.script_running() {
+        if self.python.is_some() {
+            self.hold_for_script(python::UserAction::Open(p));
             return;
         }
         let is_json = p.to_string_lossy().ends_with(".json");
@@ -704,6 +711,10 @@ impl FerroApp {
     }
 
     fn save(&mut self) {
+        // Never save a half-finished script group.
+        if self.hold_for_script(python::UserAction::Save) {
+            return;
+        }
         match self.path.clone() {
             Some(p) => match ferro_io::save_fro(&p, self.session.doc(), self.session.journal()) {
                 Ok(()) => {
@@ -718,6 +729,9 @@ impl FerroApp {
     }
 
     fn save_as(&mut self) {
+        if self.hold_for_script(python::UserAction::SaveAs) {
+            return;
+        }
         let name = format!("{}.fro", self.doc().project().name);
         if let Some(mut p) = rfd::FileDialog::new()
             .add_filter("Ferro project", &["fro"])
@@ -945,6 +959,11 @@ impl FerroApp {
         let typing = ctx.egui_wants_keyboard_input();
         let (cmd, shift) = ctx.input(|i| (i.modifiers.command, i.modifiers.shift));
         let pressed = |k: Key| ctx.input(|i| i.key_pressed(k));
+        // Esc twice within a second stops a running script (even in a text
+        // box: the user always can).
+        if pressed(Key::Escape) && !self.script_wait.asking() {
+            self.escape_while_script();
+        }
         if cmd && pressed(Key::Z) {
             if shift {
                 self.redo()
@@ -1985,6 +2004,7 @@ impl FerroApp {
 
     fn status_bar(&mut self, ui: &mut egui::Ui) {
         ui.horizontal(|ui| {
+            self.script_status(ui);
             let hint = match self
                 .status
                 .as_ref()
@@ -2015,6 +2035,10 @@ impl FerroApp {
 
     fn apply_vcb(&mut self) {
         let text = std::mem::take(&mut self.vcb);
+        if self.python.is_some() {
+            self.hold_for_script(python::UserAction::Value(text));
+            return;
+        }
         // After a Move-copy: "5x" repeats it 5 times, "/5" divides it in 5.
         let t = text.trim();
         if let Some(copy) = self.last_copy.clone().filter(|_| !self.tool.is_active()) {
@@ -2725,7 +2749,7 @@ impl FerroApp {
     // ------------------------------------------------------------ agents
 
     fn accept_proposal(&mut self) {
-        if self.script_running() {
+        if self.hold_for_script(python::UserAction::AcceptProposal) {
             return;
         }
         if let Some(p) = self.proposal.take() {
@@ -2739,7 +2763,7 @@ impl FerroApp {
     }
 
     fn reject_proposal(&mut self) {
-        if self.script_running() {
+        if self.hold_for_script(python::UserAction::RejectProposal) {
             return;
         }
         if let Some(p) = self.proposal.take() {
@@ -2758,6 +2782,8 @@ impl FerroApp {
             let tool = p.req.tool.clone();
             let resp = if self.is_script_token(&p.req.token) {
                 self.script_call(p.req)
+            } else if tool == ferro_mcp::python::CANCEL_TOOL {
+                self.cancel_from_link(&p.req)
             } else if let Some(busy) = self.refuse_while_script(&tool) {
                 busy
             } else if tool == ferro_mcp::python::TOOL {
@@ -2856,9 +2882,23 @@ impl FerroApp {
             self.proposal = Some(Proposal {
                 agent: info.name.clone(),
                 steps: 0,
+                targets: Vec::new(),
             });
         }
-        let r = ferro_tools::call(&mut self.session, &ctx, tool, &req.args)
+        // One rule with scripts (ADR 0006): while the user edits a design
+        // option, an agent command lands in it unless it names a target.
+        let (args, target) =
+            match ferro_tools::with_default_design_option(tool, &req.args, self.editing_option()) {
+                Ok(a) => a,
+                Err(m) => {
+                    if self.proposal.as_ref().is_some_and(|p| p.steps == 0) {
+                        self.session.cancel_group();
+                        self.proposal = None;
+                    }
+                    return answer(Err(json!({ "error": m })));
+                }
+            };
+        let r = ferro_tools::call(&mut self.session, &ctx, tool, &args)
             .unwrap_or_else(|| Err(json!({"error": format!("unknown tool: {tool}")})));
         // An import that changed nothing is not a step.
         let no_op = tool == "revit_import"
@@ -2879,6 +2919,7 @@ impl FerroApp {
             match (&r, &mut self.proposal) {
                 (Ok(_), Some(p)) => {
                     p.steps += 1;
+                    python::note_target(&mut p.targets, target);
                     self.say(format!("{} proposes: {tool}", info.name), false);
                 }
                 (Ok(_), None) => {
@@ -2901,6 +2942,12 @@ impl FerroApp {
             "{} proposes {} change(s). Review them in the viewport.",
             p.agent, p.steps
         );
+        let doc = self.session.doc();
+        let target = python::target_label(&p.targets, |o| {
+            doc.get(o)
+                .map(|e| e.label())
+                .unwrap_or_else(|| format!("#{}", o.0))
+        });
         ui.horizontal(|ui| {
             ui.label(
                 RichText::new("AI")
@@ -2908,6 +2955,11 @@ impl FerroApp {
                     .color(Color32::from_rgb(120, 60, 200)),
             );
             ui.label(text);
+            ui.label(
+                RichText::new(target)
+                    .strong()
+                    .color(Color32::from_rgb(200, 120, 0)),
+            );
             if ui.button("Accept").clicked() {
                 self.accept_proposal();
             }
@@ -3221,6 +3273,7 @@ impl eframe::App for FerroApp {
         egui::CentralPanel::no_frame().show(ui, |ui| self.viewport(ui, frame));
         self.windows(&ctx);
         self.chat_window(&ctx);
+        self.script_wait_ui(&ctx);
     }
 }
 

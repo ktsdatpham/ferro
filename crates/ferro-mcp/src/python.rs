@@ -17,6 +17,12 @@
 //! (spawns, opens the group) → script requests through
 //! [`PythonRun::handle`] → [`PythonRun::poll`] until it returns a
 //! [`RunEnd`] → [`PythonRun::finish`] (commits or rolls back, reports).
+//!
+//! Cancelling (`cancel_python`, M5-14.7): [`PythonRun::cancel`] kills the
+//! process tree like a timeout and the run finishes with [`CANCELLED`]. Only
+//! the user and the caller that started the run may cancel it
+//! ([`may_cancel`]); headless hosts expose this to other threads through a
+//! [`RunControl`].
 
 use ferro_core::ops::{Actor, ActorKind, DocumentChanged, ExecContext, SubTransaction};
 use ferro_core::{Document, ElementId, Session};
@@ -46,8 +52,15 @@ pub const FAILED: &str = "ferro.python.failed";
 pub const NESTED: &str = "ferro.python.nested";
 /// Another script is running; the call was refused (retry when it is done).
 pub const BUSY: &str = "ferro.python.busy";
-/// The caller may not start scripts (plugins: D-51 keeps them in WASM).
+/// The caller may not start scripts (plugins: D-51 keeps them in WASM), or
+/// may not cancel this one (only the user and the caller that started it).
 pub const NOT_ALLOWED: &str = "ferro.python.not_allowed";
+/// The script was stopped (`cancel_python`, the app's Stop button or Esc
+/// twice); its process tree was killed and nothing was changed.
+pub const CANCELLED: &str = "ferro.python.cancelled";
+
+/// Tool name of the cancel request (MCP and Ferro Link).
+pub const CANCEL_TOOL: &str = "cancel_python";
 
 /// Time limit when the caller gives none (seconds).
 pub const DEFAULT_TIMEOUT_S: f64 = 30.0;
@@ -104,16 +117,25 @@ sys.exit(_run.main())\n";
 pub fn tool() -> Value {
     json!({
         "name": TOOL,
-        "description": "Run a Python script against the open document in ONE step: all its changes are one transaction group (all or nothing, one undo step; for agents one proposal the user accepts or rejects). Use it instead of many single tool calls. The script runs in the user's python3 with the `ferro` SDK: `doc` (ferro.Document) and `tools` (one function per Ferro tool, same names and arguments) are predefined, e.g. `walls = doc.create_walls([(0, 0), (\"8m\", 0), (\"8m\", \"6m\"), (0, \"6m\")], closed=True, height=\"3m\")`. Set a variable `result` to return JSON data. An uncaught exception or a non-zero exit rolls everything back (ferro.python.failed, traceback in stderr); running past timeout_s kills it and rolls back (ferro.python.timeout). `with doc.transaction(\"name\"):` makes a block all or nothing inside the script. With in_design_option the changes go into that design option, not the shared model. Returns {ok, stdout, stderr (64 KB each at most), result, changed: [element ids], failures}.",
+        "description": "Run a Python script against the open document in ONE step: all its changes are one transaction group (all or nothing, one undo step; for agents one proposal the user accepts or rejects). Use it instead of many single tool calls. The script runs in the user's python3 with the `ferro` SDK: `doc` (ferro.Document) and `tools` (one function per Ferro tool, same names and arguments) are predefined, e.g. `walls = doc.create_walls([(0, 0), (\"8m\", 0), (\"8m\", \"6m\"), (0, \"6m\")], closed=True, height=\"3m\")`. Set a variable `result` to return JSON data. An uncaught exception or a non-zero exit rolls everything back (ferro.python.failed, traceback in stderr); running past timeout_s kills it and rolls back (ferro.python.timeout). `with doc.transaction(\"name\"):` makes a block all or nothing inside the script. With in_design_option the changes go into that design option, not the shared model. The user, or you, can stop a running script with cancel_python (ferro.python.cancelled, rolled back). Returns {ok, stdout, stderr (64 KB each at most), result, changed: [element ids], failures}.",
         "inputSchema": {
             "type": "object",
             "properties": {
                 "code": {"type": "string", "description": "Python 3 source. `doc`, `tools` and `ferro` are predefined; lengths in mm or strings with units (\"3m\")."},
                 "timeout_s": {"type": "number", "description": "Time limit in seconds (default 30, at most 300)."},
-                "in_design_option": {"type": "integer", "description": "Optional design option id: every change the script makes goes into that option's layer (a call may still name its own in_design_option). In the app, defaults to the option the user is editing."}
+                "in_design_option": {"type": ["integer", "string"], "description": "Where the script's changes land: a design option id (every change goes into that option's layer; a call may still name its own in_design_option), or \"shared\" for the shared model. Omitted (or null): the option the user is editing in the Ferro app, else the shared model."}
             },
             "required": ["code"]
         }
+    })
+}
+
+/// The MCP / Ferro Link schema of `cancel_python`.
+pub fn cancel_tool() -> Value {
+    json!({
+        "name": CANCEL_TOOL,
+        "description": "Stop the Python script running now (started with run_python): its process is killed and everything it did is rolled back; its run_python call answers ferro.python.cancelled with the output so far. Only the client that started the script (or the user, in the Ferro app) may stop it; others get ferro.python.not_allowed. Returns {cancelled: true}, or {cancelled: false} when no script is running.",
+        "inputSchema": {"type": "object", "properties": {}, "required": []}
     })
 }
 
@@ -133,15 +155,18 @@ pub struct RunArgs {
     pub code: String,
     /// Time limit.
     pub timeout: Duration,
-    /// Design option every command of the script runs in (ADR 0006), unless
-    /// a call names its own; `None` = the shared model.
-    pub in_design_option: Option<ElementId>,
+    /// Where the script's commands land unless a call names its own target
+    /// (ADR 0006): `None` = not given, so the host's default applies (the
+    /// option the user is editing in the app, else the shared model);
+    /// `Some(None)` = `"shared"`; `Some(Some(id))` = that design option.
+    pub in_design_option: Option<Option<ElementId>>,
 }
 
 impl RunArgs {
     /// Read `{code, timeout_s?, in_design_option?}`. Fails (a tool error
     /// body) when `code` is missing or not a string, `timeout_s` is not a
-    /// number in (0, [`MAX_TIMEOUT_S`]], or `in_design_option` is not an id.
+    /// number in (0, [`MAX_TIMEOUT_S`]], or `in_design_option` is neither an
+    /// id nor `"shared"`.
     pub fn from_tool(args: &Value) -> Result<RunArgs, Value> {
         let Some(code) = args.get("code").and_then(Value::as_str) else {
             return Err(json!({"error": "missing code (a string of Python source)"}));
@@ -157,13 +182,8 @@ impl RunArgs {
                 }
             },
         };
-        let in_design_option = match args.get("in_design_option") {
-            None | Some(Value::Null) => None,
-            Some(v) => match v.as_u64() {
-                Some(n) => Some(ElementId(n)),
-                None => return Err(json!({"error": "in_design_option must be an option id"})),
-            },
-        };
+        let in_design_option = ferro_tools::design_option_argument(args.get("in_design_option"))
+            .map_err(|m| json!({ "error": m }))?;
         Ok(RunArgs {
             code: code.to_string(),
             timeout: Duration::from_secs_f64(secs),
@@ -212,6 +232,32 @@ pub fn decide(actor: &Actor, propose_agents: bool) -> Result<RunMode, Value> {
     }
 }
 
+/// Whether `caller` may cancel a run started by `started_by`: the user
+/// always (the user's command has priority), an agent or plugin only when it
+/// is the one that started the run (an agent of the same name, whatever its
+/// version; the same plugin id). Others are refused
+/// with [`NOT_ALLOWED`]. Clients name themselves in their requests, so this
+/// guards against mistakes between cooperating local clients, not against a
+/// client lying about its name (all of them hold the Ferro Link token).
+pub fn may_cancel(started_by: &Actor, caller: &Actor) -> Result<(), Value> {
+    let same = match (&started_by.kind, &caller.kind) {
+        (_, ActorKind::User) => true,
+        (ActorKind::Agent { .. }, ActorKind::Agent { .. }) => started_by.name == caller.name,
+        (ActorKind::Plugin { id: a }, ActorKind::Plugin { id: b }) => a == b,
+        _ => false,
+    };
+    if same {
+        return Ok(());
+    }
+    Err(failure(
+        NOT_ALLOWED,
+        format!(
+            "only the user or {} (which started the script) may cancel it",
+            started_by.name
+        ),
+    ))
+}
+
 /// Which interpreter to start and where the SDK comes from.
 #[derive(Debug, Clone, PartialEq)]
 pub struct PythonConfig {
@@ -252,6 +298,8 @@ pub enum RunEnd {
     Exited(Option<i32>),
     /// The time limit passed; the process tree was killed.
     TimedOut,
+    /// Cancelled ([`PythonRun::cancel`]); the process tree was killed.
+    Cancelled,
 }
 
 /// What the run holds open in the session.
@@ -326,6 +374,9 @@ pub struct PythonRun {
     exited: Option<(Option<i32>, Instant)>,
     dir: PathBuf,
     tool_failures: Vec<Value>,
+    started: Instant,
+    cancelled_by: Option<String>,
+    targets: Vec<Option<ElementId>>,
 }
 
 /// A fresh random token (UUID v4, 122 random bits).
@@ -456,7 +507,7 @@ impl PythonRun {
         Ok(PythonRun {
             token,
             ctx,
-            in_design_option: args.in_design_option,
+            in_design_option: args.in_design_option.flatten(),
             hold: Some(hold),
             blocks: Vec::new(),
             before,
@@ -468,7 +519,33 @@ impl PythonRun {
             exited: None,
             dir,
             tool_failures: Vec::new(),
+            started: Instant::now(),
+            cancelled_by: None,
+            targets: Vec::new(),
         })
+    }
+
+    /// How long the script has been running.
+    pub fn elapsed(&self) -> Duration {
+        self.started.elapsed()
+    }
+
+    /// Where the script's commands landed so far, in first-use order without
+    /// repeats: `None` = the shared model, `Some(id)` = that design option
+    /// (shown on the Proposal bar, ADR 0006).
+    pub fn targets(&self) -> &[Option<ElementId>] {
+        &self.targets
+    }
+
+    /// Stop the script now: kill its process tree (as on a timeout, so a
+    /// script ignoring SIGTERM or running child processes is stopped too).
+    /// `by` names who cancelled (the user, or the agent), for the message.
+    /// Pass the returned end to [`Self::finish`], which rolls everything back
+    /// and reports [`CANCELLED`] with the output so far.
+    pub fn cancel(&mut self, by: &str) -> RunEnd {
+        self.kill();
+        self.cancelled_by = Some(by.to_string());
+        RunEnd::Cancelled
     }
 
     /// The one-time Ferro Link token of this run. It is valid only while the
@@ -491,7 +568,8 @@ impl PythonRun {
     /// and the call names none (`Session::execute_in_option`, which commits
     /// through the group like any command).
     /// Refused here: `run_python` ([`NESTED`]), `undo` / `redo` (raise an
-    /// exception to roll back instead). Savepoint requests
+    /// exception to roll back instead), `cancel_python` (a script stops by
+    /// raising or exiting). Savepoint requests
     /// ([`BEGIN_TRANSACTION`] and friends) map onto
     /// [`Session::begin_sub_transaction`].
     pub fn handle(
@@ -505,7 +583,7 @@ impl PythonRun {
                 NESTED,
                 "a script cannot start run_python; call the tools directly",
             )),
-            "undo" | "redo" => Err(json!({"error": format!(
+            "undo" | "redo" | CANCEL_TOOL => Err(json!({"error": format!(
                 "{tool} is not available inside run_python; raise an exception to roll the script back"
             )})),
             "link_status" => Ok(json!({
@@ -531,19 +609,19 @@ impl PythonRun {
                 },
                 None => Err(json!({"error": "no open transaction to roll back"})),
             },
-            _ => match self.in_design_option {
-                // The run's option, unless the call names its own.
-                Some(o)
+            // The run's target, unless the call names its own.
+            _ => match ferro_tools::with_default_design_option(tool, args, self.in_design_option) {
+                Ok((args, target)) => {
+                    let r = ferro_tools::call(session, &self.ctx, tool, &args)?;
                     if ferro_tools::runs_in_design_option(tool)
-                        && args.get("in_design_option").is_none_or(Value::is_null) =>
-                {
-                    let mut args = args.clone();
-                    if let Some(m) = args.as_object_mut() {
-                        m.insert("in_design_option".into(), json!(o.0));
+                        && r.is_ok()
+                        && !self.targets.contains(&target)
+                    {
+                        self.targets.push(target);
                     }
-                    ferro_tools::call(session, &self.ctx, tool, &args)?
+                    r
                 }
-                _ => ferro_tools::call(session, &self.ctx, tool, args)?,
+                Err(m) => Err(json!({ "error": m })),
             },
         };
         if let Err(body) = &r {
@@ -552,6 +630,17 @@ impl PythonRun {
             }
         }
         Some(r)
+    }
+
+    /// Wait (at most half a second) until the output threads have read
+    /// everything the killed process tree wrote, so a cancelled or timed-out
+    /// run still reports its output so far.
+    fn settle_output(&self) {
+        let until = Instant::now() + Duration::from_millis(500);
+        let done = |c: &Arc<Mutex<Capture>>| c.lock().map(|c| c.done).unwrap_or(true);
+        while !(done(&self.stdout) && done(&self.stderr)) && Instant::now() < until {
+            std::thread::sleep(Duration::from_millis(5));
+        }
     }
 
     /// Check the process without blocking. Returns how it ended once it has
@@ -615,11 +704,14 @@ impl PythonRun {
     /// status 0: `{ok: true, stdout, stderr, result, changed, failures: []}`.
     /// Otherwise everything the script did is rolled back and `Err` carries
     /// the same fields plus `error`, with failures starting with
-    /// [`TIMEOUT`], [`UNAVAILABLE`] or [`FAILED`] and followed by those of
+    /// [`TIMEOUT`], [`CANCELLED`], [`UNAVAILABLE`] or [`FAILED`] and followed by those of
     /// the last tool call that failed. `changed` lists the ids of elements
     /// added, modified or deleted (sorted; empty after a rollback).
     pub fn finish(mut self, session: &mut Session, end: RunEnd) -> Result<Value, Value> {
         let ok = end == RunEnd::Exited(Some(0));
+        if matches!(end, RunEnd::TimedOut | RunEnd::Cancelled) {
+            self.settle_output();
+        }
         let result = if ok { self.read_result() } else { Value::Null };
         let hold = self.hold.take();
         self.blocks.clear();
@@ -665,6 +757,14 @@ impl PythonRun {
                 format!(
                     "the script ran longer than {} s; it was stopped and nothing was changed",
                     self.timeout.as_secs_f64()
+                ),
+            ),
+            RunEnd::Cancelled => (
+                CANCELLED,
+                format!(
+                    "the script was stopped by {} after {:.1} s; nothing was changed",
+                    self.cancelled_by.as_deref().unwrap_or("the user"),
+                    self.started.elapsed().as_secs_f64()
                 ),
             ),
             RunEnd::Exited(Some(EXIT_UNSUPPORTED)) => (
@@ -831,15 +931,91 @@ impl Drop for ScriptLink {
     }
 }
 
+/// The script a headless host is running, seen from other threads: who
+/// started it and whether someone asked to cancel it.
+struct ActiveRun {
+    started_by: Actor,
+    cancel: Option<String>,
+}
+
+/// Lets other threads cancel the script a headless host runs with
+/// [`run_blocking`] (`cancel_python` while `ferro-mcp` waits for a script).
+/// Clones share the same state.
+#[derive(Clone, Default)]
+pub struct RunControl {
+    active: Arc<Mutex<Option<ActiveRun>>>,
+}
+
+impl RunControl {
+    /// No run yet.
+    pub fn new() -> RunControl {
+        RunControl::default()
+    }
+
+    /// Whether a script is running.
+    pub fn is_running(&self) -> bool {
+        self.active.lock().map(|a| a.is_some()).unwrap_or(false)
+    }
+
+    /// `cancel_python` from `caller`. Refused with [`NOT_ALLOWED`] unless
+    /// [`may_cancel`] allows it; otherwise the run is stopped and rolled back
+    /// before this returns (waiting at most 5 s for the running thread):
+    /// `{cancelled: true}`. `{cancelled: false}` when no script is running.
+    pub fn cancel(&self, caller: &Actor) -> Result<Value, Value> {
+        {
+            let Ok(mut active) = self.active.lock() else {
+                return Err(json!({"error": "the run state is unavailable"}));
+            };
+            let Some(run) = active.as_mut() else {
+                return Ok(json!({"cancelled": false, "reason": "no script is running"}));
+            };
+            may_cancel(&run.started_by, caller)?;
+            run.cancel = Some(match caller.kind {
+                ActorKind::User => "the user".to_string(),
+                _ => caller.name.clone(),
+            });
+        }
+        let until = Instant::now() + Duration::from_secs(5);
+        while self.is_running() && Instant::now() < until {
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        Ok(json!({"cancelled": true}))
+    }
+
+    fn begin(&self, started_by: Actor) {
+        if let Ok(mut a) = self.active.lock() {
+            *a = Some(ActiveRun {
+                started_by,
+                cancel: None,
+            });
+        }
+    }
+
+    fn requested(&self) -> Option<String> {
+        self.active
+            .lock()
+            .ok()
+            .and_then(|a| a.as_ref().and_then(|r| r.cancel.clone()))
+    }
+
+    fn end(&self) {
+        if let Ok(mut a) = self.active.lock() {
+            *a = None;
+        }
+    }
+}
+
 /// Run a script to the end on this thread (headless hosts: `ferro-mcp`
 /// without the app, `ferro-cli`). Script requests the run does not answer
 /// itself are refused, since there is no app (`get_selection`, file tools).
+/// Another thread may stop it through `control` ([`RunControl::cancel`]).
 pub fn run_blocking(
     session: &mut Session,
     config: &PythonConfig,
     args: &Value,
     ctx: ExecContext,
     propose_agents: bool,
+    control: &RunControl,
 ) -> Result<Value, Value> {
     let run_args = RunArgs::from_tool(args)?;
     decide(&ctx.actor, propose_agents)?;
@@ -849,8 +1025,10 @@ pub fn run_blocking(
             format!("cannot open Ferro Link for the script: {e}"),
         )
     })?;
+    let started_by = ctx.actor.clone();
     let mut run = PythonRun::start(session, config, &run_args, ctx, link.port(), TOOL)?;
     link.set_token(run.token());
+    control.begin(started_by);
     let end = loop {
         while let Some(call) = link.next(Duration::from_millis(5)) {
             let tool = call.req.tool.clone();
@@ -864,12 +1042,17 @@ pub fn run_blocking(
                 Err(body) => LinkResponse { ok: false, body },
             });
         }
+        if let Some(by) = control.requested() {
+            break run.cancel(&by);
+        }
         if let Some(end) = run.poll() {
             break end;
         }
     };
     link.set_token(""); // the token dies with the run
-    run.finish(session, end)
+    let r = run.finish(session, end);
+    control.end();
+    r
 }
 
 /// Whether `path` names an interpreter that starts (used by tests to skip
@@ -1229,6 +1412,225 @@ mod tests {
         };
         let e = decide(&plugin, false).unwrap_err();
         assert_eq!(e["failures"][0]["code"], NOT_ALLOWED);
+    }
+
+    /// Wait until `control` runs a script, then cancel it as `caller` after
+    /// `delay`, on another thread (as a second MCP client would).
+    fn cancel_later(
+        control: &RunControl,
+        caller: Actor,
+        delay: Duration,
+    ) -> std::thread::JoinHandle<Result<Value, Value>> {
+        let control = control.clone();
+        std::thread::spawn(move || {
+            let until = Instant::now() + Duration::from_secs(20);
+            while !control.is_running() && Instant::now() < until {
+                std::thread::sleep(Duration::from_millis(5));
+            }
+            std::thread::sleep(delay);
+            control.cancel(&caller)
+        })
+    }
+
+    /// Whether process `pid` still runs (Linux; gone or zombie = not running).
+    #[cfg(target_os = "linux")]
+    fn process_runs(pid: u32) -> bool {
+        let state = std::fs::read_to_string(format!("/proc/{pid}/stat")).unwrap_or_default();
+        state
+            .rsplit(')')
+            .next()
+            .and_then(|rest| rest.split_whitespace().next())
+            .is_some_and(|st| st != "Z" && st != "X")
+    }
+
+    #[test]
+    fn cancel_stops_a_busy_script_rolls_back_and_frees_the_session() {
+        let Some(mut s) = server() else { return };
+        let canceller = cancel_later(
+            &s.runs,
+            Actor::agent("test-agent", "2"),
+            Duration::from_millis(400),
+        );
+        let started = Instant::now();
+        let r = s
+            .call(
+                TOOL,
+                &json!({"code": format!("{BOX}print('working', flush=True)\nwhile True:\n    pass\n"), "timeout_s": 60}),
+            )
+            .unwrap_err();
+        assert!(started.elapsed() < Duration::from_secs(10), "stopped early");
+        assert_eq!(r["failures"][0]["code"], CANCELLED, "{r}");
+        assert!(r["error"].as_str().unwrap().contains("test-agent"), "{r}");
+        assert_eq!(r["stdout"], "working\n", "the output so far is kept");
+        assert_eq!(r["changed"], json!([]));
+        let c = canceller.join().unwrap().unwrap();
+        assert_eq!(c["cancelled"], true);
+        // Nothing changed, no history, and the next command runs.
+        assert_eq!(s.session.doc().len(), 0);
+        assert!(s.session.journal().is_empty());
+        assert!(!s.session.in_group());
+        assert!(!s.runs.is_running());
+        s.call(
+            "create_box",
+            &json!({"origin":[0,0,0],"width":1000,"depth":1000,"height":1000}),
+        )
+        .unwrap();
+        assert_eq!(s.session.doc().len(), 1);
+        assert_eq!(s.session.journal().len(), 1);
+        // With no script running, cancel says so.
+        let none = s.call(CANCEL_TOOL, &json!({})).unwrap();
+        assert_eq!(none["cancelled"], false);
+    }
+
+    #[test]
+    fn only_the_user_or_the_starter_may_cancel() {
+        let Some(mut s) = server() else { return };
+        let other = cancel_later(
+            &s.runs,
+            Actor::agent("other-agent", "1"),
+            Duration::from_millis(200),
+        );
+        let r = s
+            .call(
+                TOOL,
+                &json!({"code": format!("{BOX}import time\ntime.sleep(1.0)\n"), "timeout_s": 30}),
+            )
+            .unwrap_or_else(|e| panic!("{e}"));
+        assert_eq!(r["ok"], true, "the script ran to the end");
+        let refused = other.join().unwrap().unwrap_err();
+        assert_eq!(refused["failures"][0]["code"], NOT_ALLOWED, "{refused}");
+        assert_eq!(s.session.doc().len(), 1);
+        // The user may always.
+        let user = cancel_later(&s.runs, Actor::user("me"), Duration::from_millis(200));
+        let r = s
+            .call(TOOL, &json!({"code": "while True:\n    pass\n"}))
+            .unwrap_err();
+        assert_eq!(r["failures"][0]["code"], CANCELLED);
+        assert!(r["error"].as_str().unwrap().contains("the user"), "{r}");
+        assert_eq!(user.join().unwrap().unwrap()["cancelled"], true);
+
+        let agent = Actor::agent("a", "1");
+        assert!(
+            may_cancel(&agent, &Actor::agent("a", "2")).is_ok(),
+            "any version"
+        );
+        assert!(may_cancel(&agent, &Actor::user("u")).is_ok());
+        assert!(may_cancel(&Actor::user("u"), &agent).is_err());
+        let plugin = Actor {
+            kind: ActorKind::Plugin { id: "a".into() },
+            name: "a".into(),
+        };
+        assert!(
+            may_cancel(&agent, &plugin).is_err(),
+            "same name, other kind"
+        );
+    }
+
+    #[test]
+    fn cancel_kills_a_script_that_ignores_sigterm_and_its_children() {
+        let Some(mut s) = server() else { return };
+        let canceller = cancel_later(&s.runs, Actor::user("me"), Duration::from_millis(600));
+        let code = "import signal, subprocess, sys\n\
+try:\n    signal.signal(signal.SIGTERM, signal.SIG_IGN)\nexcept (AttributeError, ValueError):\n    pass\n\
+p = subprocess.Popen([sys.executable, '-c', 'import signal, time\\ntry:\\n    signal.signal(signal.SIGTERM, signal.SIG_IGN)\\nexcept Exception:\\n    pass\\ntime.sleep(60)'])\n\
+print(p.pid, flush=True)\nimport time\nwhile True:\n    time.sleep(0.05)\n";
+        let r = s
+            .call(TOOL, &json!({"code": code, "timeout_s": 60}))
+            .unwrap_err();
+        assert_eq!(r["failures"][0]["code"], CANCELLED, "{r}");
+        canceller.join().unwrap().unwrap();
+        #[cfg(target_os = "linux")]
+        {
+            let pid: u32 = r["stdout"].as_str().unwrap().trim().parse().unwrap();
+            std::thread::sleep(Duration::from_millis(200));
+            assert!(!process_runs(pid), "child {pid} still running");
+        }
+    }
+
+    #[test]
+    fn a_script_targets_shared_explicitly_or_follows_its_run() {
+        let Some(mut s) = server() else { return };
+        let set = s
+            .call("create_option_set", &json!({"name": "Roof"}))
+            .unwrap()["result"]["element"]
+            .as_u64()
+            .unwrap();
+        let b = s
+            .call("create_design_option", &json!({"set": set}))
+            .unwrap()["result"]["element"]
+            .as_u64()
+            .unwrap();
+        let shared = s.session.doc().len();
+        // The run's option, but one call says "shared": that box lands in
+        // the shared model.
+        let code = format!(
+            "{BOX}doc.call('create_box', origin=[0, 0, 0], width='1m', depth='1m', height='1m', in_design_option='shared')\n"
+        );
+        let r = s
+            .call(TOOL, &json!({"code": code, "in_design_option": b}))
+            .unwrap_or_else(|e| panic!("{e}"));
+        assert_eq!(s.session.doc().len(), shared + 1, "{r}");
+        let l = s.call("list_design_options", &json!({})).unwrap();
+        assert_eq!(l["sets"][0]["options"][1]["added"], 1, "{l}");
+        // The whole run "shared".
+        s.call(TOOL, &json!({"code": BOX, "in_design_option": "shared"}))
+            .unwrap();
+        assert_eq!(s.session.doc().len(), shared + 2);
+        let a = RunArgs::from_tool(&json!({"code": "", "in_design_option": "shared"})).unwrap();
+        assert_eq!(a.in_design_option, Some(None));
+        let a = RunArgs::from_tool(&json!({"code": "", "in_design_option": 4})).unwrap();
+        assert_eq!(a.in_design_option, Some(Some(ElementId(4))));
+        let a = RunArgs::from_tool(&json!({"code": ""})).unwrap();
+        assert_eq!(a.in_design_option, None);
+    }
+
+    #[test]
+    fn a_run_reports_where_its_commands_landed() {
+        let Some(mut s) = server() else { return };
+        let set = s
+            .call("create_option_set", &json!({"name": "Roof"}))
+            .unwrap()["result"]["element"]
+            .as_u64()
+            .unwrap();
+        let b = s
+            .call("create_design_option", &json!({"set": set}))
+            .unwrap()["result"]["element"]
+            .as_u64()
+            .unwrap();
+        let link = ScriptLink::bind(Duration::from_secs(30)).unwrap();
+        let args = RunArgs::from_tool(&json!({"code": "", "in_design_option": b})).unwrap();
+        let mut run = PythonRun::start(
+            &mut s.session,
+            &s.python,
+            &args,
+            ExecContext::user(),
+            link.port(),
+            TOOL,
+        )
+        .unwrap();
+        let bx = json!({"origin":[0,0,0],"width":1000,"depth":1000,"height":1000});
+        run.handle(&mut s.session, "create_box", &bx)
+            .unwrap()
+            .unwrap();
+        run.handle(&mut s.session, "create_box", &bx)
+            .unwrap()
+            .unwrap();
+        let mut sh = bx.clone();
+        sh["in_design_option"] = json!("shared");
+        run.handle(&mut s.session, "create_box", &sh)
+            .unwrap()
+            .unwrap();
+        run.handle(&mut s.session, "list_elements", &json!({}))
+            .unwrap()
+            .unwrap();
+        assert_eq!(run.targets(), &[Some(ElementId(b)), None]);
+        let refused = run.handle(&mut s.session, CANCEL_TOOL, &json!({})).unwrap();
+        assert!(refused.is_err(), "a script does not cancel itself");
+        let end = run.cancel("the user");
+        assert_eq!(end, RunEnd::Cancelled);
+        let r = run.finish(&mut s.session, end).unwrap_err();
+        assert_eq!(r["failures"][0]["code"], CANCELLED);
+        assert_eq!(s.session.doc().len(), 3, "set and its two options only");
     }
 
     #[test]
