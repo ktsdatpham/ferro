@@ -233,8 +233,8 @@ pub(crate) fn body_to_record(body: &Body) -> Result<Record, KernelError> {
     let mut verts: Vec<Vertex> = Vec::new();
     for (a, b, _) in &edges {
         for v in [*a, *b] {
-            if !vi.contains_key(&v) {
-                vi.insert(v, index(verts.len())?);
+            if let std::collections::hash_map::Entry::Vacant(slot) = vi.entry(v) {
+                slot.insert(index(verts.len())?);
                 verts.push(Vertex {
                     point: arr(point(v)?),
                     tolerance: vtol(v),

@@ -196,10 +196,7 @@ fn disjoint_operands() {
     // A difference keeps the target as it is.
     let r = ok(BooleanOp::Difference, &a, &b, "disjoint difference");
     check(&r, 1e9, 6, "disjoint difference");
-    assert_eq!(
-        r.lineage.kept,
-        fa.iter().copied().collect::<Vec<_>>().tap_sort()
-    );
+    assert_eq!(r.lineage.kept, fa.to_vec().tap_sort());
     // A union is one body of two shells.
     let r = ok(BooleanOp::Union, &a, &b, "disjoint union");
     check(&r, 2e9, 12, "disjoint union");
