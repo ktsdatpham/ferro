@@ -311,16 +311,70 @@ fn with_option_argument(mut t: Value) -> Value {
         .is_some_and(|n| AnyCommand::NAMES.contains(&n) && !DESIGN_OPTION_COMMANDS.contains(&n));
     if is_command {
         if let Some(p) = t["inputSchema"]["properties"].as_object_mut() {
-            p.insert("in_design_option".into(), json!({"type": "integer", "description": "Optional design option id: make this change inside that option (its layer), not in the shared model"}));
+            p.insert(
+                "in_design_option".into(),
+                json!({"type": ["integer", "string"], "description": IN_DESIGN_OPTION_DOC}),
+            );
         }
     }
     t
 }
 
+/// Schema text of the `in_design_option` argument (ADR 0006 implementation
+/// note: one target rule for agent commands and scripts).
+pub const IN_DESIGN_OPTION_DOC: &str = "Where the change lands: a design option id (the change goes into that option's layer), or \"shared\" for the shared model. Omitted (or null): the option the user is editing in the Ferro app, else the shared model";
+
+/// Value of `in_design_option` naming the shared model explicitly.
+pub const SHARED: &str = "shared";
+
 /// Whether the command tool `name` takes `in_design_option` (every command
 /// except those on option sets themselves).
 pub fn runs_in_design_option(name: &str) -> bool {
     AnyCommand::NAMES.contains(&name) && !DESIGN_OPTION_COMMANDS.contains(&name)
+}
+
+/// Read an `in_design_option` argument. `Ok(None)`: not given (absent or
+/// `null`), so the host's default applies; `Ok(Some(None))`: `"shared"`,
+/// the shared model; `Ok(Some(Some(id)))`: that design option. Fails on
+/// anything else (a message for the caller).
+pub fn design_option_argument(v: Option<&Value>) -> Result<Option<Option<ElementId>>, String> {
+    match v {
+        None | Some(Value::Null) => Ok(None),
+        Some(Value::String(s)) if s == SHARED => Ok(Some(None)),
+        Some(v) => match v.as_u64() {
+            Some(n) => Ok(Some(Some(ElementId(n)))),
+            None => Err(format!(
+                "in_design_option must be a design option id or \"{SHARED}\", not {v}"
+            )),
+        },
+    }
+}
+
+/// Apply the default target of a command tool call (ADR 0006: while the
+/// user edits a design option, agent commands and scripts go into it):
+/// when `name` runs in design options and `args` names no target, the
+/// returned arguments name `default` (`None` leaves them unchanged, so the
+/// command lands in the shared model). An explicit id or `"shared"` is kept.
+/// Also returns where the call will land (`None` = the shared model), or
+/// an error message when `in_design_option` is malformed.
+pub fn with_default_design_option(
+    name: &str,
+    args: &Value,
+    default: Option<ElementId>,
+) -> Result<(Value, Option<ElementId>), String> {
+    if !runs_in_design_option(name) {
+        return Ok((args.clone(), None));
+    }
+    match design_option_argument(args.get("in_design_option"))? {
+        Some(target) => Ok((args.clone(), target)),
+        None => {
+            let mut args = args.clone();
+            if let (Some(o), Some(m)) = (default, args.as_object_mut()) {
+                m.insert("in_design_option".into(), json!(o.0));
+            }
+            Ok((args, default))
+        }
+    }
 }
 
 /// Commands on option sets themselves, which cannot run inside an option.
@@ -753,16 +807,18 @@ pub fn call(
     let err = |m: String| Err(json!({"error": m}));
     if AnyCommand::NAMES.contains(&name) {
         let mut args = args.clone();
-        let in_option = match args
+        let given = args
             .as_object_mut()
-            .and_then(|o| o.remove("in_design_option"))
-        {
-            None | Some(Value::Null) => None,
-            Some(v) => match v.as_u64() {
-                Some(n) if !DESIGN_OPTION_COMMANDS.contains(&name) => Some(ElementId(n)),
-                Some(_) => return Some(err(format!("{name} cannot run inside a design option"))),
-                None => return Some(err("in_design_option must be an option id".into())),
-            },
+            .and_then(|o| o.remove("in_design_option"));
+        // Not given or "shared": the shared model (hosts apply their own
+        // default before calling, see `with_default_design_option`).
+        let in_option = match design_option_argument(given.as_ref()) {
+            Ok(None | Some(None)) => None,
+            Ok(Some(Some(_))) if DESIGN_OPTION_COMMANDS.contains(&name) => {
+                return Some(err(format!("{name} cannot run inside a design option")))
+            }
+            Ok(Some(Some(o))) => Some(o),
+            Err(m) => return Some(err(m)),
         };
         let mut norm = match normalize(&args) {
             Ok(v) => v,
@@ -1254,5 +1310,86 @@ mod tests {
         // Applying the diff to the shared model reproduces the option.
         ok(&mut s, "apply_changes", json!({"changes": d["changes"]}));
         assert_eq!(s.doc().len(), 4);
+    }
+
+    #[test]
+    fn the_default_design_option_applies_only_when_no_target_is_named() {
+        let o = Some(ElementId(7));
+        let box_args = json!({"origin": [0, 0, 0], "width": 1, "depth": 1, "height": 1});
+        // Not named: the default (the option the user edits) is filled in.
+        let (a, t) = with_default_design_option("create_box", &box_args, o).unwrap();
+        assert_eq!(a["in_design_option"], 7);
+        assert_eq!(t, o);
+        let mut null = box_args.clone();
+        null["in_design_option"] = Value::Null;
+        assert_eq!(
+            with_default_design_option("create_box", &null, o)
+                .unwrap()
+                .1,
+            o
+        );
+        // No default: the shared model, arguments unchanged.
+        let (a, t) = with_default_design_option("create_box", &box_args, None).unwrap();
+        assert_eq!(a, box_args);
+        assert_eq!(t, None);
+        // Named: kept, "shared" included.
+        let mut shared = box_args.clone();
+        shared["in_design_option"] = json!(SHARED);
+        let (a, t) = with_default_design_option("create_box", &shared, o).unwrap();
+        assert_eq!(a["in_design_option"], SHARED);
+        assert_eq!(t, None);
+        let mut other = box_args.clone();
+        other["in_design_option"] = json!(9);
+        assert_eq!(
+            with_default_design_option("create_box", &other, o)
+                .unwrap()
+                .1,
+            Some(ElementId(9))
+        );
+        // Option commands and read-only tools never get a target.
+        let (a, t) =
+            with_default_design_option("create_design_option", &json!({"set": 1}), o).unwrap();
+        assert!(a.get("in_design_option").is_none());
+        assert_eq!(t, None);
+        assert_eq!(
+            with_default_design_option("list_elements", &json!({}), o)
+                .unwrap()
+                .1,
+            None
+        );
+        // Malformed.
+        let mut bad = box_args.clone();
+        bad["in_design_option"] = json!("main");
+        assert!(with_default_design_option("create_box", &bad, o).is_err());
+        assert!(design_option_argument(Some(&json!(-1))).is_err());
+        assert_eq!(design_option_argument(None), Ok(None));
+    }
+
+    #[test]
+    fn shared_names_the_shared_model_in_a_command() {
+        let mut s = session();
+        let set = ok(&mut s, "create_option_set", json!({"name": "Roof"}))["result"]["element"]
+            .as_u64()
+            .unwrap();
+        ok(&mut s, "create_design_option", json!({"set": set}));
+        ok(
+            &mut s,
+            "create_box",
+            json!({"origin": [0, 0, 0], "width": "2m", "depth": "2m", "height": "2m", "in_design_option": "shared"}),
+        );
+        assert_eq!(
+            s.doc().len(),
+            3,
+            "set, option and the box in the shared model"
+        );
+        let e = call(
+            &mut s,
+            &ExecContext::user(),
+            "create_box",
+            &json!({"origin": [0, 0, 0], "width": 1, "depth": 1, "height": 1, "in_design_option": "x"}),
+        )
+        .unwrap()
+        .unwrap_err();
+        assert!(e["error"].as_str().unwrap().contains("\"shared\""), "{e}");
     }
 }
