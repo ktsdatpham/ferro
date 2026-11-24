@@ -127,6 +127,7 @@ decision requires a new ADR in [`../decisions/`](../decisions/).
 | D-78 | **Kernel** (ADR 0007): solidcore (safe-Rust SMLib port) for booleans and curved geometry, only inside `ferro-kernel`; `ferro-core` defines a `Kernel` trait with lineage and receives the kernel by injection like `IdSource`; without one, kernel commands fail with `ferro.kernel.unavailable` | **Accepted** |
 | D-79 | **Pin** (ADR 0008, as Revit): `pinned` blocks delete and move (`ferro.model.pinned`); other edits allowed; anyone who may edit may unpin; linked models auto-pinned, datums only with `auto_pin_datums` | **Accepted** |
 | D-80 | **Open plugins** (ADR 0009, supersedes D-51): plugins run with the user's rights like Revit / SketchUp add-ins, are a folder with a manifest and Python on the SDK, simple enough for non-programmers; only promotion to a built-in feature is reviewed through the repository gate | **Accepted** |
+| D-81 | **Open core and marketplace** (ADR 0010): the repo stays MPL-2.0 with open service clients and an open contract (`docs/services/`); accounts, licence server, marketplace backend (VNPay, commission, payouts), cloud, hosted agents, compute and enterprise are closed services; entitlements by Ed25519 licence tokens checked offline; CLA for outside contributions; the Ferro name is a trademark | **Accepted** |
 
 ## Status of the current code
 

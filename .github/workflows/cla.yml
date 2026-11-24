@@ -1,0 +1,29 @@
+name: CLA
+
+# ADR 0010: outside contributions need the Contributor License Agreement
+# (docs/legal/CLA.md). Maintainers listed there under "Exempt" pass.
+on:
+  pull_request_target:
+    types: [opened, edited, synchronize, reopened]
+
+permissions:
+  contents: read
+
+jobs:
+  cla:
+    runs-on: ubuntu-latest
+    steps:
+      # Only the base branch's CLA file is read (never the pull request's
+      # code): pull_request_target runs with the base repository's context.
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          sparse-checkout: |
+            docs/legal/CLA.md
+            scripts/cla_check.py
+          sparse-checkout-cone-mode: false
+      - name: Check the CLA line
+        env:
+          AUTHOR: ${{ github.event.pull_request.user.login }}
+          BODY: ${{ github.event.pull_request.body }}
+        run: python3 scripts/cla_check.py

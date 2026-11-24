@@ -12,6 +12,8 @@
 5. api       — docs/api/TREE.md is up to date (scripts/api_tree.py --check).
 6. python    — python/ferro/_tools.py matches python/ferro/tools.json
                (scripts/gen_python.py --check, ADR 0005).
+7. secrets   — no private keys or payment secrets in tracked files (ADR 0010:
+               service code and keys live only in the closed repository).
 
 Exit code 1 and one line per problem when something is wrong.
 """
@@ -164,6 +166,32 @@ def check_python():
         problems.append(r.stdout.strip() or "python/ferro/_tools.py is out of date")
 
 
+SECRET_PATTERNS = [
+    (re.compile(r"-----BEGIN (?:RSA |EC |DSA |OPENSSH |ENCRYPTED )?PRIVATE KEY-----"), "a private key"),
+    (re.compile(r"(?i)vnp_?hash_?secret[\"']?\s*[:=]\s*[\"'][A-Za-z0-9]{16,}[\"']"), "a VNPay hash secret"),
+    (re.compile(r"(?i)(?:secret|private)_?key[\"']?\s*[:=]\s*[\"'][A-Za-z0-9+/=_-]{32,}[\"']"), "a secret key"),
+]
+
+
+def check_secrets():
+    r = subprocess.run(["git", "ls-files", "-z"], cwd=ROOT, capture_output=True, text=True)
+    if r.returncode != 0:
+        return
+    for rel in r.stdout.split("\0"):
+        if not rel or rel.startswith(("target", "spikes/")) or rel.endswith((".png", ".fro", ".zip")):
+            continue
+        try:
+            with open(os.path.join(ROOT, rel), encoding="utf-8") as f:
+                text = f.read()
+        except (OSError, UnicodeDecodeError):
+            continue
+        for pat, what in SECRET_PATTERNS:
+            m = pat.search(text)
+            if m:
+                line = text.count("\n", 0, m.start()) + 1
+                problems.append(f"{rel}:{line}: looks like {what}; secrets never go in this repository (ADR 0010)")
+
+
 def main():
     check_glossary()
     check_layers()
@@ -171,6 +199,7 @@ def main():
     check_tasks()
     check_api()
     check_python()
+    check_secrets()
     for p in problems:
         print(p)
     if problems:
