@@ -51,7 +51,9 @@ Phases in the app (ADR 0006, M5-23): the active view's phase and phase filter (s
 - struct `PhaseDisplay` — What the view shows for phases: elements to hide and how to draw the
 - struct `PhaseState` — Phase view state of the app: a working copy of the active view's
 - fn `voids` — Voids of `doc`: Forms of category `Forms` that cut (M5-5.3), drawn
-- fn `phased_cut_doc` — `doc` as drawn in view phase `view` (M5-23.6): elements with `cut` rows
+- struct `PhaseCutDisplay` — What phased cuts change in the view (M5-23.6, M5-23.10): the document
+- fn `phased_cut_doc` — `doc` as drawn in view phase `view` under `filter` (M5-23.6,
+- fn `mark_parts` — Give demolished parts ([`PhaseCutDisplay::parts`]) their look: the
 - fn `phase_display` — Phase display of `doc` in view phase `view` under `filter`: pure, used
 
 ### `ferro_app::app::pins`
@@ -717,6 +719,12 @@ Non-destructive cuts (ADR 0004 §5, M5-5.3) and phased cuts (ADR 0006 §5, M5-23
 - fn `has_phased_cuts` — `true` when `target` has a cut row made in a phase (ADR 0006 §5).
 - struct `CutOutcome` — What [`apply_cuts`] produced: the cut body and the warnings.
 - fn `apply_cuts` — Subtract the cutters of `rows` (in the given order) from `uncut`, the
+- fn `apply_cuts_cached` — [`apply_cuts`] through `cache` (M5-5.7): a row whose result is in the
+- struct `CutCache` — Session-level cache of cut results (M5-5.7), keyed by the row's uid and
+- fn `CutCache::new` — An empty cache.
+- fn `CutCache::len` — Number of cached row results.
+- fn `CutCache::is_empty` — `true` when nothing is cached.
+- fn `CutCache::clear` — Forget every result.
 - fn `body_in_phase` — The body of element `id` in a view of phase `phase` (ADR 0006 §5): its
 - fn `removed_in_phase` — The part of element `id` that the cut rows made in phase `phase`
 
@@ -821,6 +829,7 @@ Regeneration of derived BIM geometry (Foundation Spec §4.4, D-41).
 - fn `uncut_body` — The uncut body of one element ([`uncut_bodies`]); `None` without
 - fn `regenerate` — Rebuild the geometry of every wall, floor and opening in `doc`, without
 - fn `regenerate_with` — Rebuild the geometry of every wall, floor and opening in `doc`, then
+- fn `regenerate_cached` — [`regenerate_with`] through a [`cut::CutCache`] (M5-5.7): `cut` rows
 - fn `set_geometry` — Replace an element's derived geometry (used by `ops::Transaction`).
 - fn `point_on_wall` — Opening geometry helper for commands: plan point and wall-local frame of
 
@@ -1039,6 +1048,7 @@ Core commands (milestone 1) and the dispatch enum; BIM commands live in `bim_com
 Design-option commands (ADR 0006 §Design options, M5-23.9) and the change-list command `apply_changes` (M5-26.2). Each `NAME` is also the MCP tool name.
 
 - fn `resolve_options` — The document as seen with exactly the layers of `options` (at most one
+- fn `resolve_options_cached` — [`resolve_options`] with a cut cache (M5-5.7), e.g. the session's.
 - fn `resolve` — The document as seen in `combination` (ADR 0006 §3): the shared model
 - struct `CreateOptionSet` — Create an option set (Revit: *Option Set*) with its first option
 - struct `SetOptionSet` — Rename an option set or move it to `position` (0 = first; past the end
@@ -1158,13 +1168,16 @@ Commands on the relationship table (ADR 0004 §5, M5-5.1).
 - fn `Session::with_kernel` — The same session with a geometry kernel (ADR 0007, D-78), injected
 - fn `Session::set_kernel` — Attach or remove the geometry kernel.
 - fn `Session::kernel` — The attached geometry kernel, if any.
+- fn `Session::cut_cache` — The session's cache of cut results (M5-5.7), shared by its
+- fn `Session::resolve` — The document as seen in `combination` ([`resolve`]), regenerated
+- fn `Session::resolve_options` — The document with exactly the layers of `options`
 - fn `Session::doc`
 - fn `Session::journal`
 - fn `Session::can_undo`
 - fn `Session::can_redo`
 - fn `Session::undo_name`
 - fn `Session::redo_name`
-- fn `Session::replace_document` — Replace the document (open file); clears history.
+- fn `Session::replace_document` — Replace the document (open file); clears history and the cut cache.
 - fn `Session::execute` — Run one command as one transaction (or inside the open group).
 - fn `Session::execute_in_option` — Run a command inside a design option (ADR 0006, "edit in option"):
 - fn `Session::preview` — Evaluate a command on a copy without changing the session (tool
@@ -1187,6 +1200,7 @@ Commands on the relationship table (ADR 0004 §5, M5-5.1).
 - struct `Transaction` — An atomic unit of change (§4.3). Commands mutate a working copy; `finish`
 - fn `Transaction::new`
 - fn `Transaction::with_kernel` — The same transaction with a geometry kernel (ADR 0007), injected like
+- fn `Transaction::with_cut_cache` — The same transaction with a cache of cut results (M5-5.7), shared
 - fn `Transaction::kernel` — The session's geometry kernel, for commands that need booleans.
 - fn `Transaction::name`
 - fn `Transaction::doc` — The working copy (reads see this transaction's own changes).
@@ -1653,8 +1667,8 @@ Design-option tools (ADR 0006, M5-23.9) and the change-format tools (M5-26.2): t
 - fn `combination_schema` — JSON schema of a combination argument.
 - fn `tools` — Tool definitions for design options and change lists.
 - fn `combination_arg` — Read a combination argument: `None` for `"shared"` (or a missing value
-- fn `seen` — The document as seen in a combination (`None` = shared model). Both
-- fn `list_design_options` — `list_design_options`.
+- fn `seen` — The session's document as seen in a combination (`None` = shared
+- fn `list_design_options` — `list_design_options` on the session's document.
 - fn `diff_documents` — `diff_documents {from, to}`.
 
 ### `ferro_tools::link`
