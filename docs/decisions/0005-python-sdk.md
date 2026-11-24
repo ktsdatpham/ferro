@@ -5,7 +5,7 @@
   (see the implementation note); cancelling and user priority in M5-14.7,
   one target rule for design options in M5-14.8 (owner's changes to the
   busy policy, 2026-11-24).
-- **Affects:** D-44, D-46, D-51, D-65; chapter 7
+- **Affects:** D-44, D-46, D-65, D-80 (D-51 superseded); chapter 7
 
 ## Context
 
@@ -32,7 +32,7 @@ short script that calls the same tools does the job in one step.
    against the open document inside one transaction group: all or nothing,
    one Proposal, journal records the script (D-29). The interpreter runs out
    of process (a `python3` the user has, or a bundled one), talking Ferro
-   Link, with a time limit. Distributed plugins stay WASM (D-51).
+   Link, with a time limit. Plugins may use it too (ADR 0009 supersedes D-51).
 
 ## Implementation note: `run_python` (M5-14.4, 2026-11-24)
 
@@ -66,7 +66,7 @@ short script that calls the same tools does the job in one step.
 - **Security.** A script has the user's own rights: it is the user's
   Python. Only a caller allowed to edit may start one: the user, or an agent,
   whose script then becomes (part of) its Proposal unless the user raised
-  autonomy; plugins are refused (`ferro.python.not_allowed`, D-51). The
+  autonomy; plugins run scripts like the user (ADR 0009; before it, D-51 refused them). The
   script reaches Ferro only with a **one-time token** (random UUID v4) given
   in environment variables (`FERRO_LINK_PORT`, `FERRO_LINK_TOKEN`), never in
   argv; the host accepts it only while that run lasts and drops it when the

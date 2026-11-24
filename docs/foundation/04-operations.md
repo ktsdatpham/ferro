@@ -129,7 +129,7 @@ first failure; failures of the script's last failed tool call follow:
 | `ferro.python.failed` | Uncaught exception or non-zero exit; nothing changed, traceback in `stderr` |
 | `ferro.python.nested` | A script tried to start `run_python` itself |
 | `ferro.python.busy` | Another script is running; changes from other clients wait (read-only tools work) |
-| `ferro.python.not_allowed` | The caller may not start scripts (plugins, D-51), or may not cancel this one (`cancel_python`: only the user and the client that started it) |
+| `ferro.python.not_allowed` | The caller may not cancel this run (`cancel_python`: only the user and the client that started it) |
 | `ferro.python.cancelled` | The script was stopped (`cancel_python`, the app's Stop button or Esc twice); its process tree was killed, nothing changed, output so far in `stdout` / `stderr` |
 
 A script's changes are one `TransactionGroup` (§4.3, `Session` groups):
