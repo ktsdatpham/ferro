@@ -292,17 +292,17 @@ Legend: `[ ]` open · `[~]` in progress · `[x]` done · `✓` verified ·
       - accept: `cargo test -p ferro-core collinear_outlines_fail_with_the_same_code every_command_rejects_degenerate` passes ✓ verified @lead (0 ignored tests left; bow-tie reproduced via ferro-cli → ferro.geom.self_intersecting_profile)
     - [ ] M5-15.12.3 A journal loaded from a file with id gaps still names the old ids (not kernel work; open)
 
-## M6-1 Business foundations (ADR 0010, D-81)
+## M6-20 Business foundations (ADR 0010, D-81)
 
-- [~] **M6-1 Open core, services seam and marketplace clients** @lead
-  - [x] M6-1.1 ADR 0010, service contract `docs/services/README.md`, CLA draft + `CLA` check (`scripts/cla_check.py`, `.github/workflows/cla.yml`), trademark draft, secrets lint @lead
+- [~] **M6-20 Open core, services seam and marketplace clients** @lead
+  - [x] M6-20.1 ADR 0010, service contract `docs/services/README.md`, CLA draft + `CLA` check (`scripts/cla_check.py`, `.github/workflows/cla.yml`), trademark draft, secrets lint @lead
     - accept: `python3 scripts/cla_check.py` passes for a maintainer and for a description with the CLA line, fails otherwise; `python3 scripts/lint.py` flags a `vnp_HashSecret = "<16+ chars>"` line
-  - [ ] M6-1.2 Service configuration (`services.json`, `FERRO_SERVICES_URL`, offline mode) and a small HTTP client with the `ferro.service.*` codes
-  - [ ] M6-1.3 Account sign-in by device flow (RFC 8628), token storage, sign out; app "Sign in" UI
-  - [ ] M6-1.4 Licence tokens (Ed25519, key list with `kid`, grace period) and `Entitlements`; activation codes
-  - [ ] M6-1.5 Marketplace client: catalog, listing view, install with sha256 check, Buy (checkout URL + order polling); plugin manifest `publisher` / `price` / `entitlement`; paid plugin commands show Buy without the entitlement
-  - [ ] M6-1.6 A mock services server for tests and local development (open, fake payments) implementing the contract
-  - [ ] M6-1.7 Closed repository for the official services (VNPay checkout + IPN, ledger, payouts, licence signing) — outside this repo, owner's decision
+  - [ ] M6-20.2 Service configuration (`services.json`, `FERRO_SERVICES_URL`, offline mode) and a small HTTP client with the `ferro.service.*` codes
+  - [ ] M6-20.3 Account sign-in by device flow (RFC 8628), token storage, sign out; app "Sign in" UI
+  - [ ] M6-20.4 Licence tokens (Ed25519, key list with `kid`, grace period) and `Entitlements`; activation codes
+  - [ ] M6-20.5 Marketplace client: catalog, listing view, install with sha256 check, Buy (checkout URL + order polling); plugin manifest `publisher` / `price` / `entitlement`; paid plugin commands show Buy without the entitlement
+  - [ ] M6-20.6 A mock services server for tests and local development (open, fake payments) implementing the contract
+  - [ ] M6-20.7 Closed repository for the official services (VNPay checkout + IPN, ledger, payouts, licence signing) — outside this repo, owner's decision
 
 ## M6 SketchUp parity, rest (on Foundation 2)
 

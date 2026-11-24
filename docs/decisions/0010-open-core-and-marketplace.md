@@ -76,7 +76,7 @@ through VNPay (the owner already has a merchant account).
 
 - New open modules: service configuration, account client, license-token
   verification and entitlements, marketplace catalog client and Buy flow,
-  plugin manifest pricing fields (M6-1 in the task tree).
+  plugin manifest pricing fields (M6-20 in the task tree).
 - Business code and secrets never enter this repository. A lint check
   refuses obvious secrets such as `vnp_HashSecret` values.
 - Legal steps (CLA wording, trademark filing, payment terms, e-invoices and
