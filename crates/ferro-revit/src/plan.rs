@@ -4,11 +4,10 @@ use crate::{ft, signature};
 use ferro_core::algo::body_mesh;
 use ferro_core::geom::Curve;
 use ferro_core::model::bim::{
-    CompoundStructure, LayerFunction, LocationLine, OpeningKind, WallTop,
+    CompoundStructure, LayerFunction, LocationLine, OpeningKind, WallJoin, WallTop,
 };
-use ferro_core::model::generate;
 use ferro_core::model::material::{PhysicalAsset, ThermalAsset};
-use ferro_core::model::{Document, Element, ElementBody};
+use ferro_core::model::{generate, join, Document, Element, ElementBody};
 use ferro_core::Point2;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -134,6 +133,14 @@ pub enum RevitOp {
         /// `WallLocationLine` value: 0 centerline, 1 core centerline,
         /// 2 finish exterior, 3 finish interior.
         location_line: i32,
+        /// `WallUtils.DisallowWallJoinAtEnd(wall, 0)` when the start's join
+        /// state is `disallow` (M5-5.2), else `AllowWallJoinAtEnd`. Omitted
+        /// when false, so walls that join keep their signature.
+        #[serde(default, skip_serializing_if = "is_false")]
+        disallow_join_start: bool,
+        /// The same for the end (`DisallowWallJoinAtEnd(wall, 1)`).
+        #[serde(default, skip_serializing_if = "is_false")]
+        disallow_join_end: bool,
         /// Phase names for `PHASE_CREATED` / `PHASE_DEMOLISHED` (looked up
         /// by name in Revit). Omitted when the element has no phases, so
         /// unphased elements keep their signature.
@@ -145,6 +152,19 @@ pub enum RevitOp {
         /// elements keep their signature.
         #[serde(default, skip_serializing_if = "is_false")]
         pinned: bool,
+    },
+    /// A `join` row between two native elements (walls, floors; M5-5.2):
+    /// `JoinGeometryUtils.JoinGeometry(first, second)` unless they are
+    /// joined, then `SwitchJoinOrder` unless `first` is the cutting element
+    /// (`IsCuttingElementInJoin`). `uid` is the row's uid; nothing is tagged
+    /// in Revit, so the op is re-sent on every sync and must stay
+    /// idempotent. Wall pairs whose ends meet are left to Revit's own wall
+    /// joins.
+    JoinGeometry {
+        uid: String,
+        signature: String,
+        first_uid: String,
+        second_uid: String,
     },
     /// `Floor.Create(loops, type, level)`, then `FLOOR_HEIGHTABOVELEVEL_PARAM`.
     /// First loop is the outline (counter-clockwise), then holes (clockwise),
@@ -264,6 +284,7 @@ impl RevitOp {
             | RevitOp::Opening { uid, .. }
             | RevitOp::SiteLocation { uid, .. }
             | RevitOp::DirectShape { uid, .. }
+            | RevitOp::JoinGeometry { uid, .. }
             | RevitOp::Phase { uid, .. } => uid,
         }
     }
@@ -280,6 +301,7 @@ impl RevitOp {
             | RevitOp::Opening { signature, .. }
             | RevitOp::SiteLocation { signature, .. }
             | RevitOp::DirectShape { signature, .. }
+            | RevitOp::JoinGeometry { signature, .. }
             | RevitOp::Phase { signature, .. } => Some(signature),
         }
     }
@@ -308,6 +330,7 @@ impl RevitOp {
             | RevitOp::Opening { signature, .. }
             | RevitOp::SiteLocation { signature, .. }
             | RevitOp::DirectShape { signature, .. }
+            | RevitOp::JoinGeometry { signature, .. }
             | RevitOp::Phase { signature, .. } => signature,
         }
     }
@@ -403,10 +426,56 @@ fn site_location_op(doc: &Document) -> Option<RevitOp> {
     })
 }
 
+/// `join_geometry` operations for the `join` rows between native walls and
+/// floors (M5-5.2), in uid order, and the number of native elements left
+/// unjoined because their row's `first` is a Form (a direct shape, which
+/// Revit cannot join; the Form itself sends its joined body). Wall pairs
+/// whose ends meet are left to Revit's wall joins.
+fn join_ops(doc: &Document) -> (Vec<RevitOp>, usize) {
+    let rows: Vec<&ferro_core::model::Relationship> = doc
+        .relationships()
+        .filter(|r| r.kind == ferro_core::model::RelationshipKind::Join && r.elements.len() == 2)
+        .collect();
+    if rows.is_empty() {
+        return (Vec::new(), 0);
+    }
+    let settled = join::settled_wall_pairs(doc);
+    let native = |e: &Element| matches!(e.body, ElementBody::Wall(_) | ElementBody::Floor(_));
+    let mut ops = Vec::new();
+    let mut not_sent = 0;
+    for r in rows {
+        let (Some(a), Some(b)) = (doc.get(r.elements[0]), doc.get(r.elements[1])) else {
+            continue;
+        };
+        match (native(a), native(b)) {
+            (true, true) => {
+                if settled.contains(&(a.id.min(b.id), a.id.max(b.id))) {
+                    continue;
+                }
+                ops.push(RevitOp::JoinGeometry {
+                    uid: r.uid.to_string(),
+                    signature: String::new(),
+                    first_uid: a.uid.to_string(),
+                    second_uid: b.uid.to_string(),
+                });
+            }
+            (false, true) => not_sent += 1,
+            _ => {}
+        }
+    }
+    (ops, not_sent)
+}
+
 /// Operations that bring a Revit model holding `state` up to date with
 /// `doc`. Order: warnings, deletes, site location, materials, levels and
-/// phases, types, walls, floors, openings, direct shapes. Elements whose
-/// signature is unchanged are skipped.
+/// phases, types, walls, floors, openings, direct shapes, join geometry.
+/// Elements whose signature is unchanged are skipped.
+///
+/// Joins (M5-5.2): wall ends whose join state is `disallow` carry
+/// `disallow_join_start` / `_end`; `join` rows between native walls and
+/// floors become `join_geometry` ops (see [`join_ops`]); a native element
+/// joined to a Form is sent unjoined with one `warning`
+/// (`ferro.revit.join_not_sent`).
 ///
 /// Cuts (M5-5.3): Forms send their cut body; voids are not sent; native
 /// walls and floors with cut rows are sent uncut with one `warning`
@@ -483,7 +552,7 @@ fn plan_resolved(doc: &Document, state: &RevitState) -> Vec<RevitOp> {
             .map(|p| p.label())
     };
 
-    let mut groups: [Vec<RevitOp>; 7] = Default::default();
+    let mut groups: [Vec<RevitOp>; 8] = Default::default();
     groups[0].extend(site_location_op(doc));
     if needs_default_level {
         groups[1].push(RevitOp::Level {
@@ -590,6 +659,8 @@ fn plan_resolved(doc: &Document, state: &RevitState) -> Vec<RevitOp> {
                         top_level_uid,
                         top_offset: r(ft(top_offset)),
                         location_line: location_line(w.location_line),
+                        disallow_join_start: w.join_start == WallJoin::Disallow,
+                        disallow_join_end: w.join_end == WallJoin::Disallow,
                         phase_created: phase_name(e.phase_created),
                         phase_demolished: phase_name(e.phase_demolished),
                         pinned: e.pinned,
@@ -705,6 +776,9 @@ fn plan_resolved(doc: &Document, state: &RevitState) -> Vec<RevitOp> {
         };
         groups[group].push(op);
     }
+    // Join rows (M5-5.2), after every element they name.
+    let (joins, join_not_sent) = join_ops(doc);
+    groups[7] = joins;
 
     let records: HashMap<&str, &RevitRecord> = state
         .elements
@@ -742,6 +816,17 @@ fn plan_resolved(doc: &Document, state: &RevitState) -> Vec<RevitOp> {
         .filter(|e| matches!(e.body, ElementBody::Wall(_) | ElementBody::Floor(_)))
         .filter(|e| !ferro_core::model::cut::cuts_of(doc, e.id).is_empty())
         .count();
+    if join_not_sent > 0 {
+        out.insert(
+            0,
+            RevitOp::Warning {
+                code: "ferro.revit.join_not_sent".into(),
+                message: format!(
+                    "{join_not_sent} wall(s) / floor(s) are joined to a direct shape (a Form); Revit cannot join them, so they are sent unjoined"
+                ),
+            },
+        );
+    }
     if natively_cut > 0 {
         out.insert(
             0,
@@ -862,6 +947,98 @@ mod tests {
         assert!(
             matches!(&ops[0], RevitOp::Warning { code, .. } if code == "ferro.revit.cut_not_sent")
         );
+    }
+
+    #[test]
+    fn joins_send_disallowed_ends_and_join_geometry() {
+        let mut s = house();
+        let run = |s: &mut ferro_core::Session, t: &str, a: serde_json::Value| {
+            s.execute(AnyCommand::from_tool(t, &a).unwrap(), &ExecContext::user())
+                .unwrap_or_else(|f| panic!("{t}: {f:?}"))
+                .output
+        };
+        let walls: Vec<ferro_core::ElementId> = s
+            .doc()
+            .elements()
+            .filter(|e| e.as_wall().is_some())
+            .map(|e| e.id)
+            .collect();
+        let floor = s
+            .doc()
+            .elements()
+            .find(|e| matches!(e.body, ElementBody::Floor(_)))
+            .unwrap()
+            .id;
+        let bx = s
+            .doc()
+            .elements()
+            .find(|e| e.as_form().is_some())
+            .unwrap()
+            .id;
+        let plain = plan(s.doc(), &RevitState::default());
+        assert!(plain
+            .iter()
+            .all(|o| !matches!(o, RevitOp::JoinGeometry { .. })));
+        run(
+            &mut s,
+            "set_wall",
+            json!({"wall": walls[0], "join_end": "disallow"}),
+        );
+        // A corner pair (left to Revit's wall joins), a floor–wall join
+        // (sent) and a Form–wall join (not sent, warned).
+        run(
+            &mut s,
+            "create_relationship",
+            json!({"kind": "join", "elements": [walls[1], walls[2]]}),
+        );
+        run(
+            &mut s,
+            "create_relationship",
+            json!({"kind": "join", "elements": [floor, walls[3]]}),
+        );
+        run(
+            &mut s,
+            "create_relationship",
+            json!({"kind": "join", "elements": [bx, walls[2]]}),
+        );
+        let ops = plan(s.doc(), &RevitState::default());
+        let wall_op = ops
+            .iter()
+            .find(|o| o.uid() == s.doc().get(walls[0]).unwrap().uid.to_string())
+            .unwrap();
+        assert!(matches!(
+            wall_op,
+            RevitOp::Wall {
+                disallow_join_start: false,
+                disallow_join_end: true,
+                ..
+            }
+        ));
+        let joins: Vec<&RevitOp> = ops
+            .iter()
+            .filter(|o| matches!(o, RevitOp::JoinGeometry { .. }))
+            .collect();
+        assert_eq!(joins.len(), 1);
+        let RevitOp::JoinGeometry {
+            first_uid,
+            second_uid,
+            ..
+        } = joins[0]
+        else {
+            unreachable!()
+        };
+        assert_eq!(first_uid, &s.doc().get(floor).unwrap().uid.to_string());
+        assert_eq!(second_uid, &s.doc().get(walls[3]).unwrap().uid.to_string());
+        assert!(
+            matches!(ops.last(), Some(RevitOp::JoinGeometry { .. })),
+            "joins go last"
+        );
+        assert!(ops.iter().any(
+            |o| matches!(o, RevitOp::Warning { code, .. } if code == "ferro.revit.join_not_sent")
+        ));
+        // Walls that join keep their signature: the flags are omitted.
+        let text = serde_json::to_string(&plain).unwrap();
+        assert!(!text.contains("disallow_join"));
     }
 
     #[test]
@@ -1029,6 +1206,7 @@ mod tests {
                 RevitOp::DirectShape { .. } => "direct_shape",
                 RevitOp::SiteLocation { .. } => "site_location",
                 RevitOp::Phase { .. } => "phase",
+                RevitOp::JoinGeometry { .. } => "join_geometry",
                 RevitOp::Delete { .. } => "delete",
                 RevitOp::Warning { .. } => "warning",
             })

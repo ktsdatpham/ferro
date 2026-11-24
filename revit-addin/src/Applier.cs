@@ -59,6 +59,7 @@ namespace Ferro.Revit
                         case "direct_shape": DirectShape(op); break;
                         case "site_location": SiteLocationOf(op); break;
                         case "phase": PhaseOp(op); break;
+                        case "join_geometry": JoinGeometry(op); break;
                         case "warning": _report.Problems.Add(Str(op, "message")); break;
                         default: _report.Problems.Add($"unknown operation {kind}"); break;
                     }
@@ -350,7 +351,41 @@ namespace Ferro.Revit
                 SetParam(w, BuiltInParameter.WALL_USER_HEIGHT_PARAM, Num(op, "height"));
             }
             if (OptStr(op, "name") is { } n) w.get_Parameter(BuiltInParameter.ALL_MODEL_MARK)?.Set(n);
+            JoinStates(w, op);
             Tag(w, op, created);
+        }
+
+        /// <summary>Wall end join states (M5-5.2): `disallow_join_start` /
+        /// `disallow_join_end` absent = allowed.</summary>
+        private static void JoinStates(Wall w, JsonObject op)
+        {
+            for (var end = 0; end < 2; end++)
+            {
+                var key = end == 0 ? "disallow_join_start" : "disallow_join_end";
+                var disallow = op[key] is JsonValue v && v.TryGetValue<bool>(out var b) && b;
+                var allowed = WallUtils.IsWallJoinAllowedAtEnd(w, end);
+                if (disallow && allowed) WallUtils.DisallowWallJoinAtEnd(w, end);
+                else if (!disallow && !allowed) WallUtils.AllowWallJoinAtEnd(w, end);
+            }
+        }
+
+        /// <summary>A Ferro `join` row between two native elements: join their
+        /// geometry and make `first` the cutting element. Idempotent (the op
+        /// is re-sent on every sync, nothing is tagged).</summary>
+        private void JoinGeometry(JsonObject op)
+        {
+            var first = Need<Element>(Str(op, "first_uid"), "element");
+            var second = Need<Element>(Str(op, "second_uid"), "element");
+            if (!JoinGeometryUtils.AreElementsJoined(_doc, first, second))
+            {
+                JoinGeometryUtils.JoinGeometry(_doc, first, second);
+                _report.Created++;
+            }
+            if (!JoinGeometryUtils.IsCuttingElementInJoin(_doc, first, second))
+            {
+                JoinGeometryUtils.SwitchJoinOrder(_doc, first, second);
+                _report.Updated++;
+            }
         }
 
         private void Floor(JsonObject op)

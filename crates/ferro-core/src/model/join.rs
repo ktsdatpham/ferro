@@ -338,6 +338,13 @@ pub fn wall_join_partners(doc: &Document, id: ElementId) -> Vec<ElementId> {
     out.into_iter().collect()
 }
 
+/// The wall pairs (lower id first) whose end shapes already settle their
+/// overlap (an L, mitred or butt, or a T whose stem loses): a `join` row
+/// between them needs no boolean, and Revit joins them as walls.
+pub fn settled_wall_pairs(doc: &Document) -> BTreeSet<(ElementId, ElementId)> {
+    wall_ends(doc, &super::generate::straight_walls(doc)).settled
+}
+
 /// Where a wall connection sits on a wall (IFC `IfcConnectionTypeEnum`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum WallConnectionAt {
