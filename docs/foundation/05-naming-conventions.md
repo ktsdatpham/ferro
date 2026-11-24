@@ -48,6 +48,8 @@ for the same concept.
 | `WallType` / `FloorType` | System family types | WallStyle, Assembly |
 | `Opening` | Door or window hosted by a wall | Hole, Cutout, Insert (as a type) |
 | `LocationLine` | Which line of a wall its curve follows | Justification, Alignment |
+| `WallJoin` (`join_start` / `join_end`) | Join state of a wall end: `auto` (joins walls it meets) or `disallow` (stays square; Revit Allow / Disallow Join) | Join mode, Join flag, Cleanup |
+| Join order | Which element of a `join` row wins: the first (it runs through a wall corner, it keeps the overlap of a geometry join); *Switch Join Order* reverses the row (`set_relationship`, `reverse`) | Join priority, Winner (as a field) |
 | Ferro Link | Local protocol for agents to drive the open app | Bridge, Socket API |
 | `Plugin` | A folder in `~/.ferro/plugins/` with a `PluginManifest` and Python code on the SDK; runs with the user's rights (ADR 0009) | Add-in, Addon, Extension, Package (for this) |
 | `PluginManifest` | A plugin's `plugin.json`: id, name, version, author, description and its `PluginCommand`s | Descriptor, Plugin config, Package file |

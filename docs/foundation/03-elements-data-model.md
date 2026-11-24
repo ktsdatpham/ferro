@@ -177,6 +177,7 @@ a command. Geometry is derived from location + parameters + type.
   element uids (`relationships` in `.fro.json`, a `relationships` table in
   `.fro`, format 4); the change format addresses them as
   `/relationships/<uid>`. Commands: `create_relationship`,
+  `set_relationship` (replace the elements or reverse a pair, uid kept),
   `delete_relationship`; query `list_relationships`. Failure codes:
   `ferro.model.invalid_relationship`, `ferro.model.duplicate_relationship`,
   `ferro.model.missing_relationship`, `ferro.model.missing_element`,
@@ -228,9 +229,62 @@ a command. Geometry is derived from location + parameters + type.
   a `DirectShape`; native walls and floors are rebuilt by Revit from their
   parameters, so their cuts are not sent and the plan carries one warning
   `ferro.revit.cut_not_sent` (freeze them to send the cut body).
-- **Joins** (wall-to-wall, floor-to-wall) become `join` rows (M5-5.2). Until
-  then, generation infers L- and T-joins from coincident wall ends (ADR 0001);
-  hosted openings use `host_id` and are deleted with their host.
+- **Wall-end joins** (M5-5.2, `model::join`, like Revit's automatic wall
+  joins) stay inferred: straight walls whose location ends meet (within
+  1 mm) are mitred (L); a wall end on the middle of another wall stops at
+  its face (T); three or more ends at one point stay square (ADR 0001,
+  0002). They follow every edit, so walls moved into contact join and walls
+  moved apart separate. Each wall end has a **join state** `join_start` /
+  `join_end`: `auto` (default, omitted from files) or `disallow` (Revit
+  `DisallowWallJoinAtEnd`): a disallowed end stays square, never joins and
+  is not seen by the other walls, even when touching. A `join` row between
+  two walls whose ends meet sets the corner type to **butt** with the row
+  order as join order: `first` runs through to the far face of `second`,
+  `second` stops at the near face of `first`; without a row the corner is
+  mitred. At a T the crossed wall wins by default; a row with the stem
+  `first` makes the stem run through and cuts the crossed wall through the
+  kernel. Command: `set_wall` with `join_start` / `join_end`. Pinned walls
+  may change join state (not a move, ADR 0008).
+- **Geometry joins** (M5-5.2, Revit's Join Geometry): a row `join [first,
+  second]` between walls, floors and Forms (of any category; openings join
+  through their host) makes the overlap belong to `first`: `second`'s
+  geometry becomes `second` − `first` through the session's `Kernel` at
+  regeneration, exactly like a cut row but `first` stays visible and is not
+  a void. `first` contributes its unjoined, uncut body (joins do not
+  chain); joins apply before cuts; several rows on one element apply in uid
+  order. A wall pair already settled by its ends (L, or T whose stem
+  loses) needs no boolean, and bodies that only touch (bounding boxes
+  overlapping by no more than `VERTEX_TOL`) are left as they are. Walls and
+  floors carry the result in `geometry`, Forms in their derived `cut_body`
+  (Foundation's name for "body less cuts and joins"). Failures never fail a
+  transaction: without a kernel `second` keeps its body with one
+  `ferro.kernel.unavailable` warning per regeneration; a kernel error skips
+  the row with a warning carrying its code. Commands: `create_relationship`
+  / `delete_relationship` with kind `join` (Join / Unjoin Geometry) and
+  `set_relationship` (`reverse: true` = Switch Join Order, the row keeps
+  its uid). App: Solid tools Join Geometry `JG`, Unjoin Geometry `UJ`,
+  Switch Join Order `SJ` (first pick wins), and "Disallow join" / "Allow
+  join" per end in the viewport menu of a selected wall.
+- **Joins survive freezing.** Rows reference element ids, which
+  `set_geometry_source direct` keeps, so a frozen wall keeps its rows; its
+  Form keeps the shape it had (mitred, butt, without geometry-join trims,
+  which keep applying to the Form through the kernel). Freezing turns the
+  wall's inferred end joins into `join` rows with the frozen wall `first`.
+  A parametric wall end that touches a frozen wall (a Form of category
+  `Walls`) it has a `join` row with is extended square to the far side of
+  that Form, and the row trims it back: an L stays mitred, a T stem stops
+  at the face, as before freezing.
+- **Interop of joins.** IFC: every L / T wall join is an
+  `IfcRelConnectsPathElements` (`ATSTART` / `ATEND` / `ATPATH`; relating
+  element = the row's `first`, GlobalId = the row's uid when there is a
+  row, else derived from the two wall uids); geometry joins write the
+  joined bodies. Revit: disallowed ends are sent
+  (`WallUtils.DisallowWallJoinAtEnd`); rows between native walls / floors
+  become `JoinGeometryUtils.JoinGeometry` + `SwitchJoinOrder` so `first`
+  cuts (wall pairs whose ends meet are left to Revit's wall joins); a native
+  element joined to a Form is sent unjoined with `ferro.revit.join_not_sent`
+  (the Form sends its joined body).
+- Hosted openings use `host_id` and are deleted with their host.
 - **Groups** (later) are elements referencing members; a group is not a Form.
 
 ## 3.9 Out of scope for v1 (but reserved)

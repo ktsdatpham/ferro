@@ -124,6 +124,22 @@ derived `cut_body`); a Form of category `Forms` that cuts is a *void*,
 derived from the table (drawn faint, not exported), with no new flag or
 category. Details in Foundation §3.8.
 
+*Implementation note (M5-5.2, 2026-11-24):* wall-end joins stay inferred
+(Revit's automatic joins, ADR 0001 / 0002 rules unchanged, so files keep
+their geometry); a wall end has a join state `auto | disallow` (Revit
+`DisallowWallJoinAtEnd`). A `join` row is the one explicit join: between
+corner walls it means a butt corner whose join order is the row order
+(first runs through, no separate "join type" field); otherwise it is a
+geometry join (Revit Join Geometry: `second` − `first` through the kernel,
+before cuts, same no-fail rule as cuts). Switch Join Order is a new command
+`set_relationship` (`reverse: true`) so the row keeps its uid (IFC GlobalId,
+change lists) instead of a delete + create. Freezing turns inferred joins
+into rows with the frozen wall first; a wall end touching a frozen wall it
+is joined to extends to the Form's far side and is trimmed by the row, so
+neighbours keep their shape. IFC: `IfcRelConnectsPathElements`; Revit:
+`DisallowWallJoinAtEnd`, `JoinGeometry` + `SwitchJoinOrder`. Details in
+Foundation §3.8.
+
 ### 6. Scene derived from the document (F6)
 
 New crate `ferro-scene`: an incremental, ECS-style scene derived from the
