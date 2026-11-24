@@ -1,0 +1,11 @@
+[
+  {"id": "a", "tool": "create_box", "args": {"origin": [0, 0, 0], "width": "2m", "depth": "1m", "height": "1m", "name": "United"}},
+  {"id": "b", "tool": "create_box", "args": {"origin": [1000, 500, 0], "width": "2m", "depth": "1m", "height": "1m"}},
+  {"tool": "unite_forms", "args": {"target": {"$ref": "a.result.element"}, "other": {"$ref": "b.result.element"}}},
+  {"id": "c", "tool": "create_box", "args": {"origin": ["5m", 0, 0], "width": "2m", "depth": "2m", "height": "1m", "name": "Intersected"}},
+  {"id": "d", "tool": "create_box", "args": {"origin": [6000, 1000, 500], "width": "2m", "depth": "2m", "height": "1m", "name": "Kept other"}},
+  {"tool": "intersect_forms", "args": {"target": {"$ref": "c.result.element"}, "other": {"$ref": "d.result.element"}, "keep_other": true}},
+  {"id": "e", "tool": "create_box", "args": {"origin": ["10m", 0, 0], "width": "1m", "depth": "1m", "height": "1m", "name": "Two shells"}},
+  {"id": "f", "tool": "create_box", "args": {"origin": [12000, 0, 0], "width": "1m", "depth": "1m", "height": "1m"}},
+  {"tool": "unite_forms", "args": {"target": {"$ref": "e.result.element"}, "other": {"$ref": "f.result.element"}}}
+]

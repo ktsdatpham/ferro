@@ -1,0 +1,449 @@
+{
+  "elements": {
+    "1": {
+      "body": "form",
+      "bounding_box": [
+        [
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          3000.0,
+          1500.0,
+          1000.0
+        ]
+      ],
+      "category": "forms",
+      "closed": true,
+      "counts": {
+        "edges": 24,
+        "faces": 10,
+        "vertices": 16
+      },
+      "faces": [
+        {
+          "area": 3500000.0,
+          "face": 5,
+          "normal": [
+            0.0,
+            0.0,
+            1.0
+          ],
+          "vertices": 8
+        },
+        {
+          "area": 3500000.0,
+          "face": 23,
+          "normal": [
+            0.0,
+            0.0,
+            -1.0
+          ],
+          "vertices": 8
+        },
+        {
+          "area": 2000000.0,
+          "face": 29,
+          "normal": [
+            0.0,
+            -1.0,
+            0.0
+          ],
+          "vertices": 4
+        },
+        {
+          "area": 500000.0,
+          "face": 34,
+          "normal": [
+            1.0,
+            0.0,
+            0.0
+          ],
+          "vertices": 4
+        },
+        {
+          "area": 1000000.0,
+          "face": 39,
+          "normal": [
+            0.0,
+            1.0,
+            0.0
+          ],
+          "vertices": 4
+        },
+        {
+          "area": 1000000.0,
+          "face": 44,
+          "normal": [
+            -1.0,
+            0.0,
+            0.0
+          ],
+          "vertices": 4
+        },
+        {
+          "area": 500000.0,
+          "face": 85,
+          "normal": [
+            -1.0,
+            0.0,
+            0.0
+          ],
+          "vertices": 4
+        },
+        {
+          "area": 2000000.0,
+          "face": 91,
+          "normal": [
+            0.0,
+            1.0,
+            0.0
+          ],
+          "vertices": 4
+        },
+        {
+          "area": 1000000.0,
+          "face": 97,
+          "normal": [
+            1.0,
+            0.0,
+            0.0
+          ],
+          "vertices": 4
+        },
+        {
+          "area": 1000000.0,
+          "face": 103,
+          "normal": [
+            0.0,
+            -1.0,
+            0.0
+          ],
+          "vertices": 4
+        }
+      ],
+      "name": "United",
+      "volume": 3500000000.0
+    },
+    "2": {
+      "body": "form",
+      "bounding_box": [
+        [
+          6000.0,
+          1000.0,
+          500.0
+        ],
+        [
+          7000.0,
+          2000.0,
+          1000.0
+        ]
+      ],
+      "category": "forms",
+      "closed": true,
+      "counts": {
+        "edges": 12,
+        "faces": 6,
+        "vertices": 8
+      },
+      "faces": [
+        {
+          "area": 1000000.0,
+          "face": 5,
+          "normal": [
+            0.0,
+            0.0,
+            1.0
+          ],
+          "vertices": 4
+        },
+        {
+          "area": 500000.0,
+          "face": 34,
+          "normal": [
+            1.0,
+            0.0,
+            0.0
+          ],
+          "vertices": 4
+        },
+        {
+          "area": 500000.0,
+          "face": 39,
+          "normal": [
+            0.0,
+            1.0,
+            0.0
+          ],
+          "vertices": 4
+        },
+        {
+          "area": 500000.0,
+          "face": 76,
+          "normal": [
+            0.0,
+            -1.0,
+            0.0
+          ],
+          "vertices": 4
+        },
+        {
+          "area": 1000000.0,
+          "face": 82,
+          "normal": [
+            0.0,
+            0.0,
+            -1.0
+          ],
+          "vertices": 4
+        },
+        {
+          "area": 500000.0,
+          "face": 88,
+          "normal": [
+            -1.0,
+            0.0,
+            0.0
+          ],
+          "vertices": 4
+        }
+      ],
+      "name": "Intersected",
+      "volume": 500000000.0
+    },
+    "3": {
+      "body": "form",
+      "bounding_box": [
+        [
+          6000.0,
+          1000.0,
+          500.0
+        ],
+        [
+          8000.0,
+          3000.0,
+          1500.0
+        ]
+      ],
+      "category": "forms",
+      "closed": true,
+      "counts": {
+        "edges": 12,
+        "faces": 6,
+        "vertices": 8
+      },
+      "faces": [
+        {
+          "area": 4000000.0,
+          "face": 5,
+          "normal": [
+            0.0,
+            0.0,
+            1.0
+          ],
+          "vertices": 4
+        },
+        {
+          "area": 4000000.0,
+          "face": 23,
+          "normal": [
+            0.0,
+            0.0,
+            -1.0
+          ],
+          "vertices": 4
+        },
+        {
+          "area": 2000000.0,
+          "face": 29,
+          "normal": [
+            0.0,
+            -1.0,
+            0.0
+          ],
+          "vertices": 4
+        },
+        {
+          "area": 2000000.0,
+          "face": 34,
+          "normal": [
+            1.0,
+            0.0,
+            0.0
+          ],
+          "vertices": 4
+        },
+        {
+          "area": 2000000.0,
+          "face": 39,
+          "normal": [
+            0.0,
+            1.0,
+            0.0
+          ],
+          "vertices": 4
+        },
+        {
+          "area": 2000000.0,
+          "face": 44,
+          "normal": [
+            -1.0,
+            0.0,
+            0.0
+          ],
+          "vertices": 4
+        }
+      ],
+      "name": "Kept other",
+      "volume": 4000000000.0
+    },
+    "4": {
+      "body": "form",
+      "bounding_box": [
+        [
+          10000.0,
+          0.0,
+          0.0
+        ],
+        [
+          13000.0,
+          1000.0,
+          1000.0
+        ]
+      ],
+      "category": "forms",
+      "closed": true,
+      "counts": {
+        "edges": 24,
+        "faces": 12,
+        "vertices": 16
+      },
+      "faces": [
+        {
+          "area": 1000000.0,
+          "face": 5,
+          "normal": [
+            0.0,
+            0.0,
+            1.0
+          ],
+          "vertices": 4
+        },
+        {
+          "area": 1000000.0,
+          "face": 23,
+          "normal": [
+            0.0,
+            0.0,
+            -1.0
+          ],
+          "vertices": 4
+        },
+        {
+          "area": 1000000.0,
+          "face": 29,
+          "normal": [
+            0.0,
+            -1.0,
+            0.0
+          ],
+          "vertices": 4
+        },
+        {
+          "area": 1000000.0,
+          "face": 34,
+          "normal": [
+            1.0,
+            0.0,
+            0.0
+          ],
+          "vertices": 4
+        },
+        {
+          "area": 1000000.0,
+          "face": 39,
+          "normal": [
+            0.0,
+            1.0,
+            0.0
+          ],
+          "vertices": 4
+        },
+        {
+          "area": 1000000.0,
+          "face": 44,
+          "normal": [
+            -1.0,
+            0.0,
+            0.0
+          ],
+          "vertices": 4
+        },
+        {
+          "area": 1000000.0,
+          "face": 65,
+          "normal": [
+            0.0,
+            0.0,
+            1.0
+          ],
+          "vertices": 4
+        },
+        {
+          "area": 1000000.0,
+          "face": 71,
+          "normal": [
+            -1.0,
+            0.0,
+            0.0
+          ],
+          "vertices": 4
+        },
+        {
+          "area": 1000000.0,
+          "face": 77,
+          "normal": [
+            0.0,
+            0.0,
+            -1.0
+          ],
+          "vertices": 4
+        },
+        {
+          "area": 1000000.0,
+          "face": 83,
+          "normal": [
+            0.0,
+            1.0,
+            0.0
+          ],
+          "vertices": 4
+        },
+        {
+          "area": 1000000.0,
+          "face": 89,
+          "normal": [
+            1.0,
+            0.0,
+            0.0
+          ],
+          "vertices": 4
+        },
+        {
+          "area": 1000000.0,
+          "face": 95,
+          "normal": [
+            0.0,
+            -1.0,
+            0.0
+          ],
+          "vertices": 4
+        }
+      ],
+      "name": "Two shells",
+      "volume": 2000000000.0
+    }
+  },
+  "settings": {}
+}

@@ -5,7 +5,7 @@
 
 use crate::codes;
 use ferro_core::math::BoundingBox3;
-use ferro_core::model::generate::regenerate;
+use ferro_core::model::generate::regenerate_with;
 use ferro_core::{Category, Document};
 use serde_json::{json, Value};
 use std::collections::BTreeMap;
@@ -47,8 +47,11 @@ pub fn body_problems(doc: &Document) -> (usize, Vec<Value>) {
 
 /// Regeneration errors (their own codes) and elements whose stored geometry
 /// differs from the regenerated one (`ferro.cli.stale_geometry`).
+/// Regeneration uses the geometry kernel, so `cut` rows (M5-5.3) are
+/// applied as in the app; their warnings are reported as warnings.
 pub fn regen_problems(doc: &Document) -> (Vec<Value>, Vec<Value>) {
-    let r = regenerate(doc);
+    let kernel = ferro_kernel::SolidcoreKernel::new();
+    let r = regenerate_with(doc, Some(&kernel));
     let mut problems = Vec::new();
     let mut warnings = Vec::new();
     for i in &r.issues {
@@ -59,7 +62,11 @@ pub fn regen_problems(doc: &Document) -> (Vec<Value>, Vec<Value>) {
             warnings.push(p);
         }
     }
-    for (id, _) in &r.updates {
+    for i in &r.cut_issues {
+        warnings.push(problem(i.code, i.message.clone(), Some(i.element.0)));
+    }
+    let cut_forms = r.cut_updates.iter().map(|(id, _)| id);
+    for id in r.updates.iter().map(|(id, _)| id).chain(cut_forms) {
         let what = doc
             .get(*id)
             .map(|e| e.category.to_string())
