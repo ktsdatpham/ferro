@@ -66,6 +66,13 @@ impl RelationshipKind {
         }
     }
 
+    /// `true` for kinds that change geometry at regeneration (`join`,
+    /// `cut`): a change to such a row, or to an element it links,
+    /// regenerates.
+    pub fn shapes_geometry(&self) -> bool {
+        matches!(self, RelationshipKind::Join | RelationshipKind::Cut)
+    }
+
     /// `true` when swapping the two elements gives the same relationship.
     pub fn is_symmetric(&self) -> bool {
         matches!(self, RelationshipKind::Connect)
@@ -185,6 +192,19 @@ impl Relationship {
                         t.label()
                     )));
                 }
+            }
+        }
+        if self.kind == RelationshipKind::Join {
+            if let Some(e) = self
+                .elements
+                .iter()
+                .filter_map(|id| doc.get(*id))
+                .find(|e| !super::join::is_join_element(e))
+            {
+                return Err(invalid(format!(
+                    "{} cannot be joined: a join row links walls, floors and Forms",
+                    e.label()
+                )));
             }
         }
         if let Some(p) = self.phase {

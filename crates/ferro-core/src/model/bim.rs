@@ -115,6 +115,33 @@ pub enum WallTop {
     Level { level: ElementId, offset: Length },
 }
 
+/// Join state of one wall end (Revit: `WallUtils.AllowWallJoinAtEnd` /
+/// `DisallowWallJoinAtEnd`). Stable snake_case names: `auto`, `disallow`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum WallJoin {
+    /// The end joins the walls it meets (L, T), like Revit's "Allow Join".
+    #[default]
+    Auto,
+    /// The end stays square and never joins, even when it touches a wall.
+    Disallow,
+}
+
+impl WallJoin {
+    /// Stable name, as in files and MCP.
+    pub fn name(&self) -> &'static str {
+        match self {
+            WallJoin::Auto => "auto",
+            WallJoin::Disallow => "disallow",
+        }
+    }
+
+    /// `true` for [`WallJoin::Auto`] (the default, omitted from files).
+    pub fn is_auto(&self) -> bool {
+        *self == WallJoin::Auto
+    }
+}
+
 /// A wall instance. Base level = `Element::level_id`; type = `Element::type_id`.
 /// The location curve is horizontal (its z is ignored); the exterior face is
 /// on the **left** of the curve direction.
@@ -126,6 +153,13 @@ pub struct Wall {
     pub top: WallTop,
     #[serde(default)]
     pub location_line: LocationLine,
+    /// Join state at the start of the curve (Foundation §3.8, M5-5.2);
+    /// omitted from files when `auto`.
+    #[serde(default, skip_serializing_if = "WallJoin::is_auto")]
+    pub join_start: WallJoin,
+    /// Join state at the end of the curve; omitted from files when `auto`.
+    #[serde(default, skip_serializing_if = "WallJoin::is_auto")]
+    pub join_end: WallJoin,
     /// Derived geometry (regenerated).
     #[serde(default)]
     pub geometry: Body,

@@ -8,7 +8,7 @@ use crate::geom::{Arc, Curve, Line};
 use crate::math::{tol, Length, Point2, Point3, Vec2, Vec3};
 use crate::model::bim::{
     CompoundLayer, CompoundStructure, Floor, FloorType, LayerFunction, LocationLine, Opening,
-    OpeningKind, Wall, WallTop, WallType,
+    OpeningKind, Wall, WallJoin, WallTop, WallType,
 };
 use crate::model::generate::{self, WallLayout};
 use crate::model::{Category, Element, ElementBody, ElementId};
@@ -266,6 +266,8 @@ fn create_wall(
             base_offset: o.base_offset,
             top,
             location_line: o.location_line,
+            join_start: Default::default(),
+            join_end: Default::default(),
             geometry: Default::default(),
         }),
     )?;
@@ -635,6 +637,10 @@ impl Command for SetOpening {
 /// Change a wall's location and constraints; omitted fields keep their
 /// value. Give `start` and `end` (and `mid` for a curved wall) together.
 /// `height` makes the top unconnected; `top_level` attaches it to a level.
+/// `join_start` / `join_end` set the join state of each end (`auto` or
+/// `disallow`, Revit's Allow / Disallow Join; Foundation §3.8): a
+/// disallowed end stays square and never joins. Changing only the join
+/// state is not a move, so it is allowed on a pinned wall (ADR 0008).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SetWall {
     pub wall: ElementId,
@@ -654,6 +660,10 @@ pub struct SetWall {
     pub top_offset: Option<Length>,
     #[serde(default)]
     pub location_line: Option<LocationLine>,
+    #[serde(default)]
+    pub join_start: Option<WallJoin>,
+    #[serde(default)]
+    pub join_end: Option<WallJoin>,
 }
 
 impl Command for SetWall {
@@ -690,6 +700,8 @@ impl Command for SetWall {
                 }
                 w.base_offset = s.base_offset.unwrap_or(w.base_offset);
                 w.location_line = s.location_line.unwrap_or(w.location_line);
+                w.join_start = s.join_start.unwrap_or(w.join_start);
+                w.join_end = s.join_end.unwrap_or(w.join_end);
                 match (s.top_level, s.height) {
                     (Some(level), _) => {
                         let offset = s.top_offset.unwrap_or(Length::ZERO);

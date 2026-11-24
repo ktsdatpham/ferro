@@ -29,6 +29,53 @@ impl Command for CreateRelationship {
     }
 }
 
+/// Change a relationship row in place, keeping its `uid` (so IFC ids and
+/// change lists stay stable). `elements` replaces the linked elements;
+/// `reverse: true` swaps the order of a two-element row, which for a `join`
+/// is Revit's *Switch Join Order* (the other element now wins). Omitted
+/// fields keep their value. Fails with `ferro.model.invalid_uid`,
+/// `ferro.model.missing_relationship`, `ferro.model.invalid_relationship`
+/// (also when `reverse` is given for a row of more than two elements or
+/// together with `elements`), `ferro.model.missing_element` or
+/// `ferro.model.duplicate_relationship`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SetRelationship {
+    pub relationship: String,
+    #[serde(default)]
+    pub elements: Option<Vec<ElementId>>,
+    #[serde(default)]
+    pub reverse: bool,
+}
+
+impl Command for SetRelationship {
+    const NAME: &'static str = "set_relationship";
+    fn execute(&self, tx: &mut Transaction) -> Result<CommandOutput, CommandError> {
+        let uid = parse_uid(&self.relationship)?;
+        let mut r = tx.doc().relationship(uid).cloned().ok_or_else(|| {
+            CommandError::new(
+                "ferro.model.missing_relationship",
+                format!("no relationship {uid}"),
+            )
+        })?;
+        let invalid = |m: &str| CommandError::new("ferro.model.invalid_relationship", m);
+        match (&self.elements, self.reverse) {
+            (Some(_), true) => return Err(invalid("give `elements` or `reverse`, not both")),
+            (Some(e), false) => r.elements = e.clone(),
+            (None, true) if r.elements.len() == 2 => r.elements.reverse(),
+            (None, true) => return Err(invalid("only a two-element row can be reversed")),
+            (None, false) => {}
+        }
+        tx.put_relationship(r.clone())?;
+        Ok(json!({ "relationship": uid.to_string(), "elements": r.elements }))
+    }
+}
+
+fn parse_uid(s: &str) -> Result<Uid, CommandError> {
+    s.trim()
+        .parse()
+        .map_err(|_| CommandError::new("ferro.model.invalid_uid", format!("`{s}` is not a uid")))
+}
+
 /// Remove a relationship row by `uid` (the elements stay). Fails with
 /// `ferro.model.missing_relationship` or `ferro.model.invalid_uid`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -39,12 +86,7 @@ pub struct DeleteRelationship {
 impl Command for DeleteRelationship {
     const NAME: &'static str = "delete_relationship";
     fn execute(&self, tx: &mut Transaction) -> Result<CommandOutput, CommandError> {
-        let uid: Uid = self.relationship.trim().parse().map_err(|_| {
-            CommandError::new(
-                "ferro.model.invalid_uid",
-                format!("`{}` is not a uid", self.relationship),
-            )
-        })?;
+        let uid = parse_uid(&self.relationship)?;
         let r = tx.remove_relationship(uid)?;
         Ok(json!({ "deleted": uid.to_string(), "elements": r.elements }))
     }

@@ -2,11 +2,13 @@
 //!
 //! Walls, floors and openings store their parameters; their `geometry` is
 //! rebuilt from those parameters, the types they use and the levels they sit
-//! on. Straight walls that share exactly one endpoint are mitred (L-join);
-//! openings cut their host wall. The output is deterministic: the same
+//! on. Wall ends join as `model::join` infers them (L mitre or butt, T);
+//! openings cut their host wall; `join` and `cut` rows apply through the
+//! kernel. The output is deterministic: the same
 //! document always yields the same bodies with the same ids.
 
 use super::bim::{CompoundStructure, Floor, LocationLine, OpeningKind, Wall, WallTop};
+use super::join::{self, EndCorners, StraightWall};
 use super::{cut, Category, Document, Element, ElementBody, ElementId};
 use crate::algo::{extrude_profile, Kernel};
 use crate::geom::{polygon, Arc, Curve, CurveLoop, Line, Plane, Profile};
@@ -331,127 +333,6 @@ impl Builder {
 
 fn topo_issue(e: crate::topo::TopoError, id: ElementId) -> GenIssue {
     GenIssue::error(e.code(), e.to_string(), id)
-}
-
-// -------------------------------------------------------------------- joins
-
-/// Corner points of a straight wall end: (exterior corner, interior corner).
-type EndCorners = (Point2, Point2);
-
-struct StraightWall {
-    id: ElementId,
-    s: Point2,
-    e: Point2,
-    d: Vec2,
-    ext: f64,
-    int: f64,
-}
-
-fn intersect(p1: Point2, d1: Vec2, p2: Point2, d2: Vec2) -> Option<Point2> {
-    let cross = d1.perp_dot(d2);
-    if cross.abs() < 1e-3 {
-        return None; // parallel within ~0.06°
-    }
-    let t = (p2 - p1).perp_dot(d2) / cross;
-    Some(p1 + d1 * t)
-}
-
-/// Mitred corners for wall `x` at its end `x_at_start` joined to wall `y`.
-fn miter(
-    x: &StraightWall,
-    x_at_start: bool,
-    y: &StraightWall,
-    y_at_start: bool,
-) -> Option<EndCorners> {
-    let j = if x_at_start { x.s } else { x.e };
-    let out = |w: &StraightWall, at_start: bool| -> (Vec2, f64, f64) {
-        // Outgoing direction and (left, right) offsets along its left normal.
-        if at_start {
-            (w.d, w.ext, w.int)
-        } else {
-            (w.d * -1.0, -w.int, -w.ext)
-        }
-    };
-    let (ox, lx, rx) = out(x, x_at_start);
-    let (oy, ly, ry) = out(y, y_at_start);
-    let perp = |o: Vec2| Vec2::new(-o.y, o.x);
-    let ql = intersect(j + perp(ox) * lx, ox, j + perp(oy) * ry, oy)?;
-    let qr = intersect(j + perp(ox) * rx, ox, j + perp(oy) * ly, oy)?;
-    let limit = 5.0 * (x.ext - x.int).max(y.ext - y.int);
-    if (ql - j).length() > limit || (qr - j).length() > limit {
-        return None;
-    }
-    // left(ox) is the exterior face at a start, the interior face at an end.
-    Some(if x_at_start { (ql, qr) } else { (qr, ql) })
-}
-
-fn joins(walls: &[StraightWall]) -> HashMap<ElementId, [Option<EndCorners>; 2]> {
-    let mut out = HashMap::new();
-    for (i, x) in walls.iter().enumerate() {
-        let mut ends = [None, None];
-        for (k, at_start) in [true, false].into_iter().enumerate() {
-            let p = if at_start { x.s } else { x.e };
-            let mut found = Vec::new();
-            for (jdx, y) in walls.iter().enumerate() {
-                if jdx == i {
-                    continue;
-                }
-                if y.s.distance_to(p) <= JOIN_TOL {
-                    found.push((y, true));
-                }
-                if y.e.distance_to(p) <= JOIN_TOL {
-                    found.push((y, false));
-                }
-            }
-            let tee_join = || {
-                // T-join: the end touches the middle of another wall.
-                walls
-                    .iter()
-                    .enumerate()
-                    .filter(|(jdx, _)| *jdx != i)
-                    .find_map(|(_, y)| tee(x, at_start, y))
-            };
-            ends[k] = match found.as_slice() {
-                // A collinear continuation cannot be mitred; it may still
-                // butt against a third wall it crosses.
-                [(y, y_start)] => miter(x, at_start, y, *y_start).or_else(tee_join),
-                [] => tee_join(),
-                _ => None,
-            };
-        }
-        out.insert(x.id, ends);
-    }
-    out
-}
-
-/// Corners for wall `x` whose end lies on the location line of wall `y`,
-/// away from `y`'s ends: `x` stops at the face of `y` on its own side.
-fn tee(x: &StraightWall, x_at_start: bool, y: &StraightWall) -> Option<EndCorners> {
-    let j = if x_at_start { x.s } else { x.e };
-    let other = if x_at_start { x.e } else { x.s };
-    let len = (y.e - y.s).length();
-    let u = (j - y.s).dot(y.d);
-    let ny = Vec2::new(-y.d.y, y.d.x);
-    let off = (j - y.s).dot(ny);
-    let margin = JOIN_TOL.max(1.0);
-    if u <= margin || u >= len - margin || off.abs() > JOIN_TOL {
-        return None;
-    }
-    if x.d.perp_dot(y.d).abs() < 1e-3 {
-        return None; // parallel: not a T
-    }
-    // The face of `y` that looks towards the rest of `x`.
-    let side = (other - y.s).dot(ny);
-    let face = if side >= 0.0 { y.ext } else { y.int };
-    let face_pt = y.s + ny * face;
-    let nx = Vec2::new(-x.d.y, x.d.x);
-    let pe = intersect(x.s + nx * x.ext, x.d, face_pt, y.d)?;
-    let pi = intersect(x.s + nx * x.int, x.d, face_pt, y.d)?;
-    let limit = 5.0 * (x.ext - x.int).max(y.ext - y.int);
-    if (pe - j).length() > limit || (pi - j).length() > limit {
-        return None;
-    }
-    Some((pe, pi))
 }
 
 // -------------------------------------------------------------------- walls
@@ -829,6 +710,40 @@ pub fn affects_bim(e: &Element) -> bool {
     )
 }
 
+/// The straight walls of `layouts` as end joins see them.
+fn straight_walls_of(doc: &Document, layouts: &[(ElementId, WallLayout)]) -> Vec<StraightWall> {
+    layouts
+        .iter()
+        .filter_map(|(id, l)| {
+            let (s, d, _) = l.frame()?;
+            let e = doc.get(*id)?;
+            Some(StraightWall {
+                id: *id,
+                s,
+                e: s + d * l.length(),
+                d,
+                ext: l.ext,
+                int: l.int,
+                z0: l.z0,
+                z1: l.z1,
+                disallow: [true, false].map(|at_start| {
+                    join::wall_join_at(e, at_start) == super::bim::WallJoin::Disallow
+                }),
+            })
+        })
+        .collect()
+}
+
+/// Every straight wall of `doc` whose layout resolves, as end joins see it
+/// (`model::join`).
+pub(crate) fn straight_walls(doc: &Document) -> Vec<StraightWall> {
+    let layouts: Vec<(ElementId, WallLayout)> = doc
+        .by_category(Category::Walls)
+        .filter_map(|e| Some((e.id, wall_layout(doc, e, e.as_wall()?).ok()?)))
+        .collect();
+    straight_walls_of(doc, &layouts)
+}
+
 /// Generated geometry of every wall, floor and opening of `doc`, before
 /// cuts, with the problems found (errors and warnings).
 fn generate_all(doc: &Document) -> (BTreeMap<ElementId, Body>, Vec<GenIssue>) {
@@ -841,21 +756,8 @@ fn generate_all(doc: &Document) -> (BTreeMap<ElementId, Body>, Vec<GenIssue>) {
             Err(i) => out.issues.push(i),
         }
     }
-    let straight: Vec<StraightWall> = layouts
-        .iter()
-        .filter_map(|(id, l)| {
-            let (s, d, _) = l.frame()?;
-            Some(StraightWall {
-                id: *id,
-                s,
-                e: s + d * l.length(),
-                d,
-                ext: l.ext,
-                int: l.int,
-            })
-        })
-        .collect();
-    let joined = joins(&straight);
+    let straight = straight_walls_of(doc, &layouts);
+    let joined = join::wall_ends(doc, &straight).corners;
 
     let mut opening_geom: HashMap<ElementId, Body> = HashMap::new();
     for (id, lay) in &layouts {
@@ -949,7 +851,9 @@ pub fn uncut_body(doc: &Document, id: ElementId) -> Option<Body> {
     let e = doc.get(id)?;
     match &e.body {
         ElementBody::Form(f) => Some(f.body.clone()),
-        _ if cut::cuts_of(doc, id).is_empty() => e.geometry().cloned(),
+        _ if cut::cuts_of(doc, id).is_empty() && join::joins_of(doc, id).is_empty() => {
+            e.geometry().cloned()
+        }
         _ => generate_all(doc).0.remove(&id),
     }
 }
@@ -1005,11 +909,18 @@ pub fn regenerate_cached(
         out.cut_issues.extend(o.issues);
         Some(o.body)
     };
+    // Geometry joins (M5-5.2) apply before cuts; their warnings join the
+    // cut warnings.
+    let mut joiner = join::Joiner::new(doc);
     for (id, body) in &bodies {
         let Some(e) = doc.get(*id) else { continue };
         let body = match e.body {
             ElementBody::Wall(_) | ElementBody::Floor(_) => {
-                cut_body(*id, body, &mut out).unwrap_or_else(|| body.clone())
+                let joined = joiner.apply(kernel, *id, body, &cutter_body, &mut out.cut_issues);
+                let base = joined.as_ref().unwrap_or(body);
+                cut_body(*id, base, &mut out)
+                    .or(joined)
+                    .unwrap_or_else(|| body.clone())
             }
             _ => body.clone(),
         };
@@ -1019,7 +930,11 @@ pub fn regenerate_cached(
     }
     for e in doc.elements() {
         let Some(f) = e.as_form() else { continue };
-        let new = cut_body(e.id, &f.body, &mut out).filter(|b| *b != f.body);
+        let joined = joiner.apply(kernel, e.id, &f.body, &cutter_body, &mut out.cut_issues);
+        let base = joined.as_ref().unwrap_or(&f.body);
+        let new = cut_body(e.id, base, &mut out)
+            .or(joined)
+            .filter(|b| *b != f.body);
         if new != f.cut_body {
             out.cut_updates.push((e.id, new));
         }

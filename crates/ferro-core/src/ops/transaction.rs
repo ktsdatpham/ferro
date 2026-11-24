@@ -618,7 +618,8 @@ impl<'a> Transaction<'a> {
     /// row (cutter or target, before or after) was added, changed or
     /// deleted.
     fn cuts_touched(&self, pre: &DocumentChanged) -> bool {
-        let is_cut = |r: &&Relationship| r.kind == RelationshipKind::Cut;
+        // `cut` and `join` rows (M5-5.2) both reshape at regeneration.
+        let is_cut = |r: &&Relationship| r.kind.shapes_geometry();
         let rows: Vec<&Relationship> = self
             .base
             .relationships()

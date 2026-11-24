@@ -1075,6 +1075,22 @@ fn every_command_rejects_degenerate_and_wrong_inputs_with_rollback() {
             json!({"changes": [{"op": "remove", "path": "elements"}]}),
             "ferro.change.bad_path",
         ),
+        // relationships and joins (M5-5.2)
+        (
+            "set_relationship",
+            json!({"relationship": "x", "reverse": true}),
+            "ferro.model.invalid_uid",
+        ),
+        (
+            "set_relationship",
+            json!({"relationship": f.rel.clone(), "elements": [wall, wall]}),
+            "ferro.model.invalid_relationship",
+        ),
+        (
+            "create_relationship",
+            json!({"kind": "join", "elements": [f.door, bx]}),
+            "ferro.model.invalid_relationship",
+        ),
         // booleans (M5-16); the fixture's kernel answers only apart operands
         (
             "subtract_forms",
@@ -1638,7 +1654,16 @@ fn valid_calls(f: &Fx) -> Vec<(&'static str, Value)> {
             "create_relationship",
             json!({"kind": "join", "elements": [f.wall2, f.bx], "phase": f.ph_new}),
         ),
+        (
+            "set_relationship",
+            json!({"relationship": f.rel, "reverse": true}),
+        ),
         ("delete_relationship", json!({"relationship": f.rel})),
+        // joins (M5-5.2)
+        (
+            "set_wall",
+            json!({"wall": f.wall2, "join_start": "disallow", "join_end": "auto"}),
+        ),
         // views (M5-22)
         (
             "create_view",

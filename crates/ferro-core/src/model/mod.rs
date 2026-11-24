@@ -14,6 +14,7 @@ mod document;
 mod element;
 pub mod generate;
 mod ids;
+pub mod join;
 pub mod material;
 mod parameter;
 mod parameter_definition;

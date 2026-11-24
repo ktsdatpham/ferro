@@ -9,7 +9,9 @@ use crate::geom::{Curve, Line};
 use crate::math::{tol, Length, Point2, Point3};
 use crate::model::bim::{Floor, LocationLine, Wall, WallTop};
 use crate::model::generate::level_elevation;
-use crate::model::{Category, Document, Element, ElementBody, ElementId, Form, GeometrySource};
+use crate::model::{
+    Category, Document, Element, ElementBody, ElementId, Form, GeometrySource, RelationshipKind,
+};
 use crate::topo::Body;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -94,10 +96,25 @@ fn freeze(tx: &mut Transaction, id: ElementId) -> Result<Vec<ElementId>, Command
         hosted.sort();
         ids.extend(hosted);
     }
+    // Inferred wall joins become explicit (M5-5.2): a `join` row with the
+    // frozen wall first, so its neighbours keep their end shape against
+    // the Form (`model::join`). Rows that exist stay as they are.
+    let partners = if matches!(e.body, ElementBody::Wall(_)) {
+        crate::model::join::wall_join_partners(tx.doc(), id)
+    } else {
+        Vec::new()
+    };
+    for p in partners {
+        if crate::model::join::join_between(tx.doc(), id, p).is_none() {
+            tx.add_relationship(RelationshipKind::Join, vec![id, p], None)?;
+        }
+    }
     for &x in &ids {
-        // A cut element freezes uncut: its `cut` rows keep cutting the Form
-        // (non-destructive, M5-5.3).
-        let uncut = if crate::model::cut::cuts_of(tx.doc(), x).is_empty() {
+        // A cut or joined element freezes uncut and unjoined: its `cut` and
+        // `join` rows keep shaping the Form (non-destructive, M5-5.3, M5-5.2).
+        let uncut = if crate::model::cut::cuts_of(tx.doc(), x).is_empty()
+            && crate::model::join::joins_of(tx.doc(), x).is_empty()
+        {
             None
         } else {
             crate::model::generate::uncut_body(tx.doc(), x)
@@ -133,6 +150,8 @@ fn unfreeze(tx: &mut Transaction, id: ElementId) -> Result<(), CommandError> {
                         height: Length::from_mm(w.height),
                     },
                     location_line: LocationLine::WallCenterline,
+                    join_start: Default::default(),
+                    join_end: Default::default(),
                     geometry: Body::default(),
                 }),
                 ty,

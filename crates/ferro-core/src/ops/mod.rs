@@ -45,6 +45,8 @@ mod fuzz_tests;
 #[cfg(test)]
 mod geometry_source_tests;
 #[cfg(test)]
+mod join_tests;
+#[cfg(test)]
 mod kernel_tests;
 #[cfg(test)]
 mod material_tests;

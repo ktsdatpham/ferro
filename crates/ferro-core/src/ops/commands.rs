@@ -733,6 +733,7 @@ any_command!(
     SetRenovationStatus,
     CreateRelationship,
     DeleteRelationship,
+    SetRelationship,
     CreateView,
     SetView,
     DeleteView,
