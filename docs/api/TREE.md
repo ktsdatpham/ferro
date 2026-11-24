@@ -44,6 +44,11 @@ Design options in the app (ADR 0006, M5-23.9): the combination the view shows (a
 - fn `is_option_command` — `true` for commands on option sets / options themselves, which always
 - fn `view_doc` — The document the view shows, borrowing only the two fields (for call
 
+### `ferro_app::app::joins`
+
+Wall end joins in the app (M5-5.2): the ends of selected walls get small square handles, labelled "no join" when disallowed, and the viewport's context menu offers "Disallow join" / "Allow join" per end (Revit's wall end context menu). Join Geometry, Unjoin Geometry and Switch Join Order are solid tools (`tools::join_command`). Plain-text labels only (the app font has no symbol glyphs).
+
+
 ### `ferro_app::app::phases`
 
 Phases in the app (ADR 0006, M5-23): the active view's phase and phase filter (stored in the view element, M5-22 / M5-23.8), the simple renovation buttons, phase pickers in Properties and the per-status graphics handed to the scene.
@@ -225,6 +230,7 @@ Drawing tools (D-72): app-side state machines. Each tool previews by evaluating 
 - fn `ToolKind::is_solid` — The solid tools: pick a target, then the other element.
 - fn `ToolKind::is_bim`
 - fn `ToolKind::label`
+- fn `join_command` — The command of a join tool (M5-5.2) on two picks: Join Geometry makes a
 - fn `solid_command` — The command of a solid tool: `target` picked first, then `other`.
 - struct `ToolCtx` — What the tool sees each frame.
 - enum `SubPick` — Part of a Form picked while editing it (SketchUp group editing).
@@ -674,6 +680,9 @@ BIM element data (Foundation Spec ch. 3, D-41, D-70): system family types with c
 - struct `FloorType` — A floor type (system family type, D-70).
 - enum `LocationLine` — Which line of the wall the location curve runs along (Revit: `WALL_KEY_REF_PARAM`).
 - enum `WallTop` — Top constraint of a wall (D-16).
+- enum `WallJoin` — Join state of one wall end (Revit: `WallUtils.AllowWallJoinAtEnd` /
+- fn `WallJoin::name` — Stable name, as in files and MCP.
+- fn `WallJoin::is_auto` — `true` for [`WallJoin::Auto`] (the default, omitted from files).
 - struct `Wall` — A wall instance. Base level = `Element::level_id`; type = `Element::type_id`.
 - struct `Floor` — A floor instance: a sketch profile (plan coordinates, mm) whose top sits at
 - enum `OpeningKind`
@@ -720,11 +729,14 @@ Non-destructive cuts (ADR 0004 §5, M5-5.3) and phased cuts (ADR 0006 §5, M5-23
 - struct `CutOutcome` — What [`apply_cuts`] produced: the cut body and the warnings.
 - fn `apply_cuts` — Subtract the cutters of `rows` (in the given order) from `uncut`, the
 - fn `apply_cuts_cached` — [`apply_cuts`] through `cache` (M5-5.7): a row whose result is in the
+- type `CutKey` — A 128-bit key: two independent 64-bit hashes.
 - struct `CutCache` — Session-level cache of cut results (M5-5.7), keyed by the row's uid and
 - fn `CutCache::new` — An empty cache.
 - fn `CutCache::len` — Number of cached row results.
 - fn `CutCache::is_empty` — `true` when nothing is cached.
 - fn `CutCache::clear` — Forget every result.
+- fn `cached_difference` — One cached boolean difference `body − other` for row `r` (used by
+- fn `chain_start` — The key a cached chain over `body` starts from; `None` without a cache.
 - fn `body_in_phase` — The body of element `id` in a view of phase `phase` (ADR 0006 §5): its
 - fn `removed_in_phase` — The part of element `id` that the cut rows made in phase `phase`
 
@@ -825,6 +837,7 @@ Regeneration of derived BIM geometry (Foundation Spec §4.4, D-41).
 - fn `wall_layout` — Placement of a wall element. Fails with `ferro.wall.*` codes.
 - fn `floor_body` — Build a floor body: the sketch at level + offset, extruded down by the
 - fn `affects_bim` — `true` if a change to this element can affect derived BIM geometry.
+- fn `straight_walls` — Every straight wall of `doc` whose layout resolves, as end joins see it
 - fn `uncut_bodies` — Uncut bodies of every element with geometry: generated walls, floors
 - fn `uncut_body` — The uncut body of one element ([`uncut_bodies`]); `None` without
 - fn `regenerate` — Rebuild the geometry of every wall, floor and opening in `doc`, without
@@ -840,6 +853,27 @@ Regeneration of derived BIM geometry (Foundation Spec §4.4, D-41).
 - fn `Uid::v7` — Build a version-7 UUID from a Unix time in milliseconds and random
 - fn `Uid::from_name` — Build a deterministic version-8 UUID from a name: the 128-bit
 - fn `Uid::version` — UUID version number (7 for new elements, 8 for name-based ids).
+
+### `ferro_core::model::join`
+
+Joins (ADR 0004 §5, M5-5.2; Foundation §3.8): wall-end joins and geometry joins.
+
+- fn `is_join_element` — `true` when `e` can take part in a `join` row: walls, floors and Forms
+- fn `join_between` — The `join` row linking `a` and `b` in either order, if any (one row per
+- fn `joins_of` — The `join` rows whose `second` is `id` (the rows that trim it), in uid
+- fn `wall_join_at` — The join state of the end of wall `e` (`at_start` = the curve start);
+- type `EndCorners` — Corner points of a straight wall end in plan: (exterior corner, interior
+- struct `StraightWall` — A straight wall reduced to what end joins need (plan, mm).
+- struct `WallEnds` — End corners of every straight wall, and the wall pairs whose overlap
+- fn `wall_ends` — Infer the end shape of every straight wall (module doc): L mitres (or
+- fn `wall_join_partners` — The walls joined to wall `id` by its ends (L or T, either wall's end),
+- fn `settled_wall_pairs` — The wall pairs (lower id first) whose end shapes already settle their
+- enum `WallConnectionAt` — Where a wall connection sits on a wall (IFC `IfcConnectionTypeEnum`).
+- struct `WallConnection` — One joined pair of walls (L or T), for exports (IFC
+- fn `wall_connections` — Every wall–wall end join of `doc`, as inferred now (disallowed ends and
+- struct `Joiner` — Applies the geometry joins of one regeneration (built once per
+- fn `apply_joins` — Subtract the `first` element of each row (in the given order) from
+- fn `apply_joins_cached` — [`apply_joins`] through the session's [`CutCache`] (M5-5.7): the key
 
 ### `ferro_core::model::material`
 
@@ -938,6 +972,7 @@ Relationships between elements as data (ADR 0004 §5, F5; M5-5).
 
 - enum `RelationshipKind` — What a relationship means. The order of [`Relationship::elements`] is
 - fn `RelationshipKind::name` — Stable snake_case name, as in files and MCP.
+- fn `RelationshipKind::shapes_geometry` — `true` for kinds that change geometry at regeneration (`join`,
 - fn `RelationshipKind::is_symmetric` — `true` when swapping the two elements gives the same relationship.
 - struct `Relationship` — One row of the relationship table.
 - struct `RelationshipError` — Why a relationship is refused, with its stable failure code.
@@ -1150,6 +1185,7 @@ Project settings commands (M5-24): display units, site location, currency. Each 
 Commands on the relationship table (ADR 0004 §5, M5-5.1).
 
 - struct `CreateRelationship` — Add a relationship row linking `elements` (ordered as the kind says:
+- struct `SetRelationship` — Change a relationship row in place, keeping its `uid` (so IFC ids and
 - struct `DeleteRelationship` — Remove a relationship row by `uid` (the elements stay). Fails with
 
 ### `ferro_core::ops::session`

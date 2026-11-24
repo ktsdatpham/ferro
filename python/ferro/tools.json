@@ -2137,7 +2137,7 @@
       "name": "set_opening"
     },
     {
-      "description": "Change a wall: start + end (+ mid for a curved wall), base_offset, height (fixed top) or top_level (+ top_offset), location_line. Omitted fields keep their value.",
+      "description": "Change a wall: start + end (+ mid for a curved wall), base_offset, height (fixed top) or top_level (+ top_offset), location_line, join_start / join_end. Walls whose ends meet join automatically (L mitre, T); join_start / join_end = \"disallow\" keeps that end square and unjoined (Revit Disallow Join), \"auto\" allows it again. Omitted fields keep their value.",
       "inputSchema": {
         "properties": {
           "base_offset": {
@@ -2172,6 +2172,22 @@
               "integer",
               "string"
             ]
+          },
+          "join_end": {
+            "description": "Join state at the end",
+            "enum": [
+              "auto",
+              "disallow"
+            ],
+            "type": "string"
+          },
+          "join_start": {
+            "description": "Join state at the start",
+            "enum": [
+              "auto",
+              "disallow"
+            ],
+            "type": "string"
           },
           "location_line": {
             "enum": [
@@ -2900,7 +2916,7 @@
       "name": "get_phase_quantities"
     },
     {
-      "description": "Link elements with a relationship row (stored as data, saved, undoable). Order of `elements` by kind: join [first, second] (first wins where they overlap), cut [cutter, cut] (non-destructive void: the cut element, a wall, floor or Form, shows its body minus the cutter's, regenerated when either changes; a Form used only as a cutter becomes a hidden void), host [host, hosted], attach [attached, target], bounds [space, boundary], connect [a, b], aggregate [whole, part, ...]. Only elements with geometry. `phase`: the phase it is made in. Returns {relationship: uid}. Fails with ferro.model.invalid_relationship, missing_element or duplicate_relationship.",
+      "description": "Link elements with a relationship row (stored as data, saved, undoable). Order of `elements` by kind: join [first, second] (Revit Join Geometry between walls, floors and Forms: first wins where they overlap, second shows its body minus first's, regenerated through the kernel; between two walls whose ends meet it makes a butt corner where first runs through), cut [cutter, cut] (non-destructive void: the cut element, a wall, floor or Form, shows its body minus the cutter's, regenerated when either changes; a Form used only as a cutter becomes a hidden void), host [host, hosted], attach [attached, target], bounds [space, boundary], connect [a, b], aggregate [whole, part, ...]. Only elements with geometry. `phase`: the phase it is made in. Returns {relationship: uid}. Fails with ferro.model.invalid_relationship, missing_element or duplicate_relationship.",
       "inputSchema": {
         "properties": {
           "elements": {
@@ -2964,6 +2980,40 @@
         "type": "object"
       },
       "name": "delete_relationship"
+    },
+    {
+      "description": "Change a relationship row in place (its uid stays): `elements` replaces the linked elements, or `reverse: true` swaps a two-element row; for a join that is Revit's Switch Join Order (the other element wins). Returns {relationship, elements}. Fails with ferro.model.invalid_uid, missing_relationship, invalid_relationship, missing_element or duplicate_relationship.",
+      "inputSchema": {
+        "properties": {
+          "elements": {
+            "description": "New element ids, ordered as the kind says",
+            "items": {
+              "type": "integer"
+            },
+            "type": "array"
+          },
+          "in_design_option": {
+            "description": "Where the change lands: a design option id (the change goes into that option's layer), or \"shared\" for the shared model. Omitted (or null): the option the user is editing in the Ferro app, else the shared model",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "relationship": {
+            "description": "Relationship uid",
+            "type": "string"
+          },
+          "reverse": {
+            "description": "Swap the two elements (Switch Join Order)",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "relationship"
+        ],
+        "type": "object"
+      },
+      "name": "set_relationship"
     },
     {
       "description": "Create a design option set (Revit Option Set) with its first option \"Option 1\" (primary, empty). Options are alternatives shown one per set; each is a layer of changes over the shared model. Returns {element: set, option}.",

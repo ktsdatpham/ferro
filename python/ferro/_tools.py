@@ -1278,6 +1278,8 @@ def set_wall(
     end: Optional[Point] = None,
     height: Optional[Length] = None,
     in_design_option: Optional[Any] = None,
+    join_end: Optional[Literal["auto", "disallow"]] = None,
+    join_start: Optional[Literal["auto", "disallow"]] = None,
     location_line: Optional[Literal["wall_centerline", "core_centerline", "finish_exterior", "finish_interior"]] = None,
     mid: Optional[Point] = None,
     start: Optional[Point] = None,
@@ -1285,7 +1287,10 @@ def set_wall(
     top_offset: Optional[Length] = None,
 ) -> Dict[str, Any]:
     """Change a wall: start + end (+ mid for a curved wall), base_offset, height (fixed
-    top) or top_level (+ top_offset), location_line. Omitted fields keep their value.
+    top) or top_level (+ top_offset), location_line, join_start / join_end. Walls whose
+    ends meet join automatically (L mitre, T); join_start / join_end = "disallow" keeps
+    that end square and unjoined (Revit Disallow Join), "auto" allows it again. Omitted
+    fields keep their value.
 
     Args:
         wall: Wall id.
@@ -1299,6 +1304,8 @@ def set_wall(
             into that option's layer), or "shared" for the shared model. Omitted (or
             null): the option the user is editing in the Ferro app, else the shared
             model. Optional.
+        join_end: Join state at the end. One of: auto, disallow. Optional.
+        join_start: Join state at the start. One of: auto, disallow. Optional.
         location_line: One of: wall_centerline, core_centerline, finish_exterior,
             finish_interior. Optional.
         mid: Point on the arc (curved walls). Point [x, y] or [x, y, z] in millimetres
@@ -1321,6 +1328,10 @@ def set_wall(
         args["height"] = height
     if in_design_option is not None:
         args["in_design_option"] = in_design_option
+    if join_end is not None:
+        args["join_end"] = join_end
+    if join_start is not None:
+        args["join_start"] = join_start
     if location_line is not None:
         args["location_line"] = location_line
     if mid is not None:
@@ -1908,14 +1919,16 @@ def create_relationship(
     phase: Optional[ElementId] = None,
 ) -> Dict[str, Any]:
     """Link elements with a relationship row (stored as data, saved, undoable). Order of
-    `elements` by kind: join [first, second] (first wins where they overlap), cut
-    [cutter, cut] (non-destructive void: the cut element, a wall, floor or Form, shows
-    its body minus the cutter's, regenerated when either changes; a Form used only as a
-    cutter becomes a hidden void), host [host, hosted], attach [attached, target],
-    bounds [space, boundary], connect [a, b], aggregate [whole, part, ...]. Only
-    elements with geometry. `phase`: the phase it is made in. Returns {relationship:
-    uid}. Fails with ferro.model.invalid_relationship, missing_element or
-    duplicate_relationship.
+    `elements` by kind: join [first, second] (Revit Join Geometry between walls, floors
+    and Forms: first wins where they overlap, second shows its body minus first's,
+    regenerated through the kernel; between two walls whose ends meet it makes a butt
+    corner where first runs through), cut [cutter, cut] (non-destructive void: the cut
+    element, a wall, floor or Form, shows its body minus the cutter's, regenerated when
+    either changes; a Form used only as a cutter becomes a hidden void), host [host,
+    hosted], attach [attached, target], bounds [space, boundary], connect [a, b],
+    aggregate [whole, part, ...]. Only elements with geometry. `phase`: the phase it is
+    made in. Returns {relationship: uid}. Fails with ferro.model.invalid_relationship,
+    missing_element or duplicate_relationship.
 
     Args:
         kind: One of: join, cut, host, attach, bounds, connect, aggregate.
@@ -1959,6 +1972,41 @@ def delete_relationship(
     if in_design_option is not None:
         args["in_design_option"] = in_design_option
     return _call("delete_relationship", args)
+
+
+def set_relationship(
+    *,
+    relationship: str,
+    elements: Optional[Sequence[int]] = None,
+    in_design_option: Optional[Any] = None,
+    reverse: Optional[bool] = None,
+) -> Dict[str, Any]:
+    """Change a relationship row in place (its uid stays): `elements` replaces the
+    linked elements, or `reverse: true` swaps a two-element row; for a join that is
+    Revit's Switch Join Order (the other element wins). Returns {relationship,
+    elements}. Fails with ferro.model.invalid_uid, missing_relationship,
+    invalid_relationship, missing_element or duplicate_relationship.
+
+    Args:
+        relationship: Relationship uid.
+        elements: New element ids, ordered as the kind says. Optional.
+        in_design_option: Where the change lands: a design option id (the change goes
+            into that option's layer), or "shared" for the shared model. Omitted (or
+            null): the option the user is editing in the Ferro app, else the shared
+            model. Optional.
+        reverse: Swap the two elements (Switch Join Order). Optional.
+
+    Returns:
+        The tool's JSON body. Raises FerroError on failure.
+    """
+    args: Dict[str, Any] = {"relationship": relationship}
+    if elements is not None:
+        args["elements"] = elements
+    if in_design_option is not None:
+        args["in_design_option"] = in_design_option
+    if reverse is not None:
+        args["reverse"] = reverse
+    return _call("set_relationship", args)
 
 
 def create_option_set(*, name: str) -> Dict[str, Any]:
@@ -2683,6 +2731,7 @@ TOOL_NAMES = (
     "get_phase_quantities",
     "create_relationship",
     "delete_relationship",
+    "set_relationship",
     "create_option_set",
     "set_option_set",
     "delete_option_set",
