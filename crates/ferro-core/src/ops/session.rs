@@ -2,6 +2,7 @@ use super::{
     AnyCommand, CommandOutput, DocumentChanged, Failure, IdSource, SequentialIds, Transaction,
 };
 use crate::algo::Kernel;
+use crate::model::cut::CutCache;
 use crate::model::Document;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -122,6 +123,7 @@ pub struct Session {
     group: Option<Group>,
     ids: Box<dyn IdSource + Send>,
     kernel: Option<Arc<dyn Kernel>>,
+    cut_cache: Arc<CutCache>,
     seq: u64,
     groups_opened: u64,
 }
@@ -136,6 +138,7 @@ impl Session {
             group: None,
             ids,
             kernel: None,
+            cut_cache: Arc::new(CutCache::new()),
             seq: 0,
             groups_opened: 0,
         }
@@ -157,6 +160,63 @@ impl Session {
     /// The attached geometry kernel, if any.
     pub fn kernel(&self) -> Option<&Arc<dyn Kernel>> {
         self.kernel.as_ref()
+    }
+
+    /// The session's cache of cut results (M5-5.7), shared by its
+    /// transactions, previews and resolved combinations. Not part of the
+    /// document: results are the same without it.
+    pub fn cut_cache(&self) -> &Arc<CutCache> {
+        &self.cut_cache
+    }
+
+    /// A transaction on `doc` with this session's kernel and cut cache.
+    fn transaction<'a>(
+        kernel: &Option<Arc<dyn Kernel>>,
+        cache: &Arc<CutCache>,
+        name: &str,
+        doc: &Document,
+        ids: &'a mut dyn IdSource,
+    ) -> Transaction<'a> {
+        Transaction::new(name, doc, ids)
+            .with_kernel(kernel.clone())
+            .with_cut_cache(Some(cache.clone()))
+    }
+
+    /// The document as seen in `combination` ([`resolve`]), regenerated
+    /// with this session's kernel and cut cache, so cuts on elements an
+    /// option layer changes stay applied (M5-5.6).
+    ///
+    /// # Errors
+    /// The codes of [`resolve`].
+    ///
+    /// [`resolve`]: super::design_option_commands::resolve
+    pub fn resolve(
+        &self,
+        combination: &crate::model::Combination,
+    ) -> Result<Document, Vec<Failure>> {
+        let chosen = combination
+            .chosen(&self.doc)
+            .map_err(|e| vec![super::CommandError::from(e).into_failure()])?;
+        self.resolve_options(&chosen)
+    }
+
+    /// The document with exactly the layers of `options`
+    /// ([`resolve_options`]), with this session's kernel and cut cache.
+    ///
+    /// # Errors
+    /// The codes of [`resolve_options`].
+    ///
+    /// [`resolve_options`]: super::design_option_commands::resolve_options
+    pub fn resolve_options(
+        &self,
+        options: &[crate::model::ElementId],
+    ) -> Result<Document, Vec<Failure>> {
+        super::design_option_commands::resolve_options_cached(
+            &self.doc,
+            options,
+            self.kernel.as_ref(),
+            Some(&self.cut_cache),
+        )
     }
 
     pub fn doc(&self) -> &Document {
@@ -189,8 +249,13 @@ impl Session {
     /// Run one command as one transaction (or inside the open group).
     pub fn execute(&mut self, cmd: AnyCommand, ctx: &ExecContext) -> Result<Outcome, Vec<Failure>> {
         let name = cmd.name().to_string();
-        let mut tx =
-            Transaction::new(&name, &self.doc, self.ids.as_mut()).with_kernel(self.kernel.clone());
+        let mut tx = Self::transaction(
+            &self.kernel,
+            &self.cut_cache,
+            &name,
+            &self.doc,
+            self.ids.as_mut(),
+        );
         let output = cmd.execute(&mut tx).map_err(|e| vec![e.into_failure()])?;
         let (after, changed, warnings) = tx.finish()?;
         let before = std::mem::replace(&mut self.doc, after);
@@ -233,7 +298,7 @@ impl Session {
         cmd: AnyCommand,
         ctx: &ExecContext,
     ) -> Result<Outcome, Vec<Failure>> {
-        use super::design_option_commands::{resolve_options, SetDesignOption};
+        use super::design_option_commands::SetDesignOption;
         use crate::model::design_option::layer_from_edit;
         let fail = |e: super::CommandError| vec![e.into_failure()];
         let chosen = combination
@@ -241,11 +306,16 @@ impl Session {
             .chosen(&self.doc)
             .map_err(|e| fail(e.into()))?;
         let others: Vec<_> = chosen.iter().copied().filter(|o| *o != option).collect();
-        let base_others = resolve_options(&self.doc, &others)?;
-        let base = resolve_options(&self.doc, &chosen)?;
+        let base_others = self.resolve_options(&others)?;
+        let base = self.resolve_options(&chosen)?;
         let name = cmd.name().to_string();
-        let mut tx =
-            Transaction::new(&name, &base, self.ids.as_mut()).with_kernel(self.kernel.clone());
+        let mut tx = Self::transaction(
+            &self.kernel,
+            &self.cut_cache,
+            &name,
+            &base,
+            self.ids.as_mut(),
+        );
         let output = cmd.execute(&mut tx).map_err(|e| vec![e.into_failure()])?;
         let (edited, changed, mut warnings) = tx.finish()?;
         let changes = layer_from_edit(&base_others, &edited).map_err(|e| fail(e.into()))?;
@@ -279,7 +349,7 @@ impl Session {
         cmd: &AnyCommand,
     ) -> Result<(Document, CommandOutput), Vec<Failure>> {
         let mut ids = SequentialIds::new(0);
-        let mut tx = Transaction::new(cmd.name(), doc, &mut ids).with_kernel(self.kernel.clone());
+        let mut tx = Self::transaction(&self.kernel, &self.cut_cache, cmd.name(), doc, &mut ids);
         let output = cmd.execute(&mut tx).map_err(|e| vec![e.into_failure()])?;
         let (doc, _, _) = tx.finish()?;
         Ok((doc, output))

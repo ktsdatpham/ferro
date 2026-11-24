@@ -4,8 +4,7 @@
 
 use ferro_core::model::change::diff;
 use ferro_core::model::design_option::{layer_counts, stale_layers, Combination};
-use ferro_core::ops::design_option_commands::{resolve, resolve_options};
-use ferro_core::{Document, ElementId};
+use ferro_core::{Document, ElementId, Session};
 use serde_json::{json, Value};
 
 use crate::{failures_json, tool};
@@ -75,20 +74,23 @@ pub fn combination_arg(
     }
 }
 
-/// The document as seen in a combination (`None` = shared model). Both
-/// carry empty option layers, so two views diff to model changes only.
-pub fn seen(doc: &Document, c: &Option<Combination>) -> Result<Document, Value> {
+/// The session's document as seen in a combination (`None` = shared
+/// model), regenerated with the session's kernel and cut cache so cuts
+/// stay applied (M5-5.6). Both carry empty option layers, so two views
+/// diff to model changes only.
+pub fn seen(session: &Session, c: &Option<Combination>) -> Result<Document, Value> {
     let r = match c {
-        None => resolve_options(doc, &[]),
-        Some(c) => resolve(doc, c),
+        None => session.resolve_options(&[]),
+        Some(c) => session.resolve(c),
     };
     r.map_err(
         |f| json!({"error": "the combination cannot be shown", "failures": failures_json(&f)}),
     )
 }
 
-/// `list_design_options`.
-pub fn list_design_options(doc: &Document) -> Value {
+/// `list_design_options` on the session's document.
+pub fn list_design_options(session: &Session) -> Value {
+    let doc = session.doc();
     let sets: Vec<Value> = doc
         .option_sets()
         .iter()
@@ -109,7 +111,7 @@ pub fn list_design_options(doc: &Document) -> Value {
         .iter()
         .map(|e| json!({"severity": "warning", "code": e.code, "message": e.message, "elements": e.option.into_iter().collect::<Vec<_>>()}))
         .collect();
-    if let Err(f) = resolve(doc, &Combination::primary()) {
+    if let Err(f) = session.resolve(&Combination::primary()) {
         if let Value::Array(a) = failures_json(&f) {
             failures.extend(a);
         }
@@ -118,11 +120,11 @@ pub fn list_design_options(doc: &Document) -> Value {
 }
 
 /// `diff_documents {from, to}`.
-pub fn diff_documents(doc: &Document, args: &Value) -> Result<Value, Value> {
+pub fn diff_documents(session: &Session, args: &Value) -> Result<Value, Value> {
     let bad = |m: String| json!({"error": m});
     let from = combination_arg(args.get("from"), true).map_err(bad)?;
     let to = combination_arg(args.get("to"), false).map_err(bad)?;
-    let (a, b) = (seen(doc, &from)?, seen(doc, &to)?);
+    let (a, b) = (seen(session, &from)?, seen(session, &to)?);
     let changes = diff(&a, &b).map_err(|e| bad(e.to_string()))?;
     Ok(json!({"count": changes.len(), "changes": changes}))
 }

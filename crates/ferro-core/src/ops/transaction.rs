@@ -2,6 +2,7 @@ use super::{CommandError, DocumentChanged, Failure};
 use crate::algo::{Kernel, KernelError};
 use crate::math::{tol, Vec3};
 use crate::model::bim::WallTop;
+use crate::model::cut::CutCache;
 use crate::model::generate;
 use crate::model::{
     keys, Category, Document, Element, ElementBody, ElementId, ParamValue, Relationship,
@@ -47,6 +48,7 @@ pub struct Transaction<'a> {
     work: Document,
     ids: &'a mut dyn IdSource,
     kernel: Option<Arc<dyn Kernel>>,
+    cut_cache: Option<Arc<CutCache>>,
     warnings: Vec<Failure>,
 }
 
@@ -58,6 +60,7 @@ impl<'a> Transaction<'a> {
             work: base.clone(),
             ids,
             kernel: None,
+            cut_cache: None,
             warnings: Vec::new(),
         }
     }
@@ -66,6 +69,15 @@ impl<'a> Transaction<'a> {
     /// the id source: the session passes its own.
     pub fn with_kernel(mut self, kernel: Option<Arc<dyn Kernel>>) -> Self {
         self.kernel = kernel;
+        self
+    }
+
+    /// The same transaction with a cache of cut results (M5-5.7), shared
+    /// with the session: regeneration calls the kernel only for `cut` rows
+    /// whose inputs changed. The committed document is the same with or
+    /// without it.
+    pub fn with_cut_cache(mut self, cache: Option<Arc<CutCache>>) -> Self {
+        self.cut_cache = cache;
         self
     }
 
@@ -467,7 +479,11 @@ impl<'a> Transaction<'a> {
             .chain(pre.deleted.iter().filter_map(|id| self.base.get(*id)))
             .any(generate::affects_bim);
         if bim_touched || self.cuts_touched(&pre) {
-            let regen = generate::regenerate_with(&self.work, self.kernel.as_deref());
+            let regen = generate::regenerate_cached(
+                &self.work,
+                self.kernel.as_deref(),
+                self.cut_cache.as_deref(),
+            );
             for (id, body) in regen.updates {
                 if let Some(e) = self.work.get(id) {
                     let mut e = e.clone();

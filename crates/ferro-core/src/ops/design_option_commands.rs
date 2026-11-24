@@ -12,7 +12,9 @@
 
 use super::commands::{Command, CommandOutput};
 use super::{CommandError, Failure, SequentialIds, Transaction};
+use crate::algo::Kernel;
 use crate::model::change::{apply, Change, ChangeError};
+use crate::model::cut::CutCache;
 use crate::model::design_option::{
     apply_layers, check_design_options, check_layer, Combination, DesignOption, DesignOptionError,
     OptionSet, OptionStatus, FIRST_OPTION_NAME,
@@ -20,6 +22,7 @@ use crate::model::design_option::{
 use crate::model::{Category, Document, ElementBody, ElementId};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
+use std::sync::Arc;
 
 impl From<DesignOptionError> for CommandError {
     fn from(e: DesignOptionError) -> Self {
@@ -38,38 +41,65 @@ impl From<ChangeError> for CommandError {
 }
 
 /// The document as seen with exactly the layers of `options` (at most one
-/// per set), regenerated: derived geometry and computed parameters follow
-/// the overrides. A document without option sets is returned unchanged.
+/// per set), regenerated with `kernel`: derived geometry and computed
+/// parameters follow the overrides, and `cut` rows stay applied to the
+/// elements a layer changes (M5-5.6; without a kernel they fall back to
+/// the uncut body with a `ferro.kernel.unavailable` warning, as in any
+/// transaction). Pass the session's kernel (`Session::kernel`), or use
+/// `Session::resolve_options`, which also shares the session's cut cache.
+/// A document without option sets is returned unchanged.
 ///
 /// Fails with the codes of [`apply_layers`] (`ferro.model.option_conflict`,
 /// `ferro.model.invalid_option_layer`, ...) and with the regeneration
 /// errors of an element added by a layer that does not fit (e.g. a door
 /// wider than its wall).
-pub fn resolve_options(doc: &Document, options: &[ElementId]) -> Result<Document, Vec<Failure>> {
+pub fn resolve_options(
+    doc: &Document,
+    options: &[ElementId],
+    kernel: Option<&Arc<dyn Kernel>>,
+) -> Result<Document, Vec<Failure>> {
+    resolve_options_cached(doc, options, kernel, None)
+}
+
+/// [`resolve_options`] with a cut cache (M5-5.7), e.g. the session's.
+pub fn resolve_options_cached(
+    doc: &Document,
+    options: &[ElementId],
+    kernel: Option<&Arc<dyn Kernel>>,
+    cut_cache: Option<&Arc<CutCache>>,
+) -> Result<Document, Vec<Failure>> {
     if options.is_empty() && doc.option_sets().is_empty() {
         return Ok(doc.clone());
     }
     let layered =
         apply_layers(doc, options).map_err(|e| vec![CommandError::from(e).into_failure()])?;
     let mut ids = SequentialIds::new(0);
-    let mut tx = Transaction::new("resolve", doc, &mut ids);
+    let mut tx = Transaction::new("resolve", doc, &mut ids)
+        .with_kernel(kernel.cloned())
+        .with_cut_cache(cut_cache.cloned());
     tx.replace_with(&layered);
     let (out, _, _) = tx.finish()?;
     Ok(out)
 }
 
 /// The document as seen in `combination` (ADR 0006 §3): the shared model
-/// with the chosen layers applied in set order, regenerated. Pure and
-/// deterministic. With no option sets it is the shared model.
+/// with the chosen layers applied in set order, regenerated with `kernel`
+/// (see [`resolve_options`]; `Session::resolve` uses the session's kernel
+/// and cut cache). Pure and deterministic. With no option sets it is the
+/// shared model.
 ///
 /// Fails with the codes of [`Combination::chosen`] and [`resolve_options`];
 /// conflicting layers of different sets are reported
 /// (`ferro.model.option_conflict`), never merged.
-pub fn resolve(doc: &Document, combination: &Combination) -> Result<Document, Vec<Failure>> {
+pub fn resolve(
+    doc: &Document,
+    combination: &Combination,
+    kernel: Option<&Arc<dyn Kernel>>,
+) -> Result<Document, Vec<Failure>> {
     let chosen = combination
         .chosen(doc)
         .map_err(|e| vec![CommandError::from(e).into_failure()])?;
-    resolve_options(doc, &chosen)
+    resolve_options(doc, &chosen, kernel)
 }
 
 fn not_a_set(id: ElementId) -> CommandError {

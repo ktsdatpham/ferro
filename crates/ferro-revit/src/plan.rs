@@ -417,7 +417,14 @@ fn site_location_op(doc: &Document) -> Option<RevitOp> {
 /// says they are not sent; when the primary combination cannot be resolved
 /// (conflicting or stale option layers), a `warning`
 /// (`ferro.revit.design_option_failed`) and the shared model are sent.
-pub fn plan(doc: &Document, state: &RevitState) -> Vec<RevitOp> {
+/// The combination is regenerated with `kernel` (the session's), so cut
+/// Forms an option layer changes keep their cut body (M5-5.6); without
+/// one they are sent uncut.
+pub fn plan(
+    doc: &Document,
+    state: &RevitState,
+    kernel: Option<&std::sync::Arc<dyn ferro_core::algo::Kernel>>,
+) -> Vec<RevitOp> {
     if doc.option_sets().is_empty() {
         return plan_resolved(doc, state);
     }
@@ -433,7 +440,8 @@ pub fn plan(doc: &Document, state: &RevitState) -> Vec<RevitOp> {
         });
     }
     let combination = ferro_core::model::Combination::primary();
-    let mut out = match ferro_core::ops::design_option_commands::resolve(doc, &combination) {
+    let mut out = match ferro_core::ops::design_option_commands::resolve(doc, &combination, kernel)
+    {
         Ok(seen) => plan_resolved(&seen, state),
         Err(f) => {
             warnings.push(RevitOp::Warning {
@@ -829,7 +837,7 @@ mod tests {
                 .filter(|o| matches!(o, RevitOp::DirectShape { .. }))
                 .count()
         };
-        let before = plan(s.doc(), &RevitState::default());
+        let before = plan(s.doc(), &RevitState::default(), None);
         assert_eq!(shapes(&before), 1);
         let void = s.doc().next_element_id();
         for (t, a) in [
@@ -849,7 +857,7 @@ mod tests {
             s.execute(AnyCommand::from_tool(t, &a).unwrap(), &ExecContext::user())
                 .unwrap();
         }
-        let ops = plan(s.doc(), &RevitState::default());
+        let ops = plan(s.doc(), &RevitState::default(), None);
         assert_eq!(shapes(&ops), 1, "the void is not sent");
         assert!(
             matches!(&ops[0], RevitOp::Warning { code, .. } if code == "ferro.revit.cut_not_sent")
@@ -866,7 +874,7 @@ mod tests {
         };
         let o = run(&mut s, "create_option_set", json!({"name": "Roof"}));
         let a = ferro_core::ElementId(o["option"].as_u64().unwrap());
-        let only_primary = plan(s.doc(), &RevitState::default());
+        let only_primary = plan(s.doc(), &RevitState::default(), None);
         assert!(only_primary
             .iter()
             .all(|o| !matches!(o, RevitOp::Warning { .. })));
@@ -882,7 +890,7 @@ mod tests {
         )
         .unwrap();
         run(&mut s, "create_design_option", json!({"set": o["element"]}));
-        let ops = plan(s.doc(), &RevitState::default());
+        let ops = plan(s.doc(), &RevitState::default(), None);
         assert!(
             matches!(&ops[0], RevitOp::Warning { code, .. } if code == "ferro.revit.design_options"),
             "{:?}",
@@ -899,7 +907,7 @@ mod tests {
     #[test]
     fn pinned_is_planned_for_synced_elements() {
         let mut s = house();
-        let ops = plan(s.doc(), &RevitState::default());
+        let ops = plan(s.doc(), &RevitState::default(), None);
         let levels: Vec<bool> = ops
             .iter()
             .filter_map(|o| match o {
@@ -937,7 +945,7 @@ mod tests {
             &ExecContext::user(),
         )
         .unwrap();
-        let ops = plan(s.doc(), &RevitState::default());
+        let ops = plan(s.doc(), &RevitState::default(), None);
         let w1 = wall_op(&ops);
         assert!(matches!(w1, RevitOp::Wall { pinned: true, .. }));
         assert_ne!(w0.signature(), w1.signature(), "a pin change is sent");
@@ -954,7 +962,7 @@ mod tests {
     fn phases_and_element_phase_names_are_planned() {
         let mut s = house();
         // Unphased elements carry no phase fields (signatures unchanged).
-        let before = plan(s.doc(), &RevitState::default());
+        let before = plan(s.doc(), &RevitState::default(), None);
         assert!(!serde_json::to_string(&before).unwrap().contains("phase"));
         let wall = s
             .doc()
@@ -971,7 +979,7 @@ mod tests {
             &ExecContext::user(),
         )
         .unwrap();
-        let ops = plan(s.doc(), &RevitState::default());
+        let ops = plan(s.doc(), &RevitState::default(), None);
         let phases: Vec<(String, u32)> = ops
             .iter()
             .filter_map(|o| match o {
@@ -1007,7 +1015,7 @@ mod tests {
     #[test]
     fn full_plan_is_ordered_and_in_feet() {
         let s = house();
-        let ops = plan(s.doc(), &RevitState::default());
+        let ops = plan(s.doc(), &RevitState::default(), None);
         let kinds: Vec<&str> = ops
             .iter()
             .map(|o| match o {
@@ -1130,7 +1138,7 @@ mod tests {
     #[test]
     fn unchanged_elements_are_skipped_and_removed_ones_deleted() {
         let mut s = house();
-        let first = plan(s.doc(), &RevitState::default());
+        let first = plan(s.doc(), &RevitState::default(), None);
         let mut state = RevitState {
             elements: first
                 .iter()
@@ -1142,7 +1150,7 @@ mod tests {
                 })
                 .collect(),
         };
-        assert!(plan(s.doc(), &state).is_empty(), "nothing changed");
+        assert!(plan(s.doc(), &state, None).is_empty(), "nothing changed");
 
         // Raise L2 (unpinned first, ADR 0008): only the level changes in
         // Revit (walls follow it there).
@@ -1161,7 +1169,7 @@ mod tests {
             &ExecContext::user(),
         )
         .unwrap();
-        let ops = plan(s.doc(), &state);
+        let ops = plan(s.doc(), &state, None);
         assert_eq!(ops.len(), 1, "{ops:?}");
         assert!(matches!(&ops[0], RevitOp::Level { name, .. } if name == "L2"));
 
@@ -1171,7 +1179,7 @@ mod tests {
             unique_id: "rvt-x".into(),
             signature: String::new(),
         });
-        let ops = plan(s.doc(), &state);
+        let ops = plan(s.doc(), &state, None);
         assert!(matches!(&ops[0], RevitOp::Delete { unique_id, .. } if unique_id == "rvt-x"));
     }
 
@@ -1187,7 +1195,7 @@ mod tests {
             &ExecContext::user(),
         )
         .unwrap();
-        let ops = plan(s.doc(), &RevitState::default());
+        let ops = plan(s.doc(), &RevitState::default(), None);
         assert!(ops.iter().any(|o| o.uid() == DEFAULT_LEVEL_UID));
         let RevitOp::Wall { level_uid, .. } = ops
             .iter()
@@ -1202,7 +1210,7 @@ mod tests {
     #[test]
     fn site_location_op_follows_the_project_location() {
         let mut s = house();
-        let none = plan(s.doc(), &RevitState::default());
+        let none = plan(s.doc(), &RevitState::default(), None);
         assert!(!none
             .iter()
             .any(|o| matches!(o, RevitOp::SiteLocation { .. })));
@@ -1216,7 +1224,7 @@ mod tests {
             .unwrap();
         };
         set(&mut s, 16.05);
-        let ops = plan(s.doc(), &RevitState::default());
+        let ops = plan(s.doc(), &RevitState::default(), None);
         let first = ops.first().cloned();
         let Some(RevitOp::SiteLocation {
             uid,
@@ -1247,11 +1255,11 @@ mod tests {
                 signature: signature.clone(),
             }],
         };
-        assert!(!plan(s.doc(), &state)
+        assert!(!plan(s.doc(), &state, None)
             .iter()
             .any(|o| o.uid() == SITE_LOCATION_UID));
         set(&mut s, -33.87);
-        let moved = plan(s.doc(), &state);
+        let moved = plan(s.doc(), &state, None);
         let again = moved.iter().find(|o| o.uid() == SITE_LOCATION_UID);
         assert!(again.is_some_and(|o| o.signature() != signature));
 
@@ -1261,7 +1269,7 @@ mod tests {
             &ExecContext::user(),
         )
         .unwrap();
-        assert!(!plan(s.doc(), &state)
+        assert!(!plan(s.doc(), &state, None)
             .iter()
             .any(|o| o.uid() == SITE_LOCATION_UID));
     }
@@ -1269,7 +1277,7 @@ mod tests {
     #[test]
     fn material_op_carries_thermal_and_physical_assets() {
         let mut s = house();
-        let ops = plan(s.doc(), &RevitState::default());
+        let ops = plan(s.doc(), &RevitState::default(), None);
         let mat = |ops: &[RevitOp]| {
             ops.iter()
                 .find(|o| matches!(o, RevitOp::Material { .. }))
@@ -1294,7 +1302,7 @@ mod tests {
             &ExecContext::user(),
         )
         .unwrap();
-        let after = mat(&plan(s.doc(), &RevitState::default()));
+        let after = mat(&plan(s.doc(), &RevitState::default(), None));
         let RevitOp::Material {
             thermal, physical, ..
         } = &after

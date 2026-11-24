@@ -178,7 +178,13 @@ fn deterministic(doc: &Document) -> Vec<Value> {
     let mut out = Vec::new();
     let io = |e: ferro_io::IoError| problem(e.code, e.message, None);
     let exports: [(&str, Export); 3] = [
-        ("IFC", |d| ferro_io::export_ifc(d).map(String::into_bytes)),
+        ("IFC", |d| {
+            // The session's kernel kind: design-option combinations keep
+            // their cuts (M5-5.6).
+            let k: std::sync::Arc<dyn ferro_core::algo::Kernel> =
+                std::sync::Arc::new(ferro_kernel::SolidcoreKernel::new());
+            ferro_io::export_ifc(d, Some(&k)).map(String::into_bytes)
+        }),
         ("OBJ", |d| ferro_io::export_obj(d).map(String::into_bytes)),
         ("GLB", ferro_io::export_glb),
     ];

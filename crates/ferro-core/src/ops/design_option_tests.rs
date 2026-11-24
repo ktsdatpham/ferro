@@ -85,11 +85,11 @@ fn fx() -> Fx {
 fn resolve_without_options_is_the_shared_model() {
     let mut s = session();
     boxed(&mut s, [0.0, 0.0, 0.0], 1000.0, 1000.0, 1000.0);
-    let r = resolve(s.doc(), &Combination::primary()).unwrap();
+    let r = resolve(s.doc(), &Combination::primary(), None).unwrap();
     assert_eq!(&r, s.doc());
     // Empty layers change nothing either.
     let f = fx();
-    let r = resolve(f.s.doc(), &Combination::primary()).unwrap();
+    let r = resolve(f.s.doc(), &Combination::primary(), None).unwrap();
     let shared: Vec<_> = f.s.doc().elements().collect();
     let seen: Vec<_> = r.elements().collect();
     assert_eq!(shared, seen);
@@ -149,12 +149,12 @@ fn an_option_adds_removes_and_overrides_without_touching_the_shared_model() {
         }
     }
     // Seen with A (primary): the shared model.
-    let in_a = resolve(f.s.doc(), &Combination::primary()).unwrap();
+    let in_a = resolve(f.s.doc(), &Combination::primary(), None).unwrap();
     assert!((height(&in_a, f.wall) - 3000.0).abs() < 1e-6);
     assert!(in_a.contains(f.bx));
     // Seen with B: overridden, removed, added (geometry regenerated).
     let combo = Combination { options: vec![f.b] };
-    let in_b = resolve(f.s.doc(), &combo).unwrap();
+    let in_b = resolve(f.s.doc(), &combo, None).unwrap();
     assert!((height(&in_b, f.wall) - 4500.0).abs() < 1e-6);
     let bb = in_b.get(f.wall).unwrap().bounding_box().unwrap();
     assert!((bb.max.z - 4500.0).abs() < 1e-6, "geometry follows: {bb:?}");
@@ -169,7 +169,7 @@ fn an_option_adds_removes_and_overrides_without_touching_the_shared_model() {
         "a resolved document carries no layers"
     );
     // Resolving a resolved document changes nothing.
-    assert_eq!(resolve(&in_b, &Combination::primary()).unwrap(), in_b);
+    assert_eq!(resolve(&in_b, &Combination::primary(), None).unwrap(), in_b);
 }
 
 #[test]
@@ -183,7 +183,7 @@ fn layers_given_as_changes_are_checked_against_the_shared_model() {
         json!({"option": f.b, "changes": ok}),
     );
     let combo = Combination { options: vec![f.b] };
-    let r = resolve(f.s.doc(), &combo).unwrap();
+    let r = resolve(f.s.doc(), &combo, None).unwrap();
     assert_eq!(r.get(f.wall).unwrap().name.as_deref(), Some("Tall"));
     for (bad, why) in [
         (
@@ -242,19 +242,19 @@ fn two_sets_combine_and_conflicting_layers_are_reported() {
         options: vec![d, f.b],
     };
     assert_eq!(both.chosen(f.s.doc()).unwrap(), vec![f.b, d], "set order");
-    let r = resolve(f.s.doc(), &both).unwrap();
+    let r = resolve(f.s.doc(), &both, None).unwrap();
     assert!((height(&r, f.wall) - 4000.0).abs() < 1e-6);
     let bb = r.get(f.bx).unwrap().bounding_box().unwrap();
     assert!((bb.min.y - 3000.0).abs() < 1e-6);
     // Each alone.
-    let only_d = resolve(f.s.doc(), &Combination { options: vec![d] }).unwrap();
+    let only_d = resolve(f.s.doc(), &Combination { options: vec![d] }, None).unwrap();
     assert!((height(&only_d, f.wall) - 3000.0).abs() < 1e-6);
     // Two options of one set, or a non-option, are refused.
     let twice = Combination {
         options: vec![f.a, f.b],
     };
     assert_eq!(
-        resolve(f.s.doc(), &twice).unwrap_err()[0].code,
+        resolve(f.s.doc(), &twice, None).unwrap_err()[0].code,
         "ferro.model.option_set_twice"
     );
     assert_eq!(
@@ -262,7 +262,8 @@ fn two_sets_combine_and_conflicting_layers_are_reported() {
             f.s.doc(),
             &Combination {
                 options: vec![f.wall]
-            }
+            },
+            None
         )
         .unwrap_err()[0]
             .code,
@@ -278,7 +279,7 @@ fn two_sets_combine_and_conflicting_layers_are_reported() {
     let clash = Combination {
         options: vec![f.b, c],
     };
-    let err = resolve(f.s.doc(), &clash).unwrap_err();
+    let err = resolve(f.s.doc(), &clash, None).unwrap_err();
     assert_eq!(err[0].code, "ferro.model.option_conflict");
     assert!(err[0].message.contains("/body/top"), "{}", err[0].message);
     // Editing in C while B is shown is refused too (layers would merge).
@@ -385,7 +386,7 @@ fn accept_merges_the_layer_and_archives_the_other_options() {
     assert!(!doc.has_open_design_options());
     assert!(check_design_options(doc).is_ok());
     // The set now shows nothing: the resolved document is the shared one.
-    let r = resolve(doc, &Combination::primary()).unwrap();
+    let r = resolve(doc, &Combination::primary(), None).unwrap();
     assert_eq!(r.get(f.bx).unwrap().name, None);
     // Archived / accepted options cannot be shown, edited or accepted.
     expect_code(
@@ -401,7 +402,7 @@ fn accept_merges_the_layer_and_archives_the_other_options() {
         "ferro.model.option_not_open",
     );
     assert_eq!(
-        resolve(f.s.doc(), &Combination { options: vec![f.a] }).unwrap_err()[0].code,
+        resolve(f.s.doc(), &Combination { options: vec![f.a] }, None).unwrap_err()[0].code,
         "ferro.model.option_not_open"
     );
     // Undo restores the exact document.
@@ -444,9 +445,9 @@ fn deleting_a_shared_element_an_option_overrides_is_reported_and_repairable() {
     assert_eq!(stale[0].option, Some(f.b));
     // Showing B fails with a clear code; A (primary, empty) still works.
     let combo = Combination { options: vec![f.b] };
-    let err = resolve(f.s.doc(), &combo).unwrap_err();
+    let err = resolve(f.s.doc(), &combo, None).unwrap_err();
     assert_eq!(err[0].code, "ferro.model.invalid_option_layer");
-    assert!(resolve(f.s.doc(), &Combination::primary()).is_ok());
+    assert!(resolve(f.s.doc(), &Combination::primary(), None).is_ok());
     // A later, unrelated command does not warn again.
     let o = run(&mut f.s, "set_project_name", json!({"name": "again"}));
     assert!(o.warnings.is_empty());
@@ -458,7 +459,7 @@ fn deleting_a_shared_element_an_option_overrides_is_reported_and_repairable() {
         "set_design_option",
         json!({"option": f.b, "changes": kept}),
     );
-    let r = resolve(f.s.doc(), &combo).unwrap();
+    let r = resolve(f.s.doc(), &combo, None).unwrap();
     assert!((height(&r, f.wall) - 3300.0).abs() < 1e-6);
     assert!(stale_layers(f.s.doc()).is_empty());
 }
@@ -623,7 +624,7 @@ fn edits_inside_a_group_are_one_undo_step() {
     }
     f.s.end_group();
     let combo = Combination { options: vec![f.b] };
-    let r = resolve(f.s.doc(), &combo).unwrap();
+    let r = resolve(f.s.doc(), &combo, None).unwrap();
     assert!((height(&r, f.wall) - 3300.0).abs() < 1e-6);
     f.s.undo().unwrap();
     assert_eq!(snapshot(&f.s), before);
@@ -669,16 +670,16 @@ fn an_added_opening_that_does_not_fit_fails_to_resolve() {
         json!({"wall": f.wall, "kind": "door", "position": 3000, "width": 900, "height": 2100}),
     );
     let combo = Combination { options: vec![f.b] };
-    assert!(resolve(f.s.doc(), &combo).is_ok());
+    assert!(resolve(f.s.doc(), &combo, None).is_ok());
     // The shared wall gets shorter: the option's door no longer fits.
     run(
         &mut f.s,
         "set_wall_height",
         json!({"wall": f.wall, "height": 1500}),
     );
-    let err = resolve(f.s.doc(), &combo).unwrap_err();
+    let err = resolve(f.s.doc(), &combo, None).unwrap_err();
     assert!(err[0].code.starts_with("ferro."), "{err:?}");
-    let _ = resolve_options(f.s.doc(), &[]).unwrap();
+    let _ = resolve_options(f.s.doc(), &[], None).unwrap();
 }
 
 #[test]
@@ -704,7 +705,7 @@ fn an_option_can_hold_a_relationship_row() {
         "{layer:?}"
     );
     let combo = Combination { options: vec![f.b] };
-    let r = resolve(f.s.doc(), &combo).unwrap();
+    let r = resolve(f.s.doc(), &combo, None).unwrap();
     assert_eq!(r.relationships().count(), 1);
     // Accepting moves the row into the shared model.
     expect_ok(&mut f.s, "accept_design_option", json!({"option": f.b}));

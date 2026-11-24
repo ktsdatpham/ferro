@@ -28,11 +28,20 @@
 //!   warning with the kernel's code.
 //! - **Lineage.** The kernel keeps the ids of the target's surviving faces
 //!   (`KernelResult`), so references to them survive re-cuts.
+//! - **Cache** (M5-5.7). A [`CutCache`] passed in by the caller (the
+//!   session keeps one) remembers each row's result, so a regeneration
+//!   calls the kernel only for rows whose cutter, target source body, row
+//!   or earlier rows changed. It never lives in the `Document`: results
+//!   are the same with or without it.
 
 use super::generate::GenIssue;
 use super::{Category, Document, Element, ElementBody, ElementId, Relationship, RelationshipKind};
 use crate::algo::{BooleanOp, Kernel, KernelError};
 use crate::topo::Body;
+use std::collections::hash_map::DefaultHasher;
+use std::collections::HashMap;
+use std::hash::{Hash, Hasher};
+use std::sync::Mutex;
 
 /// `true` when `e` can be the `cut` element of a cut row: walls, floors and
 /// Forms (direct geometry of any category).
@@ -127,6 +136,7 @@ pub struct CutOutcome {
 /// (`warn_unavailable = false` leaves it out, so a regeneration reports it
 /// once). A row whose cutter has no body, or whose boolean fails, is
 /// skipped with a warning carrying the kernel's code. Never panics.
+/// [`apply_cuts_cached`] without a cache.
 pub fn apply_cuts(
     kernel: Option<&dyn Kernel>,
     target: ElementId,
@@ -134,6 +144,31 @@ pub fn apply_cuts(
     rows: &[&Relationship],
     cutter_body: &dyn Fn(ElementId) -> Option<Body>,
     warn_unavailable: bool,
+) -> CutOutcome {
+    apply_cuts_cached(
+        kernel,
+        target,
+        uncut,
+        rows,
+        cutter_body,
+        warn_unavailable,
+        None,
+    )
+}
+
+/// [`apply_cuts`] through `cache` (M5-5.7): a row whose result is in the
+/// cache, for the same target source body, the same earlier rows and the
+/// same cutter body, does not call the kernel; a failed row is cached
+/// with its error, so its warning is reported again. The outcome is the
+/// same as without the cache (for a deterministic kernel).
+pub fn apply_cuts_cached(
+    kernel: Option<&dyn Kernel>,
+    target: ElementId,
+    uncut: &Body,
+    rows: &[&Relationship],
+    cutter_body: &dyn Fn(ElementId) -> Option<Body>,
+    warn_unavailable: bool,
+    cache: Option<&CutCache>,
 ) -> CutOutcome {
     let mut out = CutOutcome {
         body: uncut.clone(),
@@ -156,6 +191,8 @@ pub fn apply_cuts(
         }
         return out;
     };
+    // Key of the rows applied so far: starts from the source body.
+    let mut chain = cache.map(|_| body_key(uncut));
     for r in rows {
         let Some(&cutter) = r.elements.first() else {
             continue;
@@ -166,10 +203,30 @@ pub fn apply_cuts(
                 format!("cut {}: the cutter {cutter} has no body", r.uid),
                 target,
             ));
+            // The chain changes: a later body must not reuse this result.
+            chain = chain.map(|k| step_key(k, r, [0, 0]));
             continue;
         };
-        match kernel.boolean(BooleanOp::Difference, &out.body, &b) {
-            Ok(res) => out.body = res.body,
+        let key = chain.map(|k| step_key(k, r, body_key(&b)));
+        let cached = match (cache, key) {
+            (Some(c), Some(k)) => c.get(k),
+            _ => None,
+        };
+        let result = match cached {
+            Some(res) => res,
+            None => {
+                let res = kernel
+                    .boolean(BooleanOp::Difference, &out.body, &b)
+                    .map(|k| k.body);
+                if let (Some(c), Some(k)) = (cache, key) {
+                    c.put(k, res.clone());
+                }
+                res
+            }
+        };
+        chain = key;
+        match result {
+            Ok(body) => out.body = body,
             Err(e) => out.issues.push(GenIssue::warning(
                 e.code,
                 format!("cut {} by {cutter} is not applied: {}", r.uid, e.message),
@@ -178,6 +235,119 @@ pub fn apply_cuts(
         }
     }
     out
+}
+
+/// A 128-bit key: two independent 64-bit hashes.
+type CutKey = [u64; 2];
+
+/// Session-level cache of cut results (M5-5.7), keyed by the row's uid and
+/// phase, the cutter's body, and the body the row applies to (the target's
+/// source body and the rows before it). Pass it to
+/// `generate::regenerate_cached` / [`apply_cuts_cached`]; it is shared
+/// between transactions, previews and resolved design-option combinations
+/// of one session.
+///
+/// It lives outside the `Document` (which stays plain data and
+/// deterministic): a hit returns exactly what the kernel returned for the
+/// same inputs. Keys are 128-bit hashes of the inputs (a collision is
+/// ~2^-128 per pair). The cache holds at most [`CutCache::MAX_ENTRIES`]
+/// results and is emptied when full. Safe to share between threads; a
+/// poisoned lock is recovered, never a panic.
+#[derive(Debug, Default)]
+pub struct CutCache {
+    entries: Mutex<HashMap<CutKey, Result<Body, KernelError>>>,
+}
+
+impl CutCache {
+    /// Most results kept before the cache is emptied.
+    pub const MAX_ENTRIES: usize = 4096;
+
+    /// An empty cache.
+    pub fn new() -> CutCache {
+        CutCache::default()
+    }
+
+    /// Number of cached row results.
+    pub fn len(&self) -> usize {
+        self.lock().len()
+    }
+
+    /// `true` when nothing is cached.
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
+    /// Forget every result.
+    pub fn clear(&self) {
+        self.lock().clear();
+    }
+
+    fn lock(&self) -> std::sync::MutexGuard<'_, HashMap<CutKey, Result<Body, KernelError>>> {
+        self.entries.lock().unwrap_or_else(|p| p.into_inner())
+    }
+
+    fn get(&self, k: CutKey) -> Option<Result<Body, KernelError>> {
+        self.lock().get(&k).cloned()
+    }
+
+    fn put(&self, k: CutKey, v: Result<Body, KernelError>) {
+        let mut m = self.lock();
+        if m.len() >= Self::MAX_ENTRIES {
+            m.clear();
+        }
+        m.insert(k, v);
+    }
+}
+
+/// Feeds bytes to two hashers seeded differently (a 128-bit key).
+struct KeyWriter(DefaultHasher, DefaultHasher);
+
+impl KeyWriter {
+    fn new() -> KeyWriter {
+        let a = DefaultHasher::new();
+        let mut b = DefaultHasher::new();
+        0x9e37_79b9_7f4a_7c15_u64.hash(&mut b);
+        KeyWriter(a, b)
+    }
+    fn key(&self) -> CutKey {
+        [self.0.finish(), self.1.finish()]
+    }
+}
+
+impl std::io::Write for KeyWriter {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        self.0.write(buf);
+        self.1.write(buf);
+        Ok(buf.len())
+    }
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
+/// Key of a body: a hash of its serialised form (every id, coordinate bit
+/// and surface), so any change gives another key.
+fn body_key(b: &Body) -> CutKey {
+    let mut w = KeyWriter::new();
+    // Writing into a hasher cannot fail; on a serialiser error the key
+    // still differs from a successful one by the marker below.
+    if serde_json::to_writer(&mut w, b).is_err() {
+        std::io::Write::write(&mut w, b"!").ok();
+    }
+    w.key()
+}
+
+/// Key after applying row `r` with a cutter of key `cutter` to a body of
+/// key `prev`.
+fn step_key(prev: CutKey, r: &Relationship, cutter: CutKey) -> CutKey {
+    let mut w = KeyWriter::new();
+    for h in [&mut w.0, &mut w.1] {
+        prev.hash(h);
+        r.uid.hash(h);
+        r.phase.hash(h);
+        cutter.hash(h);
+    }
+    w.key()
 }
 
 /// The body of element `id` in a view of phase `phase` (ADR 0006 §5): its

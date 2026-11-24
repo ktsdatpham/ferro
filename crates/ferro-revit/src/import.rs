@@ -1041,7 +1041,7 @@ mod tests {
         // Ferro → Revit plan → (pretend Revit) snapshot → import into an
         // empty Ferro gives the same walls.
         let src = crate::plan::tests_support::house();
-        let ops = plan(src.doc(), &RevitState::default());
+        let ops = plan(src.doc(), &RevitState::default(), None);
         let mut snap = RevitSnapshot::default();
         for op in &ops {
             match op {

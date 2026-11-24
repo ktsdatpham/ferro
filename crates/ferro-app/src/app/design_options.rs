@@ -6,7 +6,8 @@
 //! * a document without option sets shows the shared model as before;
 //! * with option sets, the view shows a combination (primary by default):
 //!   the shared model with the chosen option layers, resolved
-//!   (`ops::design_option_commands::resolve`). Elements added by the other
+//!   (`Session::resolve`, with the session's kernel and cut cache, so cut
+//!   walls an option changes stay cut, M5-5.6). Elements added by the other
 //!   options are not shown;
 //! * while an option is edited, commands run inside it
 //!   (`Session::execute_in_option`): the shared model does not change, the
@@ -19,8 +20,8 @@ use eframe::egui::{self, Color32, RichText};
 use ferro_core::model::change::partition_applicable;
 use ferro_core::model::design_option::{stale_layers, Combination, OptionStatus};
 use ferro_core::ops::design_option_commands::{
-    resolve, resolve_options, AcceptDesignOption, CreateDesignOption, CreateOptionSet,
-    DeleteDesignOption, DeleteOptionSet, SetDesignOption,
+    AcceptDesignOption, CreateDesignOption, CreateOptionSet, DeleteDesignOption, DeleteOptionSet,
+    SetDesignOption,
 };
 use ferro_core::ops::{AnyCommand, CommandOutput, Failure, Outcome};
 use ferro_core::{Document, ElementId};
@@ -107,14 +108,14 @@ impl FerroApp {
             }
         }
         let combo = combination_of(doc, &st.picks, st.editing);
-        match resolve(doc, &combo) {
+        match self.session.resolve(&combo) {
             Ok(v) => {
                 st.view = Some(v);
                 st.error = None;
             }
             Err(f) => {
                 st.error = Some(failure_line(&f));
-                st.view = resolve_options(doc, &[]).ok();
+                st.view = self.session.resolve_options(&[]).ok();
             }
         }
         st.key = Some((doc.clone(), st.picks.clone(), st.editing));
@@ -359,14 +360,14 @@ mod tests {
         let forms = |d: &Document| d.elements().filter(|e| e.as_form().is_some()).count();
         assert_eq!(forms(s.doc()), 0, "shared model");
         let primary = combination_of(s.doc(), &[], None);
-        let seen = resolve(s.doc(), &primary).unwrap();
+        let seen = s.resolve(&primary).unwrap();
         assert_eq!(forms(&seen), 1);
         assert!(seen
             .elements()
             .filter(|e| e.as_form().is_some())
             .all(|e| e.design_option == Some(a)));
         let with_b = combination_of(s.doc(), &[], Some(b));
-        let seen = resolve(s.doc(), &with_b).unwrap();
+        let seen = s.resolve(&with_b).unwrap();
         assert!(seen
             .elements()
             .filter(|e| e.as_form().is_some())

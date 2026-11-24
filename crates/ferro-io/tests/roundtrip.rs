@@ -483,7 +483,7 @@ fn every_element_kind_is_present() {
 #[test]
 fn ifc_exports_the_primary_combination() {
     let s = house(false);
-    let ifc = export_ifc(s.doc()).expect("ifc");
+    let ifc = export_ifc(s.doc(), None).expect("ifc");
     assert!(ifc.contains("'Pavilion A'"), "primary option exported");
     assert!(!ifc.contains("Pavilion B"), "other options left out");
     assert!(!ifc.contains("South wall B"), "B's rename left out");
@@ -495,7 +495,7 @@ fn ifc_exports_the_primary_combination() {
         .expect("option B")
         .id;
     let combo = ferro_core::model::Combination { options: vec![b] };
-    let other = ferro_io::export_ifc_combination(s.doc(), &combo, None).expect("ifc");
+    let other = ferro_io::export_ifc_combination(s.doc(), &combo, None, None).expect("ifc");
     assert!(other.contains("'Pavilion B'") && !other.contains("Pavilion A"));
 }
 
@@ -549,9 +549,9 @@ fn fro_roundtrip_keeps_every_element_and_the_journal() {
 #[test]
 fn exports_are_deterministic_and_survive_a_round_trip() {
     let s = house(true);
-    let ifc = export_ifc(s.doc()).expect("ifc");
+    let ifc = export_ifc(s.doc(), None).expect("ifc");
     assert_eq!(
-        export_ifc(s.doc()).expect("ifc"),
+        export_ifc(s.doc(), None).expect("ifc"),
         ifc,
         "IFC export is not deterministic"
     );
@@ -582,9 +582,9 @@ fn exports_are_deterministic_and_survive_a_round_trip() {
 #[ignore = "bug: unnamed elements are exported with Name 'walls #<local id>', which changes when a file renumbers ids on load (M5-15.9)"]
 fn ifc_export_is_stable_across_a_round_trip() {
     let s = house(true);
-    let ifc = export_ifc(s.doc()).expect("ifc");
+    let ifc = export_ifc(s.doc(), None).expect("ifc");
     let back = document_from_json(&document_to_json(s.doc()).expect("save")).expect("load");
-    let again = export_ifc(&back).expect("ifc");
+    let again = export_ifc(&back, None).expect("ifc");
     let diff: Vec<String> = ifc
         .lines()
         .zip(again.lines())
@@ -710,4 +710,65 @@ fn cut_rows_and_cut_bodies_survive_json_and_fro() {
     // Regenerating with the same kernel changes nothing.
     let regen = generate::regenerate_with(&fro, Some(&CutterKernel));
     assert!(regen.updates.is_empty() && regen.cut_updates.is_empty());
+}
+
+#[test]
+fn ifc_of_a_combination_keeps_the_cut_of_a_wall_an_option_changes() {
+    use ferro_core::algo::Kernel;
+    use ferro_core::model::Combination;
+    let kernel: std::sync::Arc<dyn Kernel> = std::sync::Arc::new(CutterKernel);
+    let mut s = Session::new(
+        Document::new("Cut options"),
+        Box::new(SequentialIds::new(1_800_000_000_000)),
+    )
+    .with_kernel(kernel.clone());
+    let w = el(&run(
+        &mut s,
+        "create_wall",
+        json!({"start": p(0.0, 0.0, 0.0), "end": p(4000.0, 0.0, 0.0)}),
+    ));
+    let c = el(&run(
+        &mut s,
+        "create_box",
+        json!({"origin": p(1000.0, -500.0, 800.0), "width": 1000, "depth": 1000, "height": 1200}),
+    ));
+    run(
+        &mut s,
+        "create_relationship",
+        json!({"kind": "cut", "elements": [c, w]}),
+    );
+    let set = el(&run(&mut s, "create_option_set", json!({"name": "Height"})));
+    let b = ElementId(el(&run(
+        &mut s,
+        "create_design_option",
+        json!({"set": set, "name": "Tall"}),
+    )));
+    in_option(
+        &mut s,
+        b,
+        "set_wall_height",
+        json!({"wall": w, "height": 4500}),
+    );
+    let combo = Combination { options: vec![b] };
+    let with = ferro_io::export_ifc_combination(s.doc(), &combo, None, Some(&kernel)).expect("ifc");
+    let without = ferro_io::export_ifc_combination(s.doc(), &combo, None, None).expect("ifc");
+    // The opening is written, and the wall body is the cut one (here the
+    // stand-in kernel's result), not the uncut 4.5 m wall.
+    assert!(with.contains("IFCOPENINGELEMENT(") && with.contains("IFCRELVOIDSELEMENT("));
+    assert_ne!(with, without, "without a kernel the wall body is uncut");
+    let seen = s.resolve(&combo).expect("resolve");
+    let wall = seen
+        .get(ElementId(w))
+        .and_then(|e| e.geometry())
+        .expect("wall");
+    let cutter = seen
+        .get(ElementId(c))
+        .and_then(|e| e.geometry())
+        .expect("box");
+    assert_eq!(wall, cutter, "the stand-in kernel's difference");
+    // The app path (export of the resolved view) writes the same file.
+    assert_eq!(
+        ferro_io::export_ifc(&seen, Some(&kernel)).expect("ifc"),
+        with
+    );
 }

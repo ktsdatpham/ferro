@@ -188,7 +188,9 @@ impl Server {
                 };
                 let doc = self.session.doc();
                 let bytes = match name {
-                    "export_ifc" => ferro_io::export_ifc(doc).map(String::into_bytes),
+                    "export_ifc" => {
+                        ferro_io::export_ifc(doc, self.session.kernel()).map(String::into_bytes)
+                    }
                     "export_obj" => ferro_io::export_obj(doc).map(String::into_bytes),
                     _ => ferro_io::export_glb(doc),
                 };

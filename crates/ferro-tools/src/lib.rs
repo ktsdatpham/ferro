@@ -891,12 +891,12 @@ pub fn call(
             let category = args.get("category").and_then(Value::as_str);
             match combo {
                 None => Ok(summary(session.doc(), category)),
-                Some(_) => design_option::seen(session.doc(), &combo)
+                Some(_) => design_option::seen(session, &combo)
                     .map(|d| summary(&d, category)),
             }
         }
-        "list_design_options" => Ok(design_option::list_design_options(session.doc())),
-        "diff_documents" => design_option::diff_documents(session.doc(), args),
+        "list_design_options" => Ok(design_option::list_design_options(session)),
+        "diff_documents" => design_option::diff_documents(session, args),
         "get_element" => match args.get("element").and_then(Value::as_u64) {
             Some(id) => detail(session.doc(), ElementId(id)).map_err(|m| {
                 json!({"error": m, "failures": [{"severity": "error", "code": "ferro.model.not_found", "message": m, "elements": [id]}]})
@@ -930,7 +930,7 @@ pub fn call(
                 _ => Default::default(),
             };
             Ok(
-                json!({"version": session.doc().version(), "ops": ferro_revit::plan(session.doc(), &state)}),
+                json!({"version": session.doc().version(), "ops": ferro_revit::plan(session.doc(), &state, session.kernel())}),
             )
         }
         "revit_import" => {

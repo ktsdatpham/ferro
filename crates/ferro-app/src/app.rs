@@ -801,7 +801,7 @@ impl FerroApp {
         else {
             return;
         };
-        let r = ferro_io::export_ifc(self.doc())
+        let r = ferro_io::export_ifc(self.doc(), self.session.kernel())
             .map_err(|e| e.to_string())
             .and_then(|t| std::fs::write(&p, t).map_err(|e| e.to_string()));
         match r {

@@ -475,3 +475,216 @@ fn a_cut_body_survives_a_body_kind_check() {
     };
     assert!(form.cut_body.is_none());
 }
+
+// ------------------------------------------------ M5-5.6 design options
+
+/// A cut wall, an option set and an option B whose layer raises the wall
+/// to 4500 mm (the clipper still covers its top from 2000 mm).
+fn option_on_cut_wall(s: &mut Session) -> (ElementId, ElementId) {
+    use crate::model::Combination;
+    let w = wall(s, 0.0);
+    let c = clipper(s, 0.0, 2000.0);
+    cut_row(s, c, w);
+    let set = id(&run(s, "create_option_set", json!({"name": "Height"})));
+    let b = id(&run(
+        s,
+        "create_design_option",
+        json!({"set": set, "name": "B"}),
+    ));
+    let cmd = AnyCommand::from_tool("set_wall_height", &json!({"wall": w, "height": 4500}))
+        .expect("tool");
+    s.execute_in_option(b, &Combination::primary(), cmd, &ExecContext::user())
+        .expect("edit in option");
+    (w, b)
+}
+
+#[test]
+fn a_resolved_option_keeps_the_cut_of_a_wall_it_changes() {
+    use super::design_option_commands::resolve;
+    use crate::model::Combination;
+    let mut s = clip_session();
+    let (w, b) = option_on_cut_wall(&mut s);
+    let combo = Combination { options: vec![b] };
+    let clipped = 4000.0 * 200.0 * 2000.0;
+    // Through the session (kernel + cut cache) and with the kernel passed.
+    let seen = s.resolve(&combo).expect("resolve");
+    let bb = seen.get(w).and_then(|e| e.bounding_box()).expect("bbox");
+    assert!((bb.max.z - 2000.0).abs() < 1e-6, "still clipped: {bb:?}");
+    assert!(close(
+        seen.get(w).unwrap().geometry().unwrap().volume(),
+        clipped
+    ));
+    let again = resolve(s.doc(), &combo, s.kernel()).expect("resolve");
+    assert_eq!(again, seen);
+    // The primary combination keeps the shared, cut wall.
+    let primary = s.resolve(&Combination::primary()).expect("resolve");
+    assert!(close(
+        primary.get(w).unwrap().geometry().unwrap().volume(),
+        clipped
+    ));
+    // Without a kernel the regenerated wall falls back to its uncut body
+    // (the bug M5-5.6 fixed by passing the kernel).
+    let bare = resolve(s.doc(), &combo, None).expect("resolve");
+    let v = bare.get(w).unwrap().geometry().unwrap().volume();
+    assert!(close(v, 4000.0 * 200.0 * 4500.0), "{v}");
+}
+
+#[test]
+fn editing_a_cut_wall_in_an_option_keeps_the_cut_in_the_edit() {
+    use crate::model::Combination;
+    let mut s = clip_session();
+    let (w, b) = option_on_cut_wall(&mut s);
+    // A second edit in the option runs on a base resolved with the kernel:
+    // no `ferro.kernel.unavailable`, and the wall stays cut.
+    let cmd = AnyCommand::from_tool("set_wall_height", &json!({"wall": w, "height": 5000}))
+        .expect("tool");
+    let o = s
+        .execute_in_option(b, &Combination::primary(), cmd, &ExecContext::user())
+        .expect("edit");
+    assert!(
+        o.warnings
+            .iter()
+            .all(|f| f.code != "ferro.kernel.unavailable"),
+        "{:?}",
+        o.warnings
+    );
+    let seen = s.resolve(&Combination { options: vec![b] }).unwrap();
+    assert!(close(
+        seen.get(w).unwrap().geometry().unwrap().volume(),
+        4000.0 * 200.0 * 2000.0
+    ));
+}
+
+// ------------------------------------------------------ M5-5.7 cut cache
+
+/// [`ClipKernel`] counting its calls.
+struct CountingKernel(std::sync::atomic::AtomicUsize);
+
+impl CountingKernel {
+    fn calls(&self) -> usize {
+        self.0.load(std::sync::atomic::Ordering::SeqCst)
+    }
+}
+
+impl Kernel for CountingKernel {
+    fn name(&self) -> &'static str {
+        "counting-test"
+    }
+    fn boolean(&self, op: BooleanOp, a: &Body, b: &Body) -> Result<KernelResult, KernelError> {
+        self.0.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        ClipKernel.boolean(op, a, b)
+    }
+}
+
+/// 50 walls, each cut by its own clipper (50 rows), and one wall without
+/// cuts.
+fn fifty_cuts() -> (Session, Arc<CountingKernel>, Vec<ElementId>, ElementId) {
+    let k = Arc::new(CountingKernel(Default::default()));
+    let mut s = session().with_kernel(k.clone());
+    let mut cutters = Vec::new();
+    for i in 0..50 {
+        let y = i as f64 * 2000.0;
+        let w = wall(&mut s, y);
+        let c = clipper(&mut s, y, 2000.0);
+        cut_row(&mut s, c, w);
+        cutters.push(c);
+    }
+    let free = wall(&mut s, -5000.0);
+    (s, k, cutters, free)
+}
+
+#[test]
+fn the_cut_cache_calls_the_kernel_only_for_changed_rows() {
+    let (mut s, k, cutters, free) = fifty_cuts();
+    assert_eq!(s.doc().relationships().count(), 50);
+    // Each row was computed once, when it was made.
+    assert_eq!(k.calls(), 50);
+    assert!(s.cut_cache().len() >= 50);
+    // An unrelated wall edit regenerates every wall: no kernel call.
+    let before = k.calls();
+    run(
+        &mut s,
+        "set_wall_height",
+        json!({"wall": free, "height": 3500}),
+    );
+    assert_eq!(k.calls() - before, 0, "unrelated change");
+    // Moving one cutter recomputes exactly its row.
+    let before = k.calls();
+    run(
+        &mut s,
+        "move_elements",
+        json!({"elements": [cutters[7]], "vector": p(0.0, 0.0, -500.0)}),
+    );
+    assert_eq!(k.calls() - before, 1, "one cutter, one row");
+    // Undo and redo restore stored documents: no regeneration at all.
+    let before = k.calls();
+    s.undo();
+    s.redo();
+    assert_eq!(k.calls() - before, 0);
+    // Moving it back hits the cache.
+    let before = k.calls();
+    run(
+        &mut s,
+        "move_elements",
+        json!({"elements": [cutters[7]], "vector": p(0.0, 0.0, 500.0)}),
+    );
+    assert_eq!(k.calls() - before, 0, "seen before");
+    // The stored geometry equals a regeneration without any cache.
+    let fresh = crate::model::generate::regenerate_with(s.doc(), Some(&ClipKernel));
+    assert!(fresh.updates.is_empty() && fresh.cut_updates.is_empty());
+    assert!(fresh.cut_issues.is_empty());
+}
+
+#[test]
+fn cached_and_uncached_regeneration_agree_with_failures_and_order() {
+    use crate::model::cut::CutCache;
+    use crate::model::generate::{regenerate_cached, regenerate_with};
+    let mut s = clip_session();
+    let w = wall(&mut s, 0.0);
+    // Two rows on one wall (order matters), then a failing row (a cutter
+    // that is not a top clip: `ferro.kernel.unsupported`).
+    let hi = clipper(&mut s, 0.0, 2500.0);
+    let lo = clipper(&mut s, 0.0, 2000.0);
+    let bad = boxed(&mut s, [1000.0, -500.0, 500.0], 500.0, 1000.0, 500.0);
+    cut_row(&mut s, hi, w);
+    cut_row(&mut s, lo, w);
+    cut_row(&mut s, bad, w);
+    let doc = s.doc().clone();
+    let k = CountingKernel(Default::default());
+    let cache = CutCache::new();
+    let plain = regenerate_with(&doc, Some(&k));
+    let first = regenerate_cached(&doc, Some(&k), Some(&cache));
+    let calls = k.calls();
+    let second = regenerate_cached(&doc, Some(&k), Some(&cache));
+    assert_eq!(k.calls(), calls, "every row cached, failures too");
+    for r in [&first, &second] {
+        assert_eq!(r.updates, plain.updates);
+        assert_eq!(r.cut_updates, plain.cut_updates);
+        assert_eq!(r.cut_issues, plain.cut_issues);
+    }
+    assert_eq!(plain.cut_issues.len(), 1);
+    assert_eq!(plain.cut_issues[0].code, KernelError::UNSUPPORTED);
+    // A changed earlier row recomputes it and the rows after it.
+    let mut moved = doc.clone();
+    let mut e = moved.get(hi).unwrap().clone();
+    if let ElementBody::Form(f) = &mut e.body {
+        f.body.transform(&crate::math::Transform::translation(
+            crate::math::Vec3::new(0.0, 0.0, 100.0),
+        ));
+    }
+    moved.put(e);
+    let calls = k.calls();
+    let r = regenerate_cached(&moved, Some(&k), Some(&cache));
+    assert_eq!(k.calls() - calls, 3, "the moved row and the two after it");
+    assert_eq!(
+        r.updates,
+        regenerate_with(&moved, Some(&ClipKernel)).updates
+    );
+    // Without a kernel nothing is cut (one warning), cache or not.
+    let none = regenerate_cached(&doc, None, Some(&cache));
+    assert_eq!(none.cut_issues.len(), 1);
+    assert_eq!(none.cut_issues[0].code, "ferro.kernel.unavailable");
+    assert!(cache.len() <= CutCache::MAX_ENTRIES);
+    cache.clear();
+    assert!(cache.is_empty());
+}

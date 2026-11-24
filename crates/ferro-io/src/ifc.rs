@@ -29,7 +29,7 @@
 //! keeps the same ids.
 
 use crate::IoError;
-use ferro_core::algo::body_mesh;
+use ferro_core::algo::{body_mesh, Kernel};
 use ferro_core::model::bim::{CompoundStructure, OpeningKind};
 use ferro_core::model::generate;
 use ferro_core::model::structure_quantities::StructureQuantities;
@@ -38,6 +38,7 @@ use ferro_core::model::{
 };
 use std::collections::HashMap;
 use std::fmt::Write;
+use std::sync::Arc;
 
 const IFC_B64: &[u8; 64] = b"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz_$";
 
@@ -370,12 +371,17 @@ fn material_psets(w: &mut Writer, mat: usize, m: &ferro_core::model::bim::Materi
 /// options, last phase). A `cut` row on a wall or slab becomes an
 /// `IfcOpeningElement` (the cutter's body) with an `IfcRelVoidsElement`;
 /// voids (Forms that only cut) are not exported as products (M5-5.3).
-pub fn export_ifc(doc: &Document) -> Result<String, IoError> {
-    export_ifc_phase(doc, None)
+///
+/// `kernel` (the session's) regenerates the primary combination when the
+/// document has design options, so cuts on elements an option layer
+/// changes stay applied (M5-5.6); without one they are written uncut.
+pub fn export_ifc(doc: &Document, kernel: Option<&Arc<dyn Kernel>>) -> Result<String, IoError> {
+    export_ifc_phase(doc, None, kernel)
 }
 
 /// IFC4 export of the document as seen in a design-option `combination`
-/// (the primary one by default) and `phase`.
+/// (the primary one by default) and `phase`, regenerated with `kernel`
+/// (see [`export_ifc`]).
 ///
 /// Fails with `ferro.io.design_option` when the combination cannot be
 /// shown (conflicting or stale option layers, see
@@ -384,29 +390,42 @@ pub fn export_ifc_combination(
     doc: &Document,
     combination: &ferro_core::model::Combination,
     phase: Option<ElementId>,
+    kernel: Option<&Arc<dyn Kernel>>,
 ) -> Result<String, IoError> {
-    let seen = ferro_core::ops::design_option_commands::resolve(doc, combination).map_err(|f| {
-        IoError::new(
-            "ferro.io.design_option",
-            f.iter()
-                .map(|x| format!("{} ({})", x.message, x.code))
-                .collect::<Vec<_>>()
-                .join("; "),
-        )
-    })?;
+    let seen = ferro_core::ops::design_option_commands::resolve(doc, combination, kernel).map_err(
+        |f| {
+            IoError::new(
+                "ferro.io.design_option",
+                f.iter()
+                    .map(|x| format!("{} ({})", x.message, x.code))
+                    .collect::<Vec<_>>()
+                    .join("; "),
+            )
+        },
+    )?;
     export_resolved(&seen, phase)
 }
 
 /// IFC4 export of the document as it is in `phase` (`None` = the last
-/// phase; ignored when the document has no phases), primary combination.
-/// See the module docs for how phases are written.
+/// phase; ignored when the document has no phases), primary combination
+/// regenerated with `kernel` (see [`export_ifc`]). See the module docs for
+/// how phases are written.
 ///
 /// Fails with `ferro.io.design_option` (see [`export_ifc_combination`]).
-pub fn export_ifc_phase(doc: &Document, phase: Option<ElementId>) -> Result<String, IoError> {
+pub fn export_ifc_phase(
+    doc: &Document,
+    phase: Option<ElementId>,
+    kernel: Option<&Arc<dyn Kernel>>,
+) -> Result<String, IoError> {
     if doc.option_sets().is_empty() {
         return export_resolved(doc, phase);
     }
-    export_ifc_combination(doc, &ferro_core::model::Combination::primary(), phase)
+    export_ifc_combination(
+        doc,
+        &ferro_core::model::Combination::primary(),
+        phase,
+        kernel,
+    )
 }
 
 /// Export a document whose design options are already resolved.
@@ -1072,7 +1091,7 @@ mod tests {
 
     #[test]
     fn views_are_not_exported() {
-        let plain = export_ifc(house().doc()).unwrap();
+        let plain = export_ifc(house().doc(), None).unwrap();
         let mut s = house();
         s.execute(
             AnyCommand::from_tool(
@@ -1083,14 +1102,14 @@ mod tests {
             &ExecContext::user(),
         )
         .unwrap();
-        let with_view = export_ifc(s.doc()).unwrap();
+        let with_view = export_ifc(s.doc(), None).unwrap();
         assert!(!with_view.contains("ViewOnly"));
         assert_eq!(with_view, plain, "a view changes nothing in IFC");
     }
 
     #[test]
     fn renovation_status_is_written_for_the_export_phase() {
-        let plain = export_ifc(house().doc()).unwrap();
+        let plain = export_ifc(house().doc(), None).unwrap();
         assert!(!plain.contains("'Status'"), "no phases, no status");
         let mut s = house();
         for (els, st) in [
@@ -1109,7 +1128,7 @@ mod tests {
             .unwrap();
         }
         let doc = s.doc();
-        let ifc = export_ifc(doc).unwrap();
+        let ifc = export_ifc(doc, None).unwrap();
         for v in ["DEMOLISH", "NEW", "EXISTING"] {
             assert!(
                 ifc.contains(&format!(
@@ -1124,12 +1143,12 @@ mod tests {
         let phases: Vec<ElementId> = doc.phases().iter().map(|p| p.id).collect();
         let new_wall = ifc_guid(doc.get(ElementId(6)).unwrap().uid.0);
         assert!(ifc.contains(&new_wall));
-        let early = export_ifc_phase(doc, Some(phases[0])).unwrap();
+        let early = export_ifc_phase(doc, Some(phases[0]), None).unwrap();
         assert!(!early.contains(&new_wall));
         assert!(!early.contains("'DEMOLISH'"));
-        assert_eq!(export_ifc_phase(doc, Some(phases[1])).unwrap(), ifc);
+        assert_eq!(export_ifc_phase(doc, Some(phases[1]), None).unwrap(), ifc);
         // Deterministic.
-        assert_eq!(export_ifc(doc).unwrap(), ifc);
+        assert_eq!(export_ifc(doc, None).unwrap(), ifc);
     }
 
     #[test]
@@ -1164,7 +1183,7 @@ mod tests {
                 .unwrap_or("")
                 .to_string()
         };
-        let none = export_ifc(s.doc()).unwrap();
+        let none = export_ifc(s.doc(), None).unwrap();
         assert!(site_line(&none).ends_with(",$,$,.ELEMENT.,$,$,$,$,$);"));
         for (lat, lon, want) in [
             (
@@ -1186,15 +1205,15 @@ mod tests {
             )
             .unwrap();
             s.execute(cmd, &ExecContext::user()).unwrap();
-            let ifc = export_ifc(s.doc()).unwrap();
+            let ifc = export_ifc(s.doc(), None).unwrap();
             assert!(site_line(&ifc).ends_with(want), "{}", site_line(&ifc));
-            assert_eq!(ifc, export_ifc(s.doc()).unwrap(), "deterministic");
+            assert_eq!(ifc, export_ifc(s.doc(), None).unwrap(), "deterministic");
         }
     }
 
     #[test]
     fn cut_rows_on_walls_become_openings_and_voids_are_not_products() {
-        let plain = export_ifc(house().doc()).unwrap();
+        let plain = export_ifc(house().doc(), None).unwrap();
         let mut s = house();
         let wall = s
             .doc()
@@ -1233,7 +1252,7 @@ mod tests {
             )
             .unwrap_or_else(|f| panic!("{name}: {f:?}"));
         }
-        let ifc = export_ifc(s.doc()).unwrap();
+        let ifc = export_ifc(s.doc(), None).unwrap();
         let count = |t: &str, x: &str| t.matches(x).count();
         assert_eq!(
             count(&ifc, "=IFCOPENINGELEMENT("),
@@ -1251,7 +1270,7 @@ mod tests {
         );
         let row = s.doc().relationships().next().unwrap().uid;
         assert!(ifc.contains(&format!("IFCOPENINGELEMENT('{}'", ifc_guid(row.0))));
-        assert_eq!(ifc, export_ifc(s.doc()).unwrap(), "deterministic");
+        assert_eq!(ifc, export_ifc(s.doc(), None).unwrap(), "deterministic");
     }
 
     #[test]
@@ -1266,7 +1285,7 @@ mod tests {
     #[test]
     fn house_exports_spatial_structure_and_elements() {
         let s = house();
-        let ifc = export_ifc(s.doc()).unwrap();
+        let ifc = export_ifc(s.doc(), None).unwrap();
         assert!(ifc.starts_with("ISO-10303-21;"));
         assert!(ifc.contains("FILE_SCHEMA(('IFC4'))"));
         assert_eq!(ifc.matches("=IFCBUILDINGSTOREY(").count(), 2);
@@ -1282,7 +1301,7 @@ mod tests {
             std::fs::write(path, &ifc).unwrap();
         }
         // Re-export is identical (deterministic ids).
-        assert_eq!(ifc, export_ifc(s.doc()).unwrap());
+        assert_eq!(ifc, export_ifc(s.doc(), None).unwrap());
         // Every reference points at an existing entity.
         let n = ifc.matches("\n#").count();
         for cap in ifc.split('#').skip(1) {
@@ -1296,7 +1315,7 @@ mod tests {
     #[test]
     fn material_data_becomes_property_sets() {
         let s = house();
-        let plain = export_ifc(s.doc()).unwrap();
+        let plain = export_ifc(s.doc(), None).unwrap();
         assert!(
             !plain.contains("IFCMATERIALPROPERTIES"),
             "no data, no psets"
@@ -1317,7 +1336,7 @@ mod tests {
             &ExecContext::user(),
         )
         .unwrap();
-        let ifc = export_ifc(s.doc()).unwrap();
+        let ifc = export_ifc(s.doc(), None).unwrap();
         for needle in [
             "IFCMATERIALPROPERTIES('Pset_MaterialCommon'",
             "IFCMATERIALPROPERTIES('Pset_MaterialThermal'",
@@ -1364,7 +1383,7 @@ mod tests {
             )
             .unwrap();
         }
-        let ifc = export_ifc(s.doc()).unwrap();
+        let ifc = export_ifc(s.doc(), None).unwrap();
         // U = 1 / (0.13 + 0.2/0.77 + 0.04) = 2.3172...
         let at = ifc
             .find("IFCTHERMALTRANSMITTANCEMEASURE(")

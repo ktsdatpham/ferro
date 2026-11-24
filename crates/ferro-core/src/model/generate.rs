@@ -965,8 +965,21 @@ pub fn regenerate(doc: &Document) -> Regenerated {
 /// apply the `cut` relationship rows through `kernel` to walls, floors and
 /// Forms ([`cut`], M5-5.3). Only elements whose geometry (or a Form's
 /// `cut_body`) differs from the stored one are returned. Cut problems are
-/// warnings in `cut_issues` and never errors.
+/// warnings in `cut_issues` and never errors. [`regenerate_cached`]
+/// without a cache.
 pub fn regenerate_with(doc: &Document, kernel: Option<&dyn Kernel>) -> Regenerated {
+    regenerate_cached(doc, kernel, None)
+}
+
+/// [`regenerate_with`] through a [`cut::CutCache`] (M5-5.7): `cut` rows
+/// whose cutter body, target source body, row and earlier rows are
+/// unchanged since a previous regeneration with the same cache do not
+/// call the kernel. The result is the same as without the cache.
+pub fn regenerate_cached(
+    doc: &Document,
+    kernel: Option<&dyn Kernel>,
+    cache: Option<&cut::CutCache>,
+) -> Regenerated {
     let (bodies, issues) = generate_all(doc);
     let mut out = Regenerated {
         issues,
@@ -985,7 +998,7 @@ pub fn regenerate_with(doc: &Document, kernel: Option<&dyn Kernel>) -> Regenerat
         if rows.is_empty() {
             return None;
         }
-        let o = cut::apply_cuts(kernel, id, uncut, &rows, &cutter_body, warn);
+        let o = cut::apply_cuts_cached(kernel, id, uncut, &rows, &cutter_body, warn, cache);
         if kernel.is_none() && !o.issues.is_empty() {
             warn = false;
         }
