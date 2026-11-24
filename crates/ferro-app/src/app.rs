@@ -29,8 +29,10 @@ use std::sync::mpsc::Receiver;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
+mod account;
 mod design_options;
 mod joins;
+mod marketplace;
 mod phases;
 mod pins;
 mod plugins;
@@ -209,6 +211,10 @@ pub struct FerroApp {
     /// Design-option combination shown and option edited (M5-23.9; view
     /// state, not saved).
     options: design_options::DesignOptionsState,
+    /// Services: account, licences (ADR 0010).
+    account: account::AccountState,
+    /// The Marketplace window (ADR 0010).
+    market: marketplace::MarketState,
 }
 
 fn now_ms() -> u64 {
@@ -296,6 +302,8 @@ impl FerroApp {
             phasing: Default::default(),
             views: Default::default(),
             options: Default::default(),
+            account: account::AccountState::load_from(ferro_services::ServiceConfig::load()),
+            market: Default::default(),
         };
         if let Some(p) = open {
             app.open_path(p);
@@ -1374,6 +1382,8 @@ impl FerroApp {
                 if ui.button("Project settings…").clicked() {
                     self.project_settings.get_or_insert_with(Default::default);
                 }
+                ui.separator();
+                self.account_menu(ui);
                 ui.separator();
                 if ui.button("Quit").clicked() {
                     ui.ctx().send_viewport_cmd(egui::ViewportCommand::Close);
@@ -3271,6 +3281,8 @@ impl FerroApp {
     fn windows(&mut self, ctx: &egui::Context) {
         self.project_settings_window(ctx);
         self.plugins_windows(ctx);
+        self.account_window(ctx);
+        self.marketplace_window(ctx);
         egui::Window::new("About Ferro").open(&mut self.show_about).resizable(false).show(ctx, |ui| {
             ui.heading(format!("Ferro {}", env!("CARGO_PKG_VERSION")));
             ui.label("Open-source, AI-native 3D design tool for architects.");
@@ -3319,6 +3331,7 @@ impl eframe::App for FerroApp {
         self.process_agent_calls();
         self.poll_python(&ctx);
         self.poll_plugins(&ctx);
+        self.poll_services(&ctx);
         self.sync_view();
         self.poll_chat();
         self.shortcuts(&ctx);

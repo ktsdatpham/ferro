@@ -1,0 +1,26 @@
+[package]
+name = "ferro-services"
+description = "Client of the open Ferro services contract (ADR 0010): configuration, account sign-in, licence tokens, marketplace; plus a local mock server."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "ferro-services-mock"
+path = "src/bin/ferro-services-mock.rs"
+
+[dependencies]
+ferro-tools = { path = "../ferro-tools" }
+serde.workspace = true
+serde_json.workspace = true
+# Blocking HTTP with rustls (no OpenSSL); the app already uses it.
+ureq = { version = "3", features = ["json"] }
+# Licence tokens: Ed25519 signatures; plugin downloads: SHA-256.
+ed25519-dalek = { version = "2", default-features = false, features = ["std", "zeroize"] }
+sha2 = "0.10"
+uuid = { version = "1", features = ["v4"] }
+
+[dev-dependencies]
+ferro-core = { path = "../ferro-core" }
+ferro-mcp = { path = "../ferro-mcp" }

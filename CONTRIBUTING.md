@@ -41,7 +41,17 @@ CI runs those same checks on Windows, macOS and Linux.
 3. If the app needs a tool for it, add a state in `crates/ferro-app/src/tools.rs`
    that previews and commits that command.
 
-## License
+## License and CLA
 
 Ferro is licensed under MPL-2.0. By contributing you agree your work is licensed under MPL-2.0 too.
 Sign off every commit (`git commit -s`) to certify the [Developer Certificate of Origin](https://developercertificate.org/).
+
+Outside contributions also need the [Contributor License Agreement](docs/legal/CLA.md)
+(ADR 0010): add the CLA line to your first pull request's description; the `CLA`
+check verifies it. An AI agent opening a pull request for you adds the line in your
+name. The name "Ferro" and its logo follow [docs/legal/TRADEMARK.md](docs/legal/TRADEMARK.md).
+
+Service code (accounts, licences, marketplace, payments) and every secret live in a
+separate closed repository; this one holds only the open clients and the contract in
+[docs/services/](docs/services/README.md). The lint refuses private keys and payment
+secrets.

@@ -72,6 +72,14 @@ impl PluginState {
         self.slots.get(slot as usize)
     }
 
+    /// The manifest of the installed (valid) plugin with this id, enabled
+    /// or not.
+    pub fn installed(&self, id: &str) -> Option<&plugins::PluginManifest> {
+        self.list
+            .iter()
+            .find_map(|p| p.manifest.as_ref().ok().filter(|m| m.id == id))
+    }
+
     /// Commands of the active plugins (palette entries), with their slots.
     pub fn targets(&self) -> impl Iterator<Item = (Target, &Slot)> {
         self.slots
@@ -254,6 +262,24 @@ impl FerroApp {
             );
             return;
         };
+        // A paid plugin without its entitlement stays loaded, but its
+        // commands do not run (ADR 0010): say so and open its listing.
+        let entitlements = &self.account.entitlements;
+        if let Err(body) = plugins::check_entitlement(manifest, |e| entitlements.has(e)) {
+            let failure = &body["failures"][0];
+            let message = failure["message"]
+                .as_str()
+                .unwrap_or("not licensed")
+                .to_string();
+            let id = failure["plugin"].as_str().unwrap_or(plugin_id).to_string();
+            crate::report::record(format!(
+                "plugin command refused {}",
+                plugins::LICENSE_MISSING
+            ));
+            self.say(format!("{}: {message}", plugins::LICENSE_MISSING), true);
+            self.open_listing(&id);
+            return;
+        }
         let Some(port) = self.link.port() else {
             self.say("Ferro Link is not listening, so a plugin cannot run", true);
             return;
@@ -412,6 +438,7 @@ impl FerroApp {
             for p in &self.plugins.list {
                 match (&p.manifest, p.enabled) {
                     (Ok(m), true) => {
+                        let locked = self.plugin_locked(&m.id);
                         ui.menu_button(&m.name, |ui| {
                             for c in &m.commands {
                                 let slot = self
@@ -423,8 +450,13 @@ impl FerroApp {
                                     .and_then(|i| u16::try_from(i).ok())
                                     .map(|i| self.keymap.label_for(Target::Plugin(i)))
                                     .unwrap_or_default();
-                                let b = egui::Button::new(&c.label)
-                                    .right_text(RichText::new(key).weak());
+                                let label = if locked {
+                                    format!("{} (Buy)", c.label)
+                                } else {
+                                    c.label.clone()
+                                };
+                                let b =
+                                    egui::Button::new(label).right_text(RichText::new(key).weak());
                                 if ui.add(b).clicked() {
                                     run = Some((m.id.clone(), c.id.clone()));
                                     ui.close();
@@ -444,6 +476,10 @@ impl FerroApp {
             }
             if ui.button("New plugin…").clicked() {
                 self.plugins.new_name = Some(String::new());
+                ui.close();
+            }
+            if ui.button("Marketplace…").clicked() {
+                self.market.show_window = true;
                 ui.close();
             }
             if ui.button("Install from file…").clicked() {
@@ -484,6 +520,9 @@ impl FerroApp {
             .targets()
             .filter(|(_, s)| s.group == PluginGroup::Panel)
             .filter_map(|(t, s)| match t {
+                Target::Plugin(i) if self.plugin_locked(&s.plugin) => {
+                    Some((i, format!("{} (Buy)", s.label)))
+                }
                 Target::Plugin(i) => Some((i, s.label.clone())),
                 _ => None,
             })

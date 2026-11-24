@@ -158,11 +158,13 @@ pub fn issue_url(title: &str, body: &str) -> String {
     format!("{ISSUES_URL}?title={}&body={}", encode(title), encode(&b))
 }
 
-/// Open a URL in the user's browser.
+/// Open a URL in the user's browser. No shell parses the URL (on Windows
+/// it goes to `rundll32 url.dll,FileProtocolHandler`, not `cmd /C start`,
+/// so `&` or `|` in a URL from a server cannot run commands).
 pub fn open_url(url: &str) -> Result<(), String> {
     let r = if cfg!(target_os = "windows") {
-        std::process::Command::new("cmd")
-            .args(["/C", "start", "", url])
+        std::process::Command::new("rundll32")
+            .args(["url.dll,FileProtocolHandler", url])
             .spawn()
     } else if cfg!(target_os = "macos") {
         std::process::Command::new("open").arg(url).spawn()

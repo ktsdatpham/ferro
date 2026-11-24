@@ -45,7 +45,9 @@ a built-in Ferro feature.
 
 - **Format.** `~/.ferro/plugins/<folder>/plugin.json` (`$FERRO_HOME/plugins`
   when set): `id`, `name`, `version`, `author`, optional `description`, and
-  `commands: [{id, label, key?, group?, run, timeout_s?}]`. `run` is
+  `commands: [{id, label, key?, group?, run, timeout_s?}]`; since ADR 0010
+  also optional `publisher`, `price` and `entitlement` (M6-20.5: a paid
+  plugin loads, its commands need the entitlement). `run` is
   `module:function` (called with `doc` when it takes a parameter; its
   return value is the run's `result`) or a `.py` file in the folder (run
   like a `run_python` script). `key` is a two-letter code; `group` is

@@ -25,6 +25,13 @@
 //! }
 //! ```
 //!
+//! Marketplace fields (ADR 0010, all optional): `"publisher": "acme"`,
+//! `"price": {"kind": "one_time", "amount": 490000}` (đồng) and
+//! `"entitlement": "plugin:acme-stairs"`. A plugin with a price above 0 or
+//! an entitlement still loads and lists its commands, but
+//! [`check_entitlement`] refuses to run them without the entitlement
+//! (`ferro.license.missing`). Free and locally made plugins need none.
+//!
 //! A command's `run` is `module:function` (the function is called with
 //! `doc` when it takes a parameter) or a `.py` file in the plugin folder
 //! (run like a `run_python` script, with `doc`, `tools` and `ferro`
@@ -159,6 +166,43 @@ pub struct PluginManifest {
     pub description: String,
     /// What it adds; at least one.
     pub commands: Vec<PluginCommand>,
+    /// Marketplace publisher id (optional, ADR 0010).
+    pub publisher: Option<String>,
+    /// Marketplace price (optional, ADR 0010), the contract's object:
+    /// `{"kind": "free"}`, `{"kind": "one_time", "amount": 490000}` or
+    /// `{"kind": "subscription", "amount": 99000, "period": "month"}`
+    /// (đồng). Validated by [`Self::parse`].
+    pub price: Option<Value>,
+    /// Entitlement that unlocks the plugin's commands (optional, ADR
+    /// 0010), e.g. `plugin:acme-stairs`.
+    pub entitlement: Option<String>,
+}
+
+/// Failure code of a paid plugin's command run without its entitlement
+/// (contract §7).
+pub const LICENSE_MISSING: &str = "ferro.license.missing";
+
+fn valid_entitlement(s: &str) -> bool {
+    !s.is_empty()
+        && s.len() <= 128
+        && s.chars().all(|c| {
+            c.is_ascii_lowercase() || c.is_ascii_digit() || matches!(c, '.' | ':' | '_' | '-')
+        })
+}
+
+/// Check a manifest `price` object; the problem otherwise.
+fn check_price(v: &Value) -> Result<(), String> {
+    let amount_ok = v.get("amount").is_some_and(|a| a.as_u64().is_some());
+    match v.get("kind").and_then(Value::as_str) {
+        Some("free") => Ok(()),
+        Some("one_time") if amount_ok => Ok(()),
+        Some("subscription")
+            if amount_ok && matches!(v.get("period").and_then(Value::as_str), Some("month" | "year")) =>
+        {
+            Ok(())
+        }
+        _ => Err("price must be {\"kind\": \"free\"}, {\"kind\": \"one_time\", \"amount\": <đồng>} or {\"kind\": \"subscription\", \"amount\": <đồng>, \"period\": \"month\" | \"year\"}".into()),
+    }
 }
 
 fn valid_id(s: &str) -> bool {
@@ -381,6 +425,27 @@ impl PluginManifest {
             None | Some(Value::Null) => errors.push("missing `commands`".into()),
             Some(_) => errors.push("`commands` must be a list [...]".into()),
         }
+        let publisher =
+            Some(text_field(obj, "publisher", false, &mut errors, "")).filter(|s| !s.is_empty());
+        let price = match obj.get("price") {
+            None | Some(Value::Null) => None,
+            Some(p) => match check_price(p) {
+                Ok(()) => Some(p.clone()),
+                Err(m) => {
+                    errors.push(m);
+                    None
+                }
+            },
+        };
+        let entitlement =
+            Some(text_field(obj, "entitlement", false, &mut errors, "")).filter(|s| !s.is_empty());
+        if let Some(e) = &entitlement {
+            if !valid_entitlement(e) {
+                errors.push(format!(
+                    "entitlement `{e}`: use lower-case letters, digits, `.`, `:`, `-` and `_` (e.g. plugin:my-tools)"
+                ));
+            }
+        }
         if !errors.is_empty() {
             return Err(errors.join("; "));
         }
@@ -391,7 +456,30 @@ impl PluginManifest {
             author,
             description,
             commands,
+            publisher,
+            price,
+            entitlement,
         })
+    }
+
+    /// True when the manifest's price is not free (a one-time or
+    /// subscription price above 0).
+    pub fn is_paid(&self) -> bool {
+        self.price.as_ref().is_some_and(|p| {
+            p.get("kind").and_then(Value::as_str) != Some("free")
+                && p.get("amount").and_then(Value::as_u64).unwrap_or(0) > 0
+        })
+    }
+
+    /// The entitlement its commands need: `entitlement` when given, else
+    /// `plugin:<id>` for a paid plugin, else none (free and locally made
+    /// plugins need nothing, ADR 0009).
+    pub fn required_entitlement(&self) -> Option<String> {
+        match &self.entitlement {
+            Some(e) => Some(e.clone()),
+            None if self.is_paid() => Some(format!("plugin:{}", self.id)),
+            None => None,
+        }
     }
 
     /// Read and validate `dir/plugin.json` ([`Self::parse`] with entry
@@ -441,7 +529,7 @@ impl PluginManifest {
                 o
             })
             .collect();
-        let v = json!({
+        let mut v = json!({
             "id": self.id,
             "name": self.name,
             "version": self.version,
@@ -449,8 +537,48 @@ impl PluginManifest {
             "description": self.description,
             "commands": commands,
         });
+        if let Some(p) = &self.publisher {
+            v["publisher"] = json!(p);
+        }
+        if let Some(p) = &self.price {
+            v["price"] = p.clone();
+        }
+        if let Some(e) = &self.entitlement {
+            v["entitlement"] = json!(e);
+        }
         serde_json::to_string_pretty(&v).unwrap_or_else(|_| v.to_string())
     }
+}
+
+/// May a command of this plugin run? `owns(entitlement)` says whether an
+/// entitlement is owned (the app passes its licence check; ferro-mcp never
+/// sees tokens). Plugins without a [`PluginManifest::required_entitlement`]
+/// always may. Otherwise fails with a run report whose first failure is
+/// [`LICENSE_MISSING`], carrying `plugin` (the id, to open its marketplace
+/// listing) and `entitlement`. The plugin itself stays loaded and listed.
+pub fn check_entitlement(
+    manifest: &PluginManifest,
+    owns: impl Fn(&str) -> bool,
+) -> Result<(), Value> {
+    let Some(ent) = manifest.required_entitlement() else {
+        return Ok(());
+    };
+    if owns(&ent) {
+        return Ok(());
+    }
+    let message = format!(
+        "{} is a paid plugin and its licence is not owned: buy it in the Marketplace",
+        manifest.name
+    );
+    Err(json!({
+        "error": message,
+        "failures": [{
+            "code": LICENSE_MISSING,
+            "message": message,
+            "plugin": manifest.id,
+            "entitlement": ent,
+        }],
+    }))
 }
 
 /// One folder in the plugins folder, loaded or broken.
@@ -918,6 +1046,9 @@ pub fn create_plugin(root: &Path, name: &str, author: &str) -> Result<PathBuf, S
             },
             timeout_s: None,
         }],
+        publisher: None,
+        price: None,
+        entitlement: None,
     };
     let write = |file: &str, text: &str| {
         std::fs::write(dir.join(file), text).map_err(|e| format!("cannot write {file}: {e}"))

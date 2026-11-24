@@ -12,6 +12,7 @@ members = [
     "crates/ferro-ffi",
     "crates/ferro-app",
     "crates/ferro-kernel",
+    "crates/ferro-services",
 ]
 
 [workspace.package]
