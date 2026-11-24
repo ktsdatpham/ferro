@@ -92,6 +92,7 @@ namespace Ferro.Revit
         private void Tag(Element e, JsonObject op, bool created)
         {
             Phases(e, op);
+            Pin(e, op);
             Tags.Set(e, Str(op, "uid"), Str(op, "signature"));
             _byUid[Str(op, "uid")] = e;
             if (created) _report.Created++; else _report.Updated++;
@@ -106,6 +107,20 @@ namespace Ferro.Revit
                 if (!taken.Contains($"{name} ({i})")) return $"{name} ({i})";
         }
 
+        /// <summary>`Element.Pinned` from the op (ADR 0008); absent = not pinned.
+        /// Elements are unpinned while an op edits them and pinned again in
+        /// <see cref="Tag"/>.</summary>
+        private static void Pin(Element e, JsonObject op)
+        {
+            var pinned = op["pinned"] is JsonValue v && v.TryGetValue<bool>(out var b) && b;
+            if (e.Pinned != pinned) e.Pinned = pinned;
+        }
+
+        private static void Unpin(Element? e)
+        {
+            if (e != null && e.Pinned) e.Pinned = false;
+        }
+
         private static void SetParam(Element e, BuiltInParameter p, double v) { var x = e.get_Parameter(p); if (x != null && !x.IsReadOnly) x.Set(v); }
         private static void SetParam(Element e, BuiltInParameter p, int v) { var x = e.get_Parameter(p); if (x != null && !x.IsReadOnly) x.Set(v); }
         private static void SetParam(Element e, BuiltInParameter p, ElementId v) { var x = e.get_Parameter(p); if (x != null && !x.IsReadOnly) x.Set(v); }
@@ -116,6 +131,7 @@ namespace Ferro.Revit
         {
             var e = _doc.GetElement(Str(op, "unique_id"));
             if (e == null) return;
+            Unpin(e);
             _doc.Delete(e.Id);
             _byUid.Remove(Str(op, "ferro_uid"));
             _report.Deleted++;
@@ -208,6 +224,7 @@ namespace Ferro.Revit
             var lvl = Existing(op) as Level
                 ?? new FilteredElementCollector(_doc).OfClass(typeof(Level)).Cast<Level>().FirstOrDefault(x => x.Name == name);
             var created = lvl == null;
+            Unpin(lvl);
             lvl ??= Autodesk.Revit.DB.Level.Create(_doc, elev);
             if (Math.Abs(lvl.Elevation - elev) > 1e-9) lvl.Elevation = elev;
             if (lvl.Name != name) lvl.Name = UniqueName<Level>(name, lvl);
@@ -314,6 +331,7 @@ namespace Ferro.Revit
             var curve = MakeCurve(op["curve"]!);
             var w = Existing(op) as Wall;
             var created = w == null;
+            Unpin(w);
             w ??= Autodesk.Revit.DB.Wall.Create(_doc, curve, type.Id, level.Id, Math.Max(Num(op, "height"), 1.0), Num(op, "base_offset"), false, false);
             if (w.WallType.Id != type.Id) w.ChangeTypeId(type.Id);
             SetParam(w, BuiltInParameter.WALL_BASE_CONSTRAINT, level.Id);
@@ -350,6 +368,7 @@ namespace Ferro.Revit
             // Floor sketches are replaced rather than edited (simple and reliable).
             var old = Existing(op);
             var created = old == null;
+            Unpin(old);
             if (old != null) _doc.Delete(old.Id);
             var f = Autodesk.Revit.DB.Floor.Create(_doc, loops, type.Id, level.Id);
             SetParam(f, BuiltInParameter.FLOOR_HEIGHTABOVELEVEL_PARAM, Num(op, "offset"));
@@ -390,6 +409,7 @@ namespace Ferro.Revit
             var point = Xyz(op["point"]);
             var fi = Existing(op) as FamilyInstance;
             var created = fi == null;
+            Unpin(fi);
             if (fi != null && fi.Host?.Id != host.Id)
             {
                 _doc.Delete(fi.Id);
@@ -420,6 +440,7 @@ namespace Ferro.Revit
             var geometry = builder.GetBuildResult().GetGeometricalObjects();
             var ds = Existing(op) as DirectShape;
             var created = ds == null;
+            Unpin(ds);
             if (ds == null)
             {
                 var bic = Enum.TryParse<BuiltInCategory>(Str(op, "category"), out var c) ? c : BuiltInCategory.OST_GenericModel;

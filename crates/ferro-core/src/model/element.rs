@@ -1,6 +1,6 @@
 use super::bim::{Floor, FloorType, Material, Opening, Wall, WallType};
 use super::{Category, ElementId, ParamValue, Uid};
-use crate::math::{BoundingBox3, Length};
+use crate::math::{BoundingBox3, Length, Point3};
 use crate::topo::Body;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -104,6 +104,80 @@ pub struct Element {
     pub phase_demolished: Option<ElementId>,
     pub params: BTreeMap<String, ParamValue>,
     pub body: ElementBody,
+    /// A pinned element cannot be moved or deleted (ADR 0008, Revit
+    /// `Element.Pinned`); every other edit stays allowed. See
+    /// [`Element::pin_moved`]. Omitted from files when `false`.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub pinned: bool,
+}
+
+fn is_false(b: &bool) -> bool {
+    !*b
+}
+
+/// `true` when `after` is `before` moved as a whole: same number of points
+/// (paired by index), at least one moved by more than `VERTEX_TOL`, and
+/// every distance to three anchor points kept within `VERTEX_TOL` (a
+/// translation, rotation or mirror). A reshape (some points move, others
+/// stay, or distances change) is not a move.
+fn rigid_motion(before: &[Point3], after: &[Point3]) -> bool {
+    use crate::math::tol::VERTEX_TOL;
+    if before.len() != after.len() || before.is_empty() {
+        return false;
+    }
+    let moved = before
+        .iter()
+        .zip(after)
+        .any(|(p, q)| p.distance_to(*q) > VERTEX_TOL);
+    if !moved {
+        return false;
+    }
+    let a = before[0];
+    let far = |key: &dyn Fn(Point3) -> f64| {
+        (0..before.len())
+            .max_by(|i, j| key(before[*i]).total_cmp(&key(before[*j])))
+            .unwrap_or(0)
+    };
+    let i1 = far(&|p| p.distance_to(a));
+    let b = before[i1];
+    let i2 = far(&|p| (p - a).cross(b - a).length());
+    let anchors = [0, i1, i2];
+    before.iter().zip(after).all(|(p, q)| {
+        anchors
+            .iter()
+            .all(|&j| (p.distance_to(before[j]) - q.distance_to(after[j])).abs() <= VERTEX_TOL)
+    })
+}
+
+/// Points that place a wall's curve: ends, and the middle of an arc.
+fn curve_points(c: &crate::geom::Curve) -> Vec<Point3> {
+    match c {
+        crate::geom::Curve::Line(_) => vec![c.start(), c.end()],
+        crate::geom::Curve::Arc(_) => vec![c.start(), c.point_at(0.5), c.end()],
+    }
+}
+
+/// A floor's outline and holes as points (plan, z = 0).
+fn outline_points(f: &Floor) -> Vec<Point3> {
+    f.outer
+        .iter()
+        .chain(f.holes.iter().flatten())
+        .map(|p| Point3::new(p.x, p.y, 0.0))
+        .collect()
+}
+
+/// A body's vertices in id order, or `None` when the two bodies do not
+/// have the same vertex ids (the topology changed: a reshape).
+fn paired_vertices(a: &Body, b: &Body) -> Option<(Vec<Point3>, Vec<Point3>)> {
+    let pa: Vec<_> = a.vertices().collect();
+    let pb: Vec<_> = b.vertices().collect();
+    let same_ids = pa.len() == pb.len() && pa.iter().zip(&pb).all(|(x, y)| x.0 == y.0);
+    same_ids.then(|| {
+        (
+            pa.into_iter().map(|x| x.1).collect(),
+            pb.into_iter().map(|x| x.1).collect(),
+        )
+    })
 }
 
 impl Element {
@@ -160,10 +234,105 @@ impl Element {
     pub fn bounding_box(&self) -> Option<BoundingBox3> {
         self.geometry().and_then(|b| b.bounding_box())
     }
+    /// `true` when `after` is this element moved (ADR 0008 §2, as Revit):
+    /// a level's elevation changed; a wall's location curve changed (moved,
+    /// rotated or an end dragged); a door or window slid along its wall or
+    /// put in another; a Form's body or a floor's outline moved as a whole
+    /// (translation, rotation, mirror; see `rigid_motion`). Everything else
+    /// is not a move and stays allowed on a pinned element: parameters,
+    /// type, level and offsets, name, phase, category, editing a Form's
+    /// shape (push / pull, moving some of its vertices, scaling) or a
+    /// floor's profile, and regenerated values. Changes below `VERTEX_TOL`
+    /// are not moves.
+    pub fn pin_moved(&self, after: &Element) -> bool {
+        use crate::math::tol::VERTEX_TOL;
+        match (&self.body, &after.body) {
+            (ElementBody::Level(a), ElementBody::Level(b)) => {
+                (a.elevation.mm() - b.elevation.mm()).abs() > VERTEX_TOL
+            }
+            (ElementBody::Wall(a), ElementBody::Wall(b)) => {
+                let (pa, pb) = (curve_points(&a.curve), curve_points(&b.curve));
+                pa.len() != pb.len()
+                    || pa
+                        .iter()
+                        .zip(&pb)
+                        .any(|(p, q)| p.distance_to(*q) > VERTEX_TOL)
+            }
+            (ElementBody::Opening(a), ElementBody::Opening(b)) => {
+                self.host_id != after.host_id
+                    || (a.position.mm() - b.position.mm()).abs() > VERTEX_TOL
+            }
+            (ElementBody::Floor(a), ElementBody::Floor(b)) => {
+                rigid_motion(&outline_points(a), &outline_points(b))
+            }
+            (ElementBody::Form(a), ElementBody::Form(b)) => {
+                paired_vertices(&a.body, &b.body).is_some_and(|(pa, pb)| rigid_motion(&pa, &pb))
+            }
+            _ => false,
+        }
+    }
     /// Display label: name, else category and id.
     pub fn label(&self) -> String {
         self.name
             .clone()
             .unwrap_or_else(|| format!("{} {}", self.category, self.id))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::rigid_motion;
+    use crate::math::tol::VERTEX_TOL;
+    use crate::math::{Angle, Point3, Transform, UnitVec3, Vec3};
+
+    fn square() -> Vec<Point3> {
+        [(0.0, 0.0), (1000.0, 0.0), (1000.0, 500.0), (0.0, 500.0)]
+            .iter()
+            .map(|(x, y)| Point3::new(*x, *y, 0.0))
+            .collect()
+    }
+
+    #[test]
+    fn rigid_motions_are_moves_and_reshapes_are_not() {
+        let a = square();
+        let moved = |t: &Transform| a.iter().map(|p| t.apply(*p)).collect::<Vec<_>>();
+        let t = Transform::translation(Vec3::new(10.0, -5.0, 3.0));
+        assert!(rigid_motion(&a, &moved(&t)));
+        let r = Transform::rotation(
+            Point3::new(500.0, 250.0, 0.0),
+            UnitVec3::Z,
+            Angle::from_deg(30.0),
+        );
+        assert!(rigid_motion(&a, &moved(&r)));
+        // Mirror (x -> -x) keeps every distance: a move too.
+        let m: Vec<Point3> = a.iter().map(|p| Point3::new(-p.x, p.y, p.z)).collect();
+        assert!(rigid_motion(&a, &m));
+        // One corner dragged: a reshape.
+        let mut s = a.clone();
+        s[2] = Point3::new(1200.0, 500.0, 0.0);
+        assert!(!rigid_motion(&a, &s));
+        // Scaled: a reshape.
+        let sc: Vec<Point3> = a.iter().map(|p| Point3::new(p.x * 2.0, p.y, p.z)).collect();
+        assert!(!rigid_motion(&a, &sc));
+    }
+
+    #[test]
+    fn degenerate_and_tolerance_edges() {
+        let a = square();
+        assert!(!rigid_motion(&a, &a), "unchanged");
+        assert!(!rigid_motion(&[], &[]));
+        assert!(!rigid_motion(&a, &a[..3]), "different point counts");
+        let p = [Point3::new(1.0, 2.0, 3.0)];
+        assert!(rigid_motion(&p, &[Point3::new(5.0, 2.0, 3.0)]), "one point");
+        let nudge = |d: f64| {
+            a.iter()
+                .map(|p| Point3::new(p.x + d, p.y, p.z))
+                .collect::<Vec<_>>()
+        };
+        assert!(
+            !rigid_motion(&a, &nudge(VERTEX_TOL * 0.5)),
+            "within tolerance"
+        );
+        assert!(rigid_motion(&a, &nudge(VERTEX_TOL * 2.0)));
     }
 }

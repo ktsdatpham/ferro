@@ -52,6 +52,11 @@ Phases in the app (ADR 0006, M5-23): the active view's phase and phase filter (s
 - struct `PhaseState` — Phase view state of the app: a working copy of the active view's
 - fn `phase_display` — Phase display of `doc` in view phase `view` under `filter`: pure, used
 
+### `ferro_app::app::pins`
+
+Pins in the app (ADR 0008, M5-27.5): a "Pinned" row with a toggle in Properties, Pin / Unpin in the viewport's context menu and on the `PN` / `UP` codes, and a "Pinned" marker on selected pinned elements.
+
+
 ### `ferro_app::app::python`
 
 `run_python` in the app (ADR 0005 §5): the script runs out of process and calls back over Ferro Link with its one-time token; its calls are answered on the UI thread, inside the run's group, between frames. Nothing here waits for the script: [`FerroApp::poll_python`] checks it once per frame.
@@ -187,7 +192,7 @@ Turns the display scene (`ferro-scene`) into GPU vertex lists.
 
 ### `ferro_app::settings_window`
 
-The *Project settings…* window (M5-24.2): display units and decimals per quantity, site location and currency.
+The *Project settings…* window (M5-24.2): display units and decimals per quantity, site location, currency and auto-pinning of new levels (ADR 0008).
 
 - const `LISTED` — Quantities listed in the window, in this order: the geometric ones first,
 - struct `ProjectSettingsDraft` — Text being edited in the window; reloaded from the document whenever the
@@ -661,6 +666,7 @@ BIM element data (Foundation Spec ch. 3, D-41, D-70): system family types with c
 - enum `Category` — Fixed classification of elements (D-14, D-40). Adding a category is a spec
 - fn `Category::revit_builtin` — Revit `BuiltInCategory` name.
 - fn `Category::ifc_class` — IFC4 entity class.
+- fn `Category::is_datum` — Datums: levels, grids and reference planes (ADR 0008 §4). New datums
 - fn `Category::classifiable_form` — Categories a `Form` may be classified as (D-12).
 
 ### `ferro_core::model::change`
@@ -756,6 +762,7 @@ Design options (ADR 0006 §Design options, M5-23.9): option sets, options as lay
 - fn `Element::as_wall`
 - fn `Element::param`
 - fn `Element::bounding_box`
+- fn `Element::pin_moved` — `true` when `after` is this element moved (ADR 0008 §2, as Revit):
 - fn `Element::label` — Display label: name, else category and id.
 
 ### `ferro_core::model::generate`
@@ -988,7 +995,7 @@ Core commands (milestone 1) and the dispatch enum; BIM commands live in `bim_com
 - struct `SetName` — Rename an element (`null` clears the name). `name` is required: a
 - struct `SetParameter` — Set a typed parameter (D-15). Computed keys are read-only. Quantities are
 - struct `SetCategory` — Classify directly edited geometry as a BIM category (D-12, ADR 0004),
-- struct `SetProjectName` — Rename the project.
+- struct `SetProjectName` — Rename the project and / or switch project-wide behaviour: with
 - fn `AnyCommand::from_tool` — Build from a tool name and JSON arguments (MCP).
 
 ### `ferro_core::ops::design_option_commands`
@@ -1076,6 +1083,12 @@ Phase commands (ADR 0006 §Phases, M5-23): the phase list and the phase fields o
 - enum `RenovationStatus` — Renovation status of the simple mode (ADR 0006 §4, ArchiCAD-like).
 - struct `SetRenovationStatus` — Simple mode: mark elements as existing, to be demolished or new. Maps to
 
+### `ferro_core::ops::pin_commands`
+
+Pin (ADR 0008, D-79, "like Revit"): the `set_pinned` command. What a pin blocks (moving and deleting) is enforced by the `Transaction` itself (`Element::pin_moved`), so every path obeys it. Anyone who may edit may unpin: the user, agents under their normal autonomy, scripts, plugins.
+
+- struct `SetPinned` — Pin or unpin elements (Revit *Pin* / *Unpin*, `Element.Pinned`). A
+
 ### `ferro_core::ops::project_commands`
 
 Project settings commands (M5-24): display units, site location, currency. Each `NAME` is also the MCP tool name.
@@ -1140,7 +1153,7 @@ Commands on the relationship table (ADR 0004 §5, M5-5.1).
 - fn `Transaction::name`
 - fn `Transaction::doc` — The working copy (reads see this transaction's own changes).
 - fn `Transaction::element`
-- fn `Transaction::create` — Create an element and return its id.
+- fn `Transaction::create` — Create an element and return its id. A datum (`Category::is_datum`)
 - fn `Transaction::duplicate` — Duplicate an element with a new id and uid (Q-B7: copies get both).
 - fn `Transaction::modify` — Modify an element in place.
 - fn `Transaction::add_relationship` — Add a relationship row (ADR 0004 §5) with a new uid; returns it.
@@ -1151,6 +1164,7 @@ Commands on the relationship table (ADR 0004 §5, M5-5.1).
 - fn `Transaction::project_name`
 - fn `Transaction::project_settings` — Change the project settings (units, location, currency). The caller
 - fn `Transaction::put_parameter_definition` — Add or replace (by key) a project parameter definition, keeping the
+- fn `pin_failures` — Elements pinned in `before` that `after` deletes or moves (ADR 0008 §2,
 
 ### `ferro_core::ops::view_commands`
 

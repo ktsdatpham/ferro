@@ -93,6 +93,10 @@ pub enum RevitOp {
         signature: String,
         name: String,
         elevation: f64,
+        /// `Element.Pinned` (ADR 0008). Omitted when false, so unpinned
+        /// elements keep their signature.
+        #[serde(default, skip_serializing_if = "is_false")]
+        pinned: bool,
     },
     /// Duplicate a basic wall type and set its compound structure.
     WallType {
@@ -137,6 +141,10 @@ pub enum RevitOp {
         phase_created: Option<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         phase_demolished: Option<String>,
+        /// `Element.Pinned` (ADR 0008). Omitted when false, so unpinned
+        /// elements keep their signature.
+        #[serde(default, skip_serializing_if = "is_false")]
+        pinned: bool,
     },
     /// `Floor.Create(loops, type, level)`, then `FLOOR_HEIGHTABOVELEVEL_PARAM`.
     /// First loop is the outline (counter-clockwise), then holes (clockwise),
@@ -156,6 +164,10 @@ pub enum RevitOp {
         phase_created: Option<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         phase_demolished: Option<String>,
+        /// `Element.Pinned` (ADR 0008). Omitted when false, so unpinned
+        /// elements keep their signature.
+        #[serde(default, skip_serializing_if = "is_false")]
+        pinned: bool,
     },
     /// A door or window family instance hosted by a wall, placed at `point`
     /// (on the wall's location line, at the wall base). Size via the type's
@@ -181,6 +193,10 @@ pub enum RevitOp {
         phase_created: Option<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         phase_demolished: Option<String>,
+        /// `Element.Pinned` (ADR 0008). Omitted when false, so unpinned
+        /// elements keep their signature.
+        #[serde(default, skip_serializing_if = "is_false")]
+        pinned: bool,
     },
     /// A phase (ADR 0006). The Revit API cannot create phases: the add-in
     /// finds the phase by `name`, else renames the phase at position
@@ -227,6 +243,10 @@ pub enum RevitOp {
         phase_created: Option<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         phase_demolished: Option<String>,
+        /// `Element.Pinned` (ADR 0008). Omitted when false, so unpinned
+        /// elements keep their signature.
+        #[serde(default, skip_serializing_if = "is_false")]
+        pinned: bool,
     },
 }
 
@@ -291,6 +311,10 @@ impl RevitOp {
             | RevitOp::Phase { signature, .. } => signature,
         }
     }
+}
+
+fn is_false(b: &bool) -> bool {
+    !*b
 }
 
 /// Rounded feet (1e-9 ft ≈ 0.3 nm) so signatures ignore float noise.
@@ -455,6 +479,7 @@ fn plan_resolved(doc: &Document, state: &RevitState) -> Vec<RevitOp> {
             signature: String::new(),
             name: "Ferro Level 0".into(),
             elevation: 0.0,
+            pinned: false,
         });
     }
     for e in doc.elements() {
@@ -482,6 +507,7 @@ fn plan_resolved(doc: &Document, state: &RevitState) -> Vec<RevitOp> {
                     signature: String::new(),
                     name: e.label(),
                     elevation: r(ft(l.elevation.mm())),
+                    pinned: e.pinned,
                 },
             ),
             ElementBody::WallType(t) => {
@@ -554,6 +580,7 @@ fn plan_resolved(doc: &Document, state: &RevitState) -> Vec<RevitOp> {
                         location_line: location_line(w.location_line),
                         phase_created: phase_name(e.phase_created),
                         phase_demolished: phase_name(e.phase_demolished),
+                        pinned: e.pinned,
                     },
                 )
             }
@@ -583,6 +610,7 @@ fn plan_resolved(doc: &Document, state: &RevitState) -> Vec<RevitOp> {
                         offset: r(ft(f.offset.mm())),
                         phase_created: phase_name(e.phase_created),
                         phase_demolished: phase_name(e.phase_demolished),
+                        pinned: e.pinned,
                     },
                 )
             }
@@ -621,6 +649,7 @@ fn plan_resolved(doc: &Document, state: &RevitState) -> Vec<RevitOp> {
                         sill: r(ft(lay.z0 - host_level + o.sill.mm())),
                         phase_created: phase_name(e.phase_created),
                         phase_demolished: phase_name(e.phase_demolished),
+                        pinned: e.pinned,
                     },
                 )
             }
@@ -652,6 +681,7 @@ fn plan_resolved(doc: &Document, state: &RevitState) -> Vec<RevitOp> {
                         triangles: m.indices.clone(),
                         phase_created: phase_name(e.phase_created),
                         phase_demolished: phase_name(e.phase_demolished),
+                        pinned: e.pinned,
                     },
                 )
             }
@@ -787,6 +817,63 @@ mod tests {
         assert!(ops
             .iter()
             .any(|o| matches!(o, RevitOp::Wall { name: Some(n), .. } if n == "Option wall")));
+    }
+
+    /// ADR 0008 §6: `pinned` goes into the ops of synced elements (a pinned
+    /// wall and box), omitted when false, and a pin change re-sends the
+    /// element (its signature changes).
+    #[test]
+    fn pinned_is_planned_for_synced_elements() {
+        let mut s = house();
+        let ops = plan(s.doc(), &RevitState::default());
+        let levels: Vec<bool> = ops
+            .iter()
+            .filter_map(|o| match o {
+                RevitOp::Level { pinned, .. } => Some(*pinned),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(levels, vec![false, false], "levels are not auto-pinned");
+        let wall_op = |ops: &[RevitOp]| {
+            ops.iter()
+                .find(|o| matches!(o, RevitOp::Wall { .. }))
+                .cloned()
+                .expect("a wall")
+        };
+        let w0 = wall_op(&ops);
+        assert!(!serde_json::to_string(&w0).unwrap().contains("pinned"));
+        let wall = s
+            .doc()
+            .elements()
+            .find(|e| e.as_wall().is_some())
+            .map(|e| e.id)
+            .unwrap();
+        let bx = s
+            .doc()
+            .elements()
+            .find(|e| e.as_form().is_some())
+            .map(|e| e.id)
+            .unwrap();
+        s.execute(
+            AnyCommand::from_tool(
+                "set_pinned",
+                &json!({"elements": [wall, bx], "pinned": true}),
+            )
+            .unwrap(),
+            &ExecContext::user(),
+        )
+        .unwrap();
+        let ops = plan(s.doc(), &RevitState::default());
+        let w1 = wall_op(&ops);
+        assert!(matches!(w1, RevitOp::Wall { pinned: true, .. }));
+        assert_ne!(w0.signature(), w1.signature(), "a pin change is sent");
+        assert!(ops
+            .iter()
+            .any(|o| matches!(o, RevitOp::DirectShape { pinned: true, .. })));
+        let text = serde_json::to_string(&w1).unwrap();
+        assert!(text.contains("\"pinned\":true"), "{text}");
+        let back: RevitOp = serde_json::from_str(&text).unwrap();
+        assert_eq!(back, w1);
     }
 
     #[test]
@@ -983,7 +1070,14 @@ mod tests {
         };
         assert!(plan(s.doc(), &state).is_empty(), "nothing changed");
 
-        // Raise L2: only the level changes in Revit (walls follow it there).
+        // Raise L2 (unpinned first, ADR 0008): only the level changes in
+        // Revit (walls follow it there).
+        s.execute(
+            AnyCommand::from_tool("set_pinned", &json!({"elements": [2], "pinned": false}))
+                .unwrap(),
+            &ExecContext::user(),
+        )
+        .unwrap();
         s.execute(
             AnyCommand::from_tool(
                 "set_level_elevation",

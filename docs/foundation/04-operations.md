@@ -119,6 +119,12 @@ when the problem is in reaching Ferro, not in a command. They are stable too:
 
 `get_element` on a missing id fails with `ferro.model.not_found`.
 
+Pin code (ADR 0008, chapter 3 §3.13):
+
+| Code | Meaning |
+|---|---|
+| `ferro.model.pinned` | The transaction would move or delete a pinned element, delete the host of a pinned hosted element, or move / remove a pinned element in an option layer; the first element of the failure is the pinned one. Nothing changed |
+
 Script codes. `run_python` (ADR 0005 part 2, §6.2) reports these as the
 first failure; failures of the script's last failed tool call follow:
 

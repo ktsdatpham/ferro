@@ -201,7 +201,9 @@ pub fn list() -> Vec<Value> {
             json!({"latitude": {"type":"number","description":"Degrees, -90..90"}, "longitude": {"type":"number","description":"Degrees, -180..180"}, "elevation": length(), "utc_offset_minutes": {"type":"integer"}, "place": {"type":"string"}, "weather_file": {"type":"string"}, "clear": {"type":"boolean"}}), &[]),
         tool("set_project_currency", "Set the currency for costs (ISO 4217, e.g. VND, USD); null clears it.",
             json!({"currency": {"type":["string","null"]}}), &[]),
-        tool("set_project_name", "Rename the project.", json!({"name":{"type":"string"}}), &["name"]),
+        tool("set_project_name", "Rename the project and / or switch auto-pinning: with auto_pin_datums true new levels are created pinned (default false, as Revit). Omitted fields keep their value.", json!({"name":{"type":"string"}, "auto_pin_datums": {"type":"boolean","description":"New levels (datums) are created pinned"}}), &[]),
+        tool("set_pinned", "Pin or unpin elements (Revit Pin / Unpin). As in Revit, a pinned element cannot be moved (move, rotate, dragging it or its ends, a level's elevation, a door's position) or deleted, nor can the wall hosting a pinned door be deleted (ferro.model.pinned); everything else stays editable: parameters, type, name, phase, shape and profile, copying. Unpin first to move it. Returns {elements, changed}.",
+            json!({"elements": ids("Element ids"), "pinned": {"type":"boolean","description":"true = pin, false = unpin"}}), &["elements", "pinned"]),
         // BIM elements (milestone 2).
         tool("create_material", "Create a material with a base colour and optional assets (all optional, SI units named in each field): appearance (OpenPBR), physical, thermal, environmental (GWP from an EPD), cost. Wall / floor types using it then report U-value, mass, carbon and cost per m² (get_element on the type). Returns {element}.",
             material_props(json!({"name": {"type":"string"}, "color": {"type":"string","description":"#rrggbb"}, "roughness": {"type":"number","minimum":0,"maximum":1,"description":"OpenPBR specular_roughness, default 0.8"}}), false), &["name", "color"]),
@@ -548,6 +550,9 @@ pub fn summary_of(doc: &Document, category: Option<&str>, only: Option<&[Element
             m.insert("category".into(), json!(e.category));
             m.insert("body".into(), json!(e.body.kind()));
             m.insert("level".into(), json!(e.level_id));
+            if e.pinned {
+                m.insert("pinned".into(), json!(true));
+            }
             if e.design_option.is_some() {
                 m.insert("design_option".into(), json!(e.design_option));
             }
@@ -1027,6 +1032,65 @@ mod tests {
         .expect("handled")
         .unwrap_err();
         assert_eq!(r["failures"][0]["code"], "ferro.model.not_found");
+    }
+
+    /// ADR 0008 through the tool surface: pins show in summaries, block
+    /// moves, agents unpin like anyone, auto-pin is opt-in.
+    #[test]
+    fn pin_tools_through_mcp() {
+        let mut s = session();
+        let l = ok(
+            &mut s,
+            "create_level",
+            json!({"name": "L1", "elevation": 0}),
+        )["result"]["element"]
+            .clone();
+        let row = ok(&mut s, "get_element", json!({"element": l}));
+        assert!(row.get("pinned").is_none(), "not auto-pinned: {row}");
+        let agent = ExecContext {
+            actor: ferro_core::ops::Actor::agent("bot", "m"),
+            prompt: None,
+            timestamp_ms: 0,
+        };
+        let set = |p: bool| json!({"elements": [l], "pinned": p});
+        call(&mut s, &agent, "set_pinned", &set(true))
+            .expect("handled")
+            .expect("an agent may pin");
+        let row = ok(&mut s, "get_element", json!({"element": l}));
+        assert_eq!(row["pinned"], true);
+        let r = call(
+            &mut s,
+            &ExecContext::user(),
+            "set_level_elevation",
+            &json!({"level": l, "elevation": "1m"}),
+        )
+        .expect("handled")
+        .unwrap_err();
+        assert_eq!(r["failures"][0]["code"], "ferro.model.pinned");
+        ok(&mut s, "set_name", json!({"element": l, "name": "Ground"}));
+        call(&mut s, &agent, "set_pinned", &set(false))
+            .expect("handled")
+            .expect("an agent may unpin");
+        ok(
+            &mut s,
+            "set_level_elevation",
+            json!({"level": l, "elevation": "1m"}),
+        );
+        ok(&mut s, "set_project_name", json!({"auto_pin_datums": true}));
+        let l2 = ok(
+            &mut s,
+            "create_level",
+            json!({"name": "L2", "elevation": "3m"}),
+        )["result"]["element"]
+            .clone();
+        let row = ok(&mut s, "get_element", json!({"element": l2}));
+        assert_eq!(row["pinned"], true);
+        let t = list();
+        let t = t
+            .iter()
+            .find(|t| t["name"] == "set_pinned")
+            .expect("schema");
+        assert_eq!(t["inputSchema"]["required"], json!(["elements", "pinned"]));
     }
 
     #[test]

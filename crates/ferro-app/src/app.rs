@@ -31,6 +31,7 @@ use std::time::{Duration, Instant};
 
 mod design_options;
 mod phases;
+mod pins;
 mod python;
 mod views;
 
@@ -1142,6 +1143,8 @@ impl FerroApp {
             (None, Target::Hide) => self.hide_selection(),
             (None, Target::UnhideAll) => self.unhide_all_in_view(),
             (None, Target::ZoomExtents) => self.camera.zoom_extents(scene::doc_bounds(self.doc())),
+            (None, Target::Pin) => self.pin_selection(true),
+            (None, Target::Unpin) => self.pin_selection(false),
             (None, _) => self.delete_selection(),
         }
     }
@@ -1538,7 +1541,13 @@ impl FerroApp {
             let mut name = self.doc().project().name.clone();
             if ui.text_edit_singleline(&mut name).lost_focus() && name != self.doc().project().name
             {
-                self.run(SetProjectName { name }.into());
+                self.run(
+                    SetProjectName {
+                        name: Some(name),
+                        auto_pin_datums: None,
+                    }
+                    .into(),
+                );
             }
             ui.separator();
             self.levels_ui(ui);
@@ -1907,6 +1916,7 @@ impl FerroApp {
                 }
 
                 self.element_phase_rows(ui, &e);
+                self.pinned_row(ui, &e);
 
                 ui.label("Comments");
                 let current = match e.param(keys::COMMENTS) {
@@ -2690,6 +2700,8 @@ impl FerroApp {
                 );
             }
         }
+        self.pinned_markers(&painter, rect, &fc);
+        resp.context_menu(|ui| self.pin_menu(ui));
         if let Some(e) = preview_err {
             painter.text(
                 rect.left_bottom() + Vec2::new(10.0, -10.0),

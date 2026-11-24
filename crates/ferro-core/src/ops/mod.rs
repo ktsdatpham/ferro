@@ -18,6 +18,7 @@ pub mod geometry_source;
 pub mod material_commands;
 pub mod parameter_commands;
 pub mod phase_commands;
+pub mod pin_commands;
 pub mod project_commands;
 pub mod relationship_commands;
 mod session;
@@ -47,6 +48,8 @@ mod kernel_tests;
 mod material_tests;
 #[cfg(test)]
 mod phase_tests;
+#[cfg(test)]
+mod pin_tests;
 #[cfg(test)]
 mod project_tests;
 #[cfg(test)]

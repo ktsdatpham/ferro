@@ -147,6 +147,16 @@ pub struct ProjectSettings {
     /// ISO 4217 code used for costs, e.g. "VND".
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub currency: Option<String>,
+    /// New datums (levels, grids, reference planes) are created pinned
+    /// (ADR 0008 §4), for teams that want it. Default `false` (as Revit);
+    /// omitted from files when `false`. Linked models will be created
+    /// pinned regardless, once links exist.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub auto_pin_datums: bool,
+}
+
+fn is_false(b: &bool) -> bool {
+    !*b
 }
 
 fn is_default_units(u: &ProjectUnits) -> bool {
@@ -241,5 +251,17 @@ mod tests {
         assert_eq!(s, "{}");
         let back: ProjectSettings = serde_json::from_str("{}").unwrap();
         assert_eq!(back, ProjectSettings::default());
+        assert!(
+            !back.auto_pin_datums,
+            "datums are not auto-pinned by default"
+        );
+        let on = ProjectSettings {
+            auto_pin_datums: true,
+            ..ProjectSettings::default()
+        };
+        let s = serde_json::to_string(&on).unwrap();
+        assert_eq!(s, r#"{"auto_pin_datums":true}"#);
+        let back: ProjectSettings = serde_json::from_str(&s).unwrap();
+        assert_eq!(back, on);
     }
 }

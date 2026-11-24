@@ -1369,8 +1369,11 @@ fn bad_tool_arguments_are_clean_errors() {
             "imprint_face",
             json!({"element": 1, "face": 1, "points": [1, 2]}),
         ),
-        ("set_project_name", json!({})),
-        ("set_project_name", json!(["name"])),
+        ("set_project_name", json!({"name": 5})),
+        ("set_project_name", json!({"auto_pin_datums": "yes"})),
+        ("set_pinned", json!({"elements": [1]})),
+        ("set_pinned", json!({"elements": 1, "pinned": true})),
+        ("set_pinned", json!({"pinned": false})),
         // `name` is required (null clears); a missing one used to clear the
         // name silently (M5-15.12).
         ("set_name", json!({"element": 1})),
@@ -1630,6 +1633,12 @@ fn valid_calls(f: &Fx) -> Vec<(&'static str, Value)> {
             "push_pull_face",
             json!({"element": f.wall, "face": wall_top, "distance": 200}),
         ),
+        // pins (ADR 0008)
+        (
+            "set_pinned",
+            json!({"elements": [f.bx, f.wall, f.l1], "pinned": true}),
+        ),
+        ("set_project_name", json!({"auto_pin_datums": true})),
     ]
 }
 
@@ -1644,6 +1653,83 @@ fn valid_calls_cover_every_command() {
         );
     }
 }
+
+/// ADR 0008 §2 on every command (pins as Revit): with every element of the
+/// fixture pinned, each valid call either fails with `ferro.model.pinned`
+/// and changes nothing, or neither moves nor deletes any element that
+/// existed before. Both lists are asserted, so the test cannot pass by
+/// refusing everything or by refusing nothing.
+#[test]
+fn pinned_fixture_refuses_moves_and_deletes_only() {
+    let base = Fx::new();
+    let mut f = Fx::new();
+    let all: Vec<ElementId> = f.s.doc().elements().map(|e| e.id).collect();
+    run(
+        &mut f.s,
+        "set_pinned",
+        json!({"elements": all, "pinned": true}),
+    );
+    assert!(f.s.doc().elements().all(|e| e.pinned));
+    let pinned = f.s.doc().clone();
+    let mut allowed: Vec<&str> = Vec::new();
+    let mut refused: Vec<&str> = Vec::new();
+    for (tool, args) in valid_calls(&base) {
+        f.s.replace_document(pinned.clone());
+        let before = snapshot(&f.s);
+        match try_run(&mut f.s, tool, args.clone()) {
+            Err(fails) => {
+                assert_eq!(
+                    fails[0].code, "ferro.model.pinned",
+                    "{tool} {args}: {fails:?}"
+                );
+                assert!(
+                    fails[0].elements.iter().all(|e| pinned.contains(*e)),
+                    "{tool}: the failure names the pinned element"
+                );
+                assert_eq!(snapshot(&f.s), before, "{tool}: rolled back");
+                refused.push(tool);
+            }
+            Ok(_) => {
+                for e in pinned.elements() {
+                    let after = f.s.doc().get(e.id);
+                    let after = after.unwrap_or_else(|| panic!("{tool} deleted pinned {}", e.id));
+                    assert!(!e.pin_moved(after), "{tool} {args} moved pinned {}", e.id);
+                }
+                allowed.push(tool);
+            }
+        }
+    }
+    refused.sort();
+    refused.dedup();
+    assert_eq!(
+        refused, PINNED_REFUSED,
+        "calls refused with everything pinned"
+    );
+    assert!(
+        allowed.len() > 3 * refused.len(),
+        "most edits stay allowed: {allowed:?}"
+    );
+}
+
+/// Valid calls refused with every fixture element pinned: they move or
+/// delete a pinned element (or the host of one). Everything else in
+/// `valid_calls` (parameters, types, phases, shape edits, copies, option
+/// layers that do not move or delete) passes.
+/// (`erase_faces` erases the sheet's only face, which deletes it;
+/// `subtract_forms` deletes its cutter; this `set_wall` drags an end.)
+const PINNED_REFUSED: &[&str] = &[
+    "delete_design_option",
+    "delete_elements",
+    "delete_option_set",
+    "delete_phase",
+    "delete_view",
+    "erase_faces",
+    "move_elements",
+    "rotate_elements",
+    "set_level_elevation",
+    "set_wall",
+    "subtract_forms",
+];
 
 /// Each element-id argument of each command replaced by every element of
 /// the fixture (every kind) and by a missing id: either a valid commit or a

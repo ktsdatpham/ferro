@@ -32,6 +32,7 @@ an **Element**.
 | `host_id` | `Option<ElementId>` | Hosting element (3.8) | `Host` |
 | `level_id` | `Option<ElementId>` | Associated level (3.6) | `LevelId` |
 | `body` | `ElementBody` | Category-specific data and geometry | — |
+| `pinned` | `bool` | Cannot be moved or deleted (3.13); omitted from files when `false` | `Pinned` |
 
 Rules:
 
@@ -367,3 +368,48 @@ for an explicit repair with `set_design_option`.
 combination shown). Revit gets the primary combination, with a `warning`
 operation when other open options exist (Revit design options are a later
 step).
+
+## 3.13 Pins (ADR 0008, D-79)
+
+Every element has `pinned: bool` (Revit `Element.Pinned`). A pin keeps an
+element where it is, as in Revit: it guards datums and big references
+against a stray drag, a careless agent or a script, and nothing more.
+
+Rules:
+
+1. **What a pin blocks.** Deleting a pinned element and moving it fail
+   with `ferro.model.pinned` naming the element, and roll back. Moving
+   (`Element::pin_moved`) is: a level's elevation changing; a wall's
+   location curve changing (moved, rotated, an end dragged); a door or
+   window sliding along its wall or going into another; a Form's body or
+   a floor's outline moved as a whole (translation, rotation or mirror;
+   changes within `VERTEX_TOL` are not moves). Deleting a host whose
+   hosted element is pinned is refused the same way (the failure names the
+   pinned element, then the host). An option layer may not move or remove
+   a pinned element either (`set_design_option`, or editing in the option).
+2. **What stays free.** Everything else: parameters, type, name, level and
+   offsets, phase, category, editing a Form's shape (push / pull, moving
+   some of its vertices, scaling, freezing / unfreezing) or a floor's
+   profile, option-layer overrides other than moves, copying (copies are
+   not pinned), and everything regeneration derives (a pinned wall
+   re-mitred because its neighbour moved, a pinned Form following its
+   unpinned level).
+3. **Where it is enforced.** In the `Transaction` (`finish`, step 0, before
+   regeneration): each element pinned when the transaction began is
+   compared with what the commands made of it, so every path (commands,
+   MCP, scripts, agents, plugins, design options, `apply_changes`) obeys
+   it alike. An element pinned when a transaction begins stays pinned for
+   that whole transaction: unpinning takes effect from the next one.
+4. **Who may unpin.** Anyone who may edit (`set_pinned`): the user, an agent
+   under its normal autonomy (in a Proposal when it proposes), scripts and
+   plugins. No extra rule.
+5. **Auto-pin.** `ProjectSettings.auto_pin_datums` (default `false`, as
+   Revit; omitted from files when `false`; `set_project_name
+   {auto_pin_datums}` switches it) pins new datums (levels, grids,
+   reference planes: `Category::is_datum`) on creation. Linked models will
+   be created pinned once they exist.
+6. **Interop.** Revit: `pinned` travels in the plan's level, wall, floor,
+   opening and DirectShape operations (omitted when false); the add-in sets
+   `Element.Pinned` (unpinning while it applies an operation); the Revit
+   snapshot reports `pinned` and an import makes Ferro's pins follow
+   Revit's. IFC: not exported.
