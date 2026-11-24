@@ -1371,7 +1371,10 @@ mod tests {
         let set = ok(&mut s, "create_option_set", json!({"name": "Roof"}))["result"]["element"]
             .as_u64()
             .unwrap();
-        ok(&mut s, "create_design_option", json!({"set": set}));
+        let b = ok(&mut s, "create_design_option", json!({"set": set}))["result"]["element"]
+            .as_u64()
+            .unwrap();
+        let options_only = s.doc().len();
         ok(
             &mut s,
             "create_box",
@@ -1379,9 +1382,18 @@ mod tests {
         );
         assert_eq!(
             s.doc().len(),
-            3,
-            "set, option and the box in the shared model"
+            options_only + 1,
+            "the box is in the shared model"
         );
+        // The host default (the option the user edits) when nothing is named.
+        let bx = json!({"origin": [0, 0, 0], "width": 1, "depth": 1, "height": 1});
+        let (args, target) =
+            with_default_design_option("create_box", &bx, Some(ElementId(b))).unwrap();
+        assert_eq!(target, Some(ElementId(b)));
+        ok(&mut s, "create_box", args);
+        assert_eq!(s.doc().len(), options_only + 1, "shared model unchanged");
+        let l = ok(&mut s, "list_design_options", json!({}));
+        assert_eq!(l["sets"][0]["options"][1]["added"], 1, "{l}");
         let e = call(
             &mut s,
             &ExecContext::user(),
